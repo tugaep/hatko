@@ -29,3 +29,7 @@ DELIVERABLES.md
 TECHNICAL-REQUIREMENTS.md
 bonus.md
 documentation.md
+
+# claude-mem writes context files into any directory it touches. The provided
+# dataset must stay exactly as supplied, and anything here gets ingested.
+sample_dataset/**/CLAUDE.md
