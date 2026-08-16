@@ -1,0 +1,31 @@
+node_modules/
+.env
+.env.local
+
+# SQLite database + WAL sidecars
+data/
+*.db
+*.db-shm
+*.db-wal
+
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+.DS_Store
+*.log
+npm-debug.log*
+coverage/
+.vercel
+
+# Case brief. Kept locally for reference; the repository is the solution, not the prompt.
+TASK.md
+RULES.md
+MUST-HAVE.md
+EVALUATION.md
+DELIVERABLES.md
+TECHNICAL-REQUIREMENTS.md
+bonus.md
+documentation.md

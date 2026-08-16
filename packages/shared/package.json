@@ -1,0 +1,13 @@
+{
+  "name": "@sorrel/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Zod schemas and inferred types shared by the API, the web app, the MCP server and the ingestion CLI",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

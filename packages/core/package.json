@@ -1,0 +1,21 @@
+{
+  "name": "@sorrel/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Storage, ingestion and retrieval. Shared by the API, the MCP server and the CLI scripts.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./db": "./src/db/index.ts"
+  },
+  "scripts": {
+    "migrate": "node src/db/migrate-cli.ts",
+    "reset": "node src/db/migrate-cli.ts --reset",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@sorrel/shared": "*",
+    "sqlite-vec": "^0.1.9",
+    "zod": "^4.4.3"
+  }
+}

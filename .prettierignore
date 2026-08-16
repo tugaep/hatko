@@ -1,0 +1,15 @@
+node_modules/
+data/
+.next/
+package-lock.json
+
+# Case brief and provided corpus — left exactly as supplied.
+sample_dataset/
+TASK.md
+RULES.md
+MUST-HAVE.md
+EVALUATION.md
+DELIVERABLES.md
+TECHNICAL-REQUIREMENTS.md
+bonus.md
+documentation.md

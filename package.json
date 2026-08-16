@@ -1,0 +1,27 @@
+{
+  "name": "sorrel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Semantic search and grounded answers over an internal document corpus",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"packages/**/*.test.ts\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "npm run migrate --workspace @sorrel/core",
+    "db:reset": "npm run reset --workspace @sorrel/core"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  }
+}
