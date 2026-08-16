@@ -138,8 +138,8 @@ planted, not incidental:
   will out-rank v3 on some phrasings. Deprecation is detected at ingest, stored on
   the document, passed to the answer prompt, and surfaced in the UI. A correct
   answer to sample question 2 says v2 is deprecated.
-- **Answers span documents.** `build-pipeline.md` + `incident-postmortem-2026-03.md`
-  - `lumen-build-4.2.md` are three views of one incident.
+- **Answers span documents.** `build-pipeline.md`, `incident-postmortem-2026-03.md`
+  and `lumen-build-4.2.md` are three views of one incident.
 - **Docs are tiny** (500B–1KB, ~3 headings each). A naive 800-token splitter yields
   one chunk per document and discards all structure. Chunk on headings.
 - **The porter stemmer does not conflate irregular verbs** — `built` and
