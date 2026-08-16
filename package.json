@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:migrate": "npm run migrate --workspace @sorrel/core",
-    "db:reset": "npm run reset --workspace @sorrel/core"
+    "db:reset": "npm run reset --workspace @sorrel/core",
+    "ingest": "npm run ingest --workspace @sorrel/core"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

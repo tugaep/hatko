@@ -453,7 +453,7 @@ Centered in the answer column: a flat vector pressed-leaf specimen at 96px in gr
 
 > No documents cover this.
 
-Then, in `body-sm` `--text-muted`: _Sorrel only answers from the indexed corpus. Nothing in the 144 indexed documents addresses this question._ Below that, the closest-scoring chunks under a `Nearest passages` eyebrow, so the user can judge for themselves.
+Then, in `body-sm` `--text-muted`: _Sorrel only answers from the indexed corpus. Nothing in the 142 indexed documents addresses this question._ Below that, the closest-scoring chunks under a `Nearest passages` eyebrow, so the user can judge for themselves.
 
 Styling this as a failure would teach users that honesty is malfunction. It gets the same visual weight and care as a successful answer.
 

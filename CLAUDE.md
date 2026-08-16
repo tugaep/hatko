@@ -110,7 +110,7 @@ schemas in `packages/shared`, so the database and the API share one definition.
 `erasableSyntaxOnly` is on, so no `enum`, no `namespace`, no parameter
 properties. Use `import type` for type-only imports.
 
-**No ANN index.** ~450 chunks scan exhaustively in about 1 ms. An approximate
+**No ANN index.** 142 chunks scan exhaustively in about 1 ms. An approximate
 index would trade recall away for latency we do not need. Revisit two orders of
 magnitude larger.
 
@@ -128,7 +128,7 @@ straightforward.
 
 ## 6. Corpus facts that shape retrieval
 
-The sample corpus is 144 files, ~17.7k words, ~24k tokens. The difficulty is
+The sample corpus is 142 files, ~17.7k words, ~24k tokens. The difficulty is
 planted, not incidental:
 
 - **78 near-identical delivery reports.** Pure vector search returns a wall of
@@ -140,8 +140,13 @@ planted, not incidental:
   answer to sample question 2 says v2 is deprecated.
 - **Answers span documents.** `build-pipeline.md`, `incident-postmortem-2026-03.md`
   and `lumen-build-4.2.md` are three views of one incident.
-- **Docs are tiny** (500B–1KB, ~3 headings each). A naive 800-token splitter yields
-  one chunk per document and discards all structure. Chunk on headings.
+- **Docs are tiny** — max 1030 bytes, mean 800. Measured: the chunker produces
+  exactly one chunk per document, 142 for 142. That is deliberate, not a bug.
+  `sample_questions.md` names expected answers as whole documents, so a
+  document-sized passage is exactly the unit being evaluated, and splitting the 78
+  delivery reports into interchangeable "## Sign-off" fragments would make the
+  mush problem worse. The heading-split and merge logic is what keeps the same
+  code correct on a corpus with longer files.
 - **The porter stemmer does not conflate irregular verbs** — `built` and
   `building` never meet. Asserted in `packages/core/src/db/schema.test.ts` so it
   stays visible. The vector arm covers this class of gap.
@@ -207,7 +212,7 @@ Each step ends somewhere demonstrable.
 | #   | Step                                                 | Status               |
 | --- | ---------------------------------------------------- | -------------------- |
 | 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9` |
-| 2   | Ingestion CLI → corpus indexed, runs recorded        | next                 |
+| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**             |
 | 3   | Hybrid retrieval + rerank + eval script              |                      |
 | 4   | RAG answers, citations, abstain path                 |                      |
 | 5   | Better Auth, roles, server-side gating               |                      |

@@ -11,7 +11,8 @@
   "scripts": {
     "migrate": "node src/db/migrate-cli.ts",
     "reset": "node src/db/migrate-cli.ts --reset",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\"",
+    "ingest": "node src/ingest/cli.ts"
   },
   "dependencies": {
     "@sorrel/shared": "*",

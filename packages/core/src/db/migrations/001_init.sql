@@ -34,8 +34,8 @@ CREATE TABLE documents (
   error         TEXT,
   chunk_count   INTEGER NOT NULL DEFAULT 0,
   indexed_at    TEXT,
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
 CREATE INDEX documents_status_idx     ON documents (status);
@@ -56,7 +56,7 @@ CREATE TABLE chunks (
   -- time and deliberately not stored, so what is displayed is what was written.
   content      TEXT    NOT NULL,
   token_count  INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   UNIQUE (document_id, ordinal)
 );
 
@@ -69,8 +69,8 @@ CREATE INDEX chunks_document_idx ON chunks (document_id);
 -- the embedding model to one of a different width needs a new migration.
 --
 -- No ANN index is configured, and that is deliberate: the sample corpus produces
--- roughly 450 chunks, where an exhaustive cosine scan returns in about 1 ms.
--- An approximate index would trade recall away for latency we do not need. At a
+-- 142 chunks, where an exhaustive cosine scan returns in about 1 ms. An
+-- approximate index would trade recall away for latency we do not need. At a
 -- corpus two or three orders of magnitude larger this becomes the thing to revisit.
 -- ---------------------------------------------------------------------------
 CREATE VIRTUAL TABLE chunks_vec USING vec0 (
@@ -133,7 +133,7 @@ CREATE TABLE ingestion_runs (
   docs_deleted  INTEGER NOT NULL DEFAULT 0,
   docs_failed   INTEGER NOT NULL DEFAULT 0,
   error         TEXT,
-  started_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  started_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   finished_at   TEXT
 );
 
@@ -156,7 +156,7 @@ CREATE TABLE search_queries (
   top_score    REAL,
   abstained    INTEGER NOT NULL DEFAULT 0 CHECK (abstained IN (0, 1)),
   latency_ms   INTEGER NOT NULL DEFAULT 0,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
 CREATE INDEX search_queries_created_idx ON search_queries (created_at DESC);

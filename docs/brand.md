@@ -36,7 +36,7 @@ Plain, precise, quietly certain. Sorrel sounds like a good technical writer, not
 | Do                                    | Don't                                           |
 | ------------------------------------- | ----------------------------------------------- |
 | "No documents cover this."            | "I couldn't find anything, sorry!"              |
-| "Indexed 144 documents in 12s."       | "Success! Your corpus is ready 🎉"              |
+| "Indexed 142 documents in 12s."       | "Success! Your corpus is ready 🎉"              |
 | "sdk-notes-v2 is deprecated. See v3." | "Note: there may be a newer version available." |
 | "Ingestion failed on 3 files."        | "Oops! Something went wrong."                   |
 
