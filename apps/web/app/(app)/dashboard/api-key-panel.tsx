@@ -7,6 +7,7 @@ import { apiSend } from '../../../lib/client.ts';
 import { formatDateTime } from '../../../lib/format.ts';
 import { useApi } from '../../../lib/use-api.ts';
 import {
+  AlertIcon,
   Badge,
   Button,
   ErrorCard,
@@ -43,7 +44,7 @@ const SOURCE_COPY: Record<SecretStatus['source'], { badge: string; detail: strin
   unreadable: {
     badge: 'unreadable',
     detail:
-      'A key is stored but cannot be decrypted — BETTER_AUTH_SECRET changed after it was saved. Re-enter it, or restore the previous secret.',
+      'A key is stored but cannot be decrypted. BETTER_AUTH_SECRET changed after it was saved: re-enter the key, or restore the previous secret.',
   },
 };
 
@@ -83,7 +84,7 @@ export function ApiKeyPanel() {
 
   if (!status.data) {
     return (
-      <LabelFrame catalog="CFG-01" title={<Eyebrow>Provider key</Eyebrow>}>
+      <LabelFrame title={<Eyebrow as="h3">Provider key</Eyebrow>}>
         <SkeletonLine className="w-1/2" />
         <SkeletonLine className="mt-3 w-full" />
         <SkeletonLine className="mt-3 w-2/3" />
@@ -94,7 +95,7 @@ export function ApiKeyPanel() {
   const source = SOURCE_COPY[status.data.source];
 
   return (
-    <LabelFrame catalog="CFG-01" title={<Eyebrow>Provider key</Eyebrow>}>
+    <LabelFrame title={<Eyebrow as="h3">Provider key</Eyebrow>}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={status.data.configured ? 'brand' : 'danger'}>
           {status.data.configured ? 'active' : 'unavailable'}
@@ -109,7 +110,7 @@ export function ApiKeyPanel() {
       <p className="mt-3 text-body-sm text-text-muted">{source.detail}</p>
 
       {status.data.updatedAt && (
-        <p className="text-mono-label tabular mt-2 font-mono uppercase text-text-muted">
+        <p className="text-mono-label tabular mt-2 font-mono text-text-muted">
           Set {formatDateTime(status.data.updatedAt)}
           {status.data.updatedBy && ` by ${status.data.updatedBy}`}
         </p>
@@ -119,7 +120,6 @@ export function ApiKeyPanel() {
         <Field
           label="Replace key"
           htmlFor="api-key"
-          error={failure ?? undefined}
           hint="Never displayed again after saving. At least 20 characters."
         >
           <Input
@@ -130,7 +130,6 @@ export function ApiKeyPanel() {
             autoComplete="off"
             spellCheck={false}
             placeholder="sk-…"
-            invalid={failure !== null}
           />
         </Field>
 
@@ -154,6 +153,22 @@ export function ApiKeyPanel() {
             </Button>
           ) : null}
         </div>
+
+        {/*
+         * Reported next to the buttons rather than as a field error. A save can fail because
+         * the provider rejected the key, or because the API was unreachable, or because the
+         * session expired — only the first is a problem with what is in the field, and the
+         * client cannot tell them apart, so it does not claim to.
+         */}
+        {failure && (
+          <p
+            role="alert"
+            className="mt-3 flex items-start gap-2 border border-danger bg-danger-subtle p-2 text-caption text-text"
+          >
+            <AlertIcon className="mt-px size-3.5 shrink-0 text-danger-text" />
+            {failure}
+          </p>
+        )}
       </div>
     </LabelFrame>
   );

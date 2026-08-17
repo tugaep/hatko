@@ -32,7 +32,7 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '—' : dateTime.format(date);
+  return Number.isNaN(date.getTime()) ? 'unknown' : dateTime.format(date);
 }
 
 export function formatPercent(fraction: number): string {

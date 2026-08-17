@@ -54,7 +54,11 @@ export function Button({
       className={cx(
         'relative inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap',
         'transition-[background-color,color,filter,opacity] duration-120 ease-brand',
-        'disabled:cursor-not-allowed disabled:opacity-40',
+        // 40% opacity faded the label *and* the fill together, leaving a primary button
+        // barely legible. Disabled is now a distinct flat treatment: readable, obviously
+        // inert, and it keeps the label at a contrast a person can still read.
+        'disabled:cursor-not-allowed disabled:border-rule-strong disabled:bg-bg-sunken',
+        'disabled:text-text-muted disabled:shadow-none',
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,
@@ -145,10 +149,15 @@ export function Field({
         {label}
       </label>
       {children}
-      {/* Error text is never colour-only: it carries the icon and the words. */}
+      {/*
+       * Error text is never colour-only: it carries the icon and the words. `role="alert"`
+       * because a validation failure arriving after submit is exactly the case assistive
+       * tech needs told about — without it, a wrong password produced silence.
+       */}
       {error ? (
         <p
           id={`${htmlFor}-error`}
+          role="alert"
           className="flex items-start gap-1.5 text-caption text-danger-text"
         >
           <AlertIcon className="mt-px size-3.5 shrink-0" />
@@ -167,8 +176,13 @@ export function Field({
  * The label frame — the signature component. A square-cornered L1 card with a
  * catalog number in the top-right, the way a specimen plate is labelled.
  *
- * `notch` cuts the top-right corner like a tear-open packet. It applies to at most
- * one element per view, which is a judgement the caller makes.
+ * `catalog` takes a real record identifier — `DOC-0142`, `RUN-0007` — and nothing else.
+ * A panel that labels itself `IDX-02` identifies no specimen; brand.md licenses catalog
+ * numbers on the specimen, never on the drawer it sits in, and ten invented ones on one
+ * screen is how the motif turns into wallpaper.
+ *
+ * `notch` cuts the top-right corner like a tear-open packet. At most one element per
+ * view, which is a judgement the caller makes.
  */
 export function LabelFrame({
   title,
@@ -189,9 +203,13 @@ export function LabelFrame({
     <div
       {...rest}
       className={cx(
-        'border border-rule bg-bg-raised p-4 transition-colors duration-120 ease-brand',
-        interactive && 'hover:border-rule-strong',
-        notch && '[clip-path:polygon(0_0,calc(100%-12px)_0,100%_12px,100%_100%,0_100%)]',
+        // `min-w-0` so a long unbreakable child cannot widen the grid track this card
+        // sits in. Grid and flex items default to `min-width: auto`, which is min-content.
+        'min-w-0 border border-rule bg-bg-raised p-4 transition-colors duration-120 ease-brand',
+        // Promotes to `--border-interactive`, not `--rule-strong`: rule-strong against the
+        // card fill is 1.65:1, a hover the user cannot see landing.
+        interactive && 'hover:border-border-interactive',
+        notch && 'notch',
         className,
       )}
     >
@@ -210,8 +228,30 @@ export function LabelFrame({
   );
 }
 
-export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cx('text-eyebrow uppercase text-text-muted', className)}>{children}</p>;
+/**
+ * The small uppercase section label.
+ *
+ * `as` exists because most of these label a panel, and a panel label is a heading. Nine
+ * of them shipped as `<p>`, which left the dashboard with a three-entry heading outline
+ * and no way to navigate it by heading at all. The visual treatment is identical either
+ * way; only the element changes.
+ */
+export function Eyebrow({
+  children,
+  className,
+  id,
+  as: Tag = 'p',
+}: {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+  as?: 'p' | 'h2' | 'h3';
+}) {
+  return (
+    <Tag id={id} className={cx('text-eyebrow uppercase text-text-muted', className)}>
+      {children}
+    </Tag>
+  );
 }
 
 /** Status badge. Subtle fill, dark ink, and always the word — never colour alone. */
@@ -291,6 +331,15 @@ export function SkeletonLine({ className }: { className?: string }) {
   return <span className={cx('skeleton block h-3', className)} />;
 }
 
+/**
+ * Two glyphs, drawn here rather than imported.
+ *
+ * The frontend convention is to never hand-roll SVG icons and to install Phosphor or
+ * Tabler instead, and it is the right default — a project with twenty icons should not be
+ * drawing them. This one needs two, and the repository's own rule (CLAUDE.md §7.4) is
+ * that a new dependency arrives with a written justification. "Two shapes" is not one.
+ * If a third is needed, install the library and delete both of these.
+ */
 export function AlertIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true" className={className} fill="currentColor">

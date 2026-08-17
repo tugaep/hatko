@@ -135,6 +135,17 @@
 
   /* The system's only shadow. L3 overlays may use it; nothing else may. */
   --shadow-overlay: 0 8px 24px -8px rgb(10 23 18 / 0.18);
+
+  /*
+   * Stacking order, named. Four layers is the whole set, and they are declared here
+   * rather than picked per component — an ad-hoc `z-20` on a popover and an ad-hoc
+   * `z-30` on the header is how a tooltip ends up painted underneath the nav, which
+   * is exactly what happened before this existed.
+   */
+  --z-sticky: 30;
+  --z-nav: 40;
+  --z-overlay: 50;
+  --z-toast: 60;
 }
 
 @theme inline {
@@ -257,6 +268,10 @@
  * A 44px hit area on a coarse pointer without changing how the element draws. Inline
  * padding would push the fill outside the line box; an overlay does not, so a citation
  * chip stays a chip on desktop and becomes thumb-sized on a phone.
+ *
+ * Both axes, not just the vertical one. A citation chip is about 16px wide, so the
+ * first version — `inset: -14px -6px` — produced a 27x45 target: tall enough and half
+ * as wide as it needed to be.
  */
 @utility hit-touch {
   position: relative;
@@ -265,9 +280,60 @@
     &::after {
       content: '';
       position: absolute;
-      inset: -14px -6px;
+      inset: -14px;
+      min-width: 44px;
+      min-height: 44px;
+      /* Centre the overlay on the element rather than letting min-width grow it rightward. */
+      left: 50%;
+      right: auto;
+      translate: -50% 0;
     }
   }
+}
+
+/*
+ * Wrapper for a hover-only affordance. On a coarse pointer there is no hover, so a
+ * popover reachable only by focus is dead weight — and worse than dead weight, since an
+ * absolutely-positioned one still widens the document. Applied to a wrapping element
+ * rather than the popover itself, so it does not have to out-specify `group-hover:block`.
+ */
+@utility hover-only {
+  @media (pointer: coarse) {
+    display: none;
+  }
+}
+
+/*
+ * File paths, hashes and other long unbreakable runs.
+ *
+ * `truncate` looks tidier but is wrong twice over here: it hides the end of a path,
+ * which is the identifying part, and because the min-content of a `nowrap` run is the
+ * whole run, it forces every grid track containing it wider than the viewport. That is
+ * measurable — the dashboard rendered 425px of content into a 375px window until this
+ * replaced it. Wrapping at any character costs a second line and nothing else.
+ */
+@utility path {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The corner notch — brand motif 2, a tear-open cut on one card per view.
+ *
+ * `clip-path` alone cuts the card's 1px border along the diagonal, leaving the notch
+ * with no edge; against a card fill 1.08:1 from the page ground it was invisible at
+ * every width tested. The gradient draws the missing hairline back in.
+ */
+@utility notch {
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  background-image: linear-gradient(
+    to bottom left,
+    var(--rule-strong) 0,
+    var(--rule-strong) 20px,
+    transparent 20px
+  );
+  background-repeat: no-repeat;
+  background-position: top right;
+  background-size: 15px 15px;
 }
 
 /* Loading skeletons: geometry of the real content, breathing rather than spinning. */

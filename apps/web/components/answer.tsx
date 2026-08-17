@@ -1,6 +1,6 @@
 'use client';
 
-import type { AnswerResponse, Citation, SearchResult } from '@hatko/shared';
+import type { AnswerResponse, Citation } from '@hatko/shared';
 import { PressedLeafSpecimen } from './marks.tsx';
 import { Eyebrow, cx } from './ui.tsx';
 
@@ -24,11 +24,12 @@ export function Answer({
   onCitationClick: (chunkId: number) => void;
 }) {
   const byIndex = new Map(response.citations.map((citation) => [citation.index, citation]));
-  const passages = new Map(response.sources.map((source) => [source.chunkId, source]));
 
   return (
-    // Polite, not assertive: an answer arriving is new content, not an interruption.
-    <div aria-live="polite" className="max-w-[68ch]">
+    // The live region is mounted by the parent and never unmounts, so this content
+    // arriving inside it is an announcement. A region inserted together with its own
+    // content is not announced by most assistive tech, which is what shipped first.
+    <div className="max-w-[68ch]">
       {response.abstained ? (
         <Abstained />
       ) : (
@@ -39,7 +40,7 @@ export function Answer({
           <div className="rise text-body text-text">
             {response.answer.split(/\n{2,}/).map((paragraph, i) => (
               <p key={i} className={i > 0 ? 'mt-4' : undefined}>
-                {renderWithCitations(paragraph, byIndex, passages, onCitationClick)}
+                {renderWithCitations(paragraph, byIndex, onCitationClick)}
               </p>
             ))}
           </div>
@@ -62,8 +63,17 @@ function Abstained() {
       <PressedLeafSpecimen />
       <h2 className="font-display text-h2 mt-4 text-text">No documents cover this.</h2>
       <p className="mt-2 max-w-[46ch] text-body-sm text-text-muted">
-        Hatko answers only from the indexed corpus. Nothing in it addresses this question — the
-        nearest passages it found are listed alongside, so you can judge the miss yourself.
+        Hatko answers only from the indexed corpus, and nothing in it addresses this question. The
+        nearest passages it found are listed alongside, with their scores.
+      </p>
+      {/*
+       * Not a dead end. The question is already recorded in the corpus-gap list an admin
+       * reads on the dashboard, so saying so turns a refusal into the first half of a
+       * loop. Stated rather than linked: a regular user cannot open that page.
+       */}
+      <p className="mt-4 max-w-[46ch] border-t border-rule pt-4 text-caption text-text-muted">
+        This question is recorded as a corpus gap. An administrator sees it on the dashboard as a
+        document worth writing.
       </p>
     </div>
   );
@@ -96,7 +106,6 @@ function DeprecationNotices({ notices }: { notices: AnswerResponse['deprecationN
 function renderWithCitations(
   text: string,
   byIndex: Map<number, Citation>,
-  passages: Map<number, SearchResult>,
   onClick: (chunkId: number) => void,
 ) {
   return text.split(MARKER).map((part, i) => {
@@ -106,65 +115,44 @@ function renderWithCitations(
     const citation = byIndex.get(Number(part));
     if (!citation) return `[${part}]`;
 
-    return (
-      <CitationChip
-        key={i}
-        citation={citation}
-        passage={passages.get(citation.chunkId)}
-        onClick={() => onClick(citation.chunkId)}
-      />
-    );
+    return <CitationChip key={i} citation={citation} onClick={() => onClick(citation.chunkId)} />;
   });
 }
 
-function CitationChip({
-  citation,
-  passage,
-  onClick,
-}: {
-  citation: Citation;
-  passage: SearchResult | undefined;
-  onClick: () => void;
-}) {
+/**
+ * A citation marker. Click scrolls to the source card and promotes it for 1.2s.
+ *
+ * **There is deliberately no hover popover here, and design.md §8 asks for one.** It was
+ * built, measured, and removed, and the reasoning is worth keeping because the deviation
+ * is visible:
+ *
+ * It duplicated the rail. The popover showed the document title, the path and the first
+ * four lines of the passage — all of which sit in a source card a few inches to the right,
+ * permanently visible, with the *whole* passage and the retrieval scores. Clicking already
+ * takes the reader there.
+ *
+ * And it could not be positioned correctly without JavaScript. Anchored left, it projected
+ * 275 unreachable pixels past the right edge of a phone — and being `position: absolute`,
+ * it widened the document even while hidden, for readers who never hovered. Centred, it
+ * moved the same overflow to the left edge (measured: `left: -182` in a 1280 viewport).
+ * Fixing it properly means measuring on pointerenter and positioning a `fixed` layer,
+ * which is real machinery for an affordance that repeats what is already on screen.
+ *
+ * The `aria-label` carries the same information for anyone who cannot see the rail, which
+ * is the part that actually had to work.
+ */
+function CitationChip({ citation, onClick }: { citation: Citation; onClick: () => void }) {
   return (
-    <span className="group relative inline-block align-baseline">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={`Source ${citation.index}: ${citation.documentTitle}`}
-        className={cx(
-          'hit-touch text-mono-label rounded-sm bg-attention-subtle px-1 py-px align-[0.1em] font-mono',
-          'text-text transition-colors duration-120 ease-brand hover:bg-attention',
-        )}
-      >
-        {citation.index}
-      </button>
-
-      {/*
-       * L3 — the one level allowed the system's single shadow token. A layer floating
-       * over prose cannot separate itself with a border alone, because the value behind
-       * it is unknown.
-       */}
-      <span
-        role="tooltip"
-        className={cx(
-          'pointer-events-none invisible absolute bottom-full left-0 z-20 mb-2 w-72 max-w-[min(18rem,calc(100vw-2rem))]',
-          'translate-y-1 border border-border-interactive bg-bg-raised p-3 opacity-0 shadow-[var(--shadow-overlay)]',
-          'transition-[opacity,transform] duration-180 ease-brand',
-          'group-hover:visible group-hover:translate-y-0 group-hover:opacity-100',
-          'group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100',
-        )}
-      >
-        <span className="block text-h4 text-text">{citation.documentTitle}</span>
-        <span className="text-mono mt-0.5 block truncate font-mono text-text-muted">
-          {citation.sourcePath}
-        </span>
-        {passage && (
-          <span className="mt-2 block line-clamp-4 text-caption text-text-muted">
-            {passage.content}
-          </span>
-        )}
-      </span>
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Source ${citation.index}: ${citation.documentTitle}`}
+      className={cx(
+        'hit-touch text-mono-label rounded-sm bg-attention-subtle px-1 py-px align-[0.1em] font-mono',
+        'text-text transition-colors duration-120 ease-brand hover:bg-attention',
+      )}
+    >
+      {citation.index}
+    </button>
   );
 }

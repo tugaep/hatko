@@ -60,12 +60,16 @@ export async function requireUser(returnTo: string): Promise<SessionUser> {
  * Lacking the permission redirects to /chat rather than rendering a 403 page: the
  * user has a working home in this application, and bouncing them to it is more useful
  * than a dead end. The nav never offers the link in the first place.
+ *
+ * `?denied=` carries the reason so the destination can say what happened. A silent
+ * redirect is correct security and confusing product — the user typed a URL, something
+ * moved them, and nothing told them why.
  */
 export async function requirePermission(
   permission: Permission,
   returnTo: string,
 ): Promise<SessionUser> {
   const user = await requireUser(returnTo);
-  if (!can(user.role, permission)) redirect('/chat');
+  if (!can(user.role, permission)) redirect(`/chat?denied=${encodeURIComponent(permission)}`);
   return user;
 }

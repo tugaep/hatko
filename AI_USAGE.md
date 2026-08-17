@@ -1145,3 +1145,151 @@ documents embedded, 2.0s, 0 failed). `npm run typecheck` and `npm test` clean (1
 tests), `next build` clean. Leaving the old `@sorrel.local` accounts behind in a
 renamed database would have left two sets of demo credentials with published
 passwords, which is why the database was rebuilt rather than moved.
+
+---
+
+## Acting on the two design reviews (17 Aug 2026)
+
+Two review passes ran against the finished web UI: an Impeccable `critique` (dual-agent:
+a design-director review, and a deterministic detector plus browser evidence, isolated
+from each other until synthesis) and an anti-slop frontend audit. First scores: **22/40**
+on Nielsen's ten, 1 P0, 4 P1, 3 P2, five of eight cognitive-load checks failing. The
+detector found **zero** findings in source and four rule families at runtime, three of
+which were false positives against this project's committed brand decisions.
+
+Three findings arrived by independent routes, which is the part worth recording.
+
+**Right-edge overflow on every phone.** The design review measured it: `/dashboard` laid
+425px of content into a 375px window, `/chat` 437px, and `window.scrollTo(400,0)` left
+`scrollX` at 0 — so the clipped region was not scrollable, it was destroyed. The detector
+independently flagged three `text-overflow` hits on `.truncate.font-mono` elements. I
+bisected it in the live page by hiding one subtree at a time: the culprit was the
+`truncate`d source-path `<p>`, because the min-content of a `white-space: nowrap` run is
+the whole run and grid tracks default to `min-width: auto`. Replacing `truncate` with
+`overflow-wrap: anywhere` in the live page dropped `scrollWidth` from 425 to 375 before I
+changed a line of source. After the fix, measured again at 375 with an answer rendered and
+the sources open: 375/375, zero overflowing elements.
+
+**The catalog-number motif had become wallpaper.** The design review counted ten of
+thirteen dashboard catalog numbers identifying no record (`IDX-01`, `QRY-03`, `CFG-01`).
+The taste audit reached the same place mechanically — 13 `<Eyebrow>` plus 8 uppercase
+mono-labels against a ceiling of `ceil(sections/3)`. The detector reached it a third way,
+with 24 `wide-tracking` hits on one page. All ten invented numbers are gone; `DOC-0141` and
+`RUN-0001` stayed, because they name a row. I also added the rule to `brand.md` so the
+motif has a stated limit: a catalog number belongs on a specimen, never on the drawer.
+
+**The popover/header stacking bug.** The review measured the citation popover's title
+occluded by 22px (popover z-20 under a z-30 header); the taste audit flagged the absence of
+a z-index scale as a rule violation. Same defect from the rule side and the symptom side.
+There is now a four-token scale in `globals.css`.
+
+### Where I removed a specified feature rather than fix it
+
+`design.md` §8 specifies a hover popover on each citation chip. It was built. It had three
+measured defects, and fixing the third honestly meant JavaScript:
+
+- `position: absolute` while merely `invisible` still contributes to scroll width, so it
+  widened the document by 275 unreachable pixels for readers who never hovered.
+- `block` and `line-clamp-4` both set `display`; `block` won, so the clamp was inert and it
+  rendered a 657-character passage at 363px tall.
+- Anchored `left-0` it overflowed the right edge. Centred with `left-1/2 -translate-x-1/2`
+  it overflowed the **left** edge instead — measured `left: -182` in a 1280 viewport. There
+  is no CSS-only anchor that fits at both edges with cross-browser support.
+
+At that point I asked what the popover was _for_. It showed the document title, the path and
+the first four lines of the passage. All three sit in a source card a few inches right,
+permanently visible, with the whole passage and the retrieval scores — and clicking the chip
+already scrolls there and promotes it. It was duplicating the rail. So it is deleted, the
+reasoning is in the component, and the deviation from §8 is stated rather than hidden. The
+chip's `aria-label` carries the same information for anyone who cannot see the rail, which
+was the part that had to work.
+
+### The accessibility findings were the worst ones
+
+Not the visible bugs — the invisible ones.
+
+**Focus was destroyed on every question.** The composer was disabled while the answer
+generated, which threw focus to `<body>` and never returned it, so a keyboard user had to
+traverse six source cards and every citation chip to ask a second question. Measured before:
+`activeElement` = `BODY`. After: `question`, both during the request and after the answer
+lands. The input is now `readOnly` while pending instead of `disabled`; overlapping submits
+were already refused by a guard that existed.
+
+**Nothing was announced.** The only `aria-live` region was rendered _with_ the answer, and a
+region inserted together with its content is not announced by most assistive tech. So the
+product's core interaction produced silence. The live region is now a persistent `<ol>` that
+outlives every turn.
+
+**A wrong password marked the email field invalid.** The server does not say which field was
+wrong, and should not — that would leak which addresses have accounts. So the client cannot
+know either, and it was putting `aria-invalid` on a correct value. The failure now belongs to
+the attempt, reported once, with `role="alert"`.
+
+**Nine dashboard panels had no heading at all** — they were `<p class="text-eyebrow">`,
+leaving a three-entry outline on the page with the most content. That surfaced a real design
+problem underneath: `Ingestion` and `Documents` were 24px Fraunces while `Index health` and
+`Provider key` were 12px labels, the same rank at opposite volumes. The fix was not to pick
+one size. Those four groups genuinely are sections and the cards in them genuinely are
+subordinate, so the outline is now h1 → h2 section → h3 panel, and the two type sizes finally
+mean two different ranks.
+
+Also: `<main>` and heading order on sign-in (an `<h2>` preceded the page's `<h1>`); 44×44 hit
+areas on all three evidence controls, verified with `elementFromPoint` walking outward from
+each centre (44×45, 44×46, 107×45 against drawn boxes of 27×17, 15×17, 107×17); `Escape` on
+the sources disclosure; and a disabled-button treatment that is legible rather than 40%
+opacity on both label and fill.
+
+### Copy and honesty fixes
+
+`1 passages`, 142 times. `4.5S` and `240MS`, from `uppercase` applied to an SI unit in a brand
+whose stated rule is numbers over adjectives. Four em-dashes in shipped copy and an en-dash
+used as a range separator. Six lines carrying two or three `·` separators each, now labelled
+`<dl>` columns — `vector 0.84 · bm25 0.99 · fused 0.174` read as one opaque token, three
+labelled pairs read as three measurements. An `UNCATEGORISED` badge on 60 documents whose
+value is "no value". Deprecation stated four times for one document, now twice.
+
+Two behaviour changes came out of it rather than styling:
+
+**A legend for the numbers the product is proud of.** Help and documentation scored 1/4:
+`vector`, `bm25`, `fused`, "index is torn", "abstain rate" were all exposed and none
+explained. Exposing internals without a legend is not transparency, it is trivia.
+
+**Forcing ingestion now asks first.** A plain run is idempotent and skips unchanged files in
+milliseconds, so it still fires on one click. Forcing re-embeds all 142 documents, spends
+provider credits and cannot be undone, and it had no confirmation of any kind.
+
+**The abstain state is no longer a dead end.** It was the best screen in the product and the
+only one with no next action, while the dashboard already kept the corpus-gap list that closes
+the loop. It now says the question was recorded. Stated rather than linked, because a regular
+user cannot open that page.
+
+### Not done, and why
+
+**Sorting the documents table.** Raised as a power-user red flag. `listDocumentsFiltered` has
+no ordering parameter, so this is an API and query change rather than a frontend one, and it
+was outside what these two reviews were asked to fix.
+
+**The document list renders twice** — 25 cards (`md:hidden`) plus 25 table rows — at every
+width. One markup tree correct at both sizes needs a media-query hook and a hydration
+boundary; 25 `display: none` label frames cost nothing measurable at this corpus size, and
+`display: none` content is absent from the accessibility tree, so a screen reader sees one
+list. Left as is, deliberately, and stated here rather than left to be discovered.
+
+**Ten eyebrow labels remain on the dashboard**, above the taste rule's mechanical ceiling.
+Every survivor names its own data — six panel headings and four stat-tile labels. The rule
+exists to catch decorative kickers, and the decorative ones (the invented catalog numbers,
+the mono strip across the foot of the sign-in panel) are the ones that went.
+
+**Fraunces stays.** It is one of two display serifs the anti-slop rules ban by name, and the
+only thing defending it is that `brand.md` names it. Worth knowing that the most recognisable
+AI type tell in the project sits in the wordmark, defensible in one sentence and only one. It
+is now confined to display sizes in writing, since a display serif doing a label's job is the
+specific way this system would look cheap.
+
+### Verified after the fixes
+
+`npm run typecheck`, `npm test` (152 pass), `next build` all clean. Detector re-run: zero
+findings. Re-measured in a real browser at 375, 768 and 1280: no horizontal overflow on any
+page in any state, all three touch targets ≥44px, focus retained across a submit, the live
+region persistent, one of six sources marked cited, sources inline-expanded at 768 as §9
+requires, and the heading outline ordered on all three surfaces.

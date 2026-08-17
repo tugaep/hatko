@@ -33,12 +33,12 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
     // knowing whether this user has one. The chat composer is the caller.
     <div className="min-h-dvh" style={{ ['--nav-h' as string]: bottomBar ? '3.5rem' : '0rem' }}>
       {/* Opaque, not translucent — the interface is a printed surface, not glass. */}
-      <header className="sticky top-0 z-30 border-b border-rule bg-bg">
+      <header className="sticky top-0 z-[var(--z-sticky)] border-b border-rule bg-bg">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
           <Link
             href="/chat"
             className="flex items-center gap-2 rounded-sm"
-            aria-label="Hatko — ask a question"
+            aria-label="Hatko: ask a question"
           >
             <Logo className="size-5 text-brand" />
             <Wordmark />
@@ -69,7 +69,7 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
         <nav
           aria-label="Main"
           // Safe-area inset so the bar clears a home indicator rather than sitting under it.
-          className="fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-bg-raised pb-[env(safe-area-inset-bottom)] md:hidden"
+          className="fixed inset-x-0 bottom-0 z-[var(--z-nav)] border-t border-rule bg-bg-raised pb-[env(safe-area-inset-bottom)] md:hidden"
         >
           <ul className="flex">
             {items.map((item) => (

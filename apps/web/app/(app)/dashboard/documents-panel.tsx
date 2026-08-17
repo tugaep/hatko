@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  CATEGORY_UNCATEGORISED,
   documentSchema,
   documentStatusSchema,
   paginated,
@@ -65,10 +66,12 @@ export function DocumentsPanel() {
   const total = page.data?.total ?? 0;
 
   return (
-    <section aria-label="Documents" className="grid gap-4">
+    <section aria-labelledby="documents-heading" className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="font-display text-h2 text-text">Documents</h2>
+          <h2 id="documents-heading" className="font-display text-h2 text-text">
+            Documents
+          </h2>
           <p className="mt-1 text-body-sm text-text-muted">
             {page.data
               ? `${total.toLocaleString('en-GB')} matching, showing ${page.data.items.length}`
@@ -142,13 +145,10 @@ export function DocumentsPanel() {
               </thead>
               <tbody>
                 {page.data.items.map((doc) => (
-                  <tr
-                    key={doc.id}
-                    className="border-b border-rule transition-colors duration-120 ease-brand last:border-0 hover:bg-bg-sunken"
-                  >
+                  <tr key={doc.id} className="border-b border-rule last:border-0">
                     <Td>
                       <span className="block font-medium text-text">{doc.title}</span>
-                      <span className="text-mono block truncate font-mono text-text-muted">
+                      <span className="text-mono path block font-mono text-text-muted">
                         {doc.sourcePath}
                       </span>
                     </Td>
@@ -166,7 +166,7 @@ export function DocumentsPanel() {
                       {formatBytes(doc.byteSize)}
                     </Td>
                     <Td className="tabular text-right font-mono text-text-muted">
-                      {doc.indexedAt ? formatDateTime(doc.indexedAt) : '—'}
+                      {doc.indexedAt ? formatDateTime(doc.indexedAt) : 'never'}
                     </Td>
                   </tr>
                 ))}
@@ -206,19 +206,34 @@ function DocumentCard({ doc }: { doc: Document }) {
       title={
         <>
           <h3 className="text-h4 text-text">{doc.title}</h3>
-          <p className="text-mono mt-0.5 truncate font-mono text-text-muted">{doc.sourcePath}</p>
+          <p className="text-mono path mt-0.5 font-mono text-text-muted">{doc.sourcePath}</p>
         </>
       }
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone={STATUS_TONE[doc.status]}>{doc.status}</Badge>
-        <Badge>{doc.category}</Badge>
+        {/* `uncategorised` is the ingest fallback for a file at the corpus root. A badge
+            whose value is "no value" is noise, and 60 documents carry it. */}
+        {doc.category !== CATEGORY_UNCATEGORISED && <Badge>{doc.category}</Badge>}
         {doc.isDeprecated && <Badge tone="danger">deprecated</Badge>}
       </div>
-      <p className="text-mono-label tabular mt-3 font-mono text-text-muted">
-        {doc.chunkCount} passages · {formatBytes(doc.byteSize)} ·{' '}
-        {doc.indexedAt ? formatDateTime(doc.indexedAt) : 'not indexed'}
-      </p>
+      {/* Labelled pairs, not a dot-delimited run — and `passage` pluralised, since every
+          document in the sample corpus produces exactly one and `1 passages` shipped 142
+          times. */}
+      <dl className="text-mono-label tabular mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-text-muted">
+        <div className="flex gap-1.5">
+          <dt>{doc.chunkCount === 1 ? 'passage' : 'passages'}</dt>
+          <dd className="text-text">{doc.chunkCount}</dd>
+        </div>
+        <div className="flex gap-1.5">
+          <dt>size</dt>
+          <dd className="text-text">{formatBytes(doc.byteSize)}</dd>
+        </div>
+        <div className="flex gap-1.5">
+          <dt>indexed</dt>
+          <dd className="text-text">{doc.indexedAt ? formatDateTime(doc.indexedAt) : 'never'}</dd>
+        </div>
+      </dl>
       {doc.error && (
         <p className="mt-2 border border-danger bg-danger-subtle p-2 text-caption text-text">
           {doc.error}
@@ -245,7 +260,7 @@ function Pagination({
   return (
     <nav className="flex items-center justify-between gap-4" aria-label="Document pages">
       <p className="text-mono-label tabular font-mono uppercase text-text-muted">
-        {offset + 1}–{last} of {total}
+        {offset + 1}-{last} of {total}
       </p>
       <div className="flex gap-2">
         <Button

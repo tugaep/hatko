@@ -58,8 +58,18 @@ export default async function SignInPage({
       {/*
        * The plate. Decorative, so it is the half that disappears on a phone — the form
        * is the job, and a specimen above the fold would push it below.
+       *
+       * Its statement is a `<p>`, not an `<h2>`. As a heading it preceded the page's own
+       * `<h1>` in DOM order, which gives a screen reader a document that starts at level
+       * two and then goes up. It is a poster line; posters do not need heading semantics.
+       *
+       * The mono line that used to sit at the bottom of this panel is gone. Real data, but
+       * a small-caps strip across the foot of a hero is decoration wearing a number.
        */}
-      <aside className="hidden flex-col justify-between border-r border-rule bg-bg-sunken p-10 lg:flex">
+      <aside
+        aria-hidden="true"
+        className="hidden flex-col justify-between border-r border-rule bg-bg-sunken p-10 lg:flex"
+      >
         <div className="flex items-center gap-2">
           <Logo className="size-5 text-brand" />
           <Wordmark />
@@ -67,23 +77,24 @@ export default async function SignInPage({
 
         <div>
           <FernSpecimen className="size-32" />
-          <h2 className="font-display text-display mt-6 max-w-[24ch] text-text">
-            The answer is already in the corpus.
-          </h2>
-          <p className="mt-4 max-w-[46ch] text-body text-text-muted">
+          <p className="font-display text-h2 mt-6 max-w-[26ch] text-text">
+            The answer is already in the corpus. The work is knowing where to look.
+          </p>
+          <p className="mt-4 max-w-[46ch] text-body-sm text-text-muted">
             Hatko finds the passages that answer your question and writes an answer that cites them.
             When nothing covers it, it says so.
           </p>
         </div>
 
-        <p className="text-mono-label tabular font-mono uppercase text-text-muted">
+        <p className="tabular text-caption text-text-muted">
           {chunks === null
-            ? 'Internal retrieval'
-            : `Internal retrieval · ${chunks.toLocaleString('en-GB')} passages indexed`}
+            ? 'Internal retrieval tool.'
+            : `${chunks.toLocaleString('en-GB')} passages indexed.`}
         </p>
       </aside>
 
-      <div className="flex flex-col justify-center px-4 py-12 sm:px-10">
+      {/* `<main>`, which this page did not have. §10 asks for landmarks on every page. */}
+      <main className="flex flex-col justify-center px-4 py-12 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
           <div className="flex items-center gap-2 lg:hidden">
             <Logo className="size-5 text-brand" />
@@ -97,7 +108,7 @@ export default async function SignInPage({
 
           <SignInForm next={destination} />
         </div>
-      </div>
+      </main>
     </div>
   );
 }

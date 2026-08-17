@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { answerResponseSchema, type AnswerResponse } from '@hatko/shared';
+import { answerResponseSchema, type AnswerResponse, type Permission } from '@hatko/shared';
 import { isAuthError, messageOf } from '../../../lib/api.ts';
 import { apiSend } from '../../../lib/client.ts';
 import { formatMs } from '../../../lib/format.ts';
@@ -36,7 +36,15 @@ const EXAMPLES = [
 /** How long a cited source card stays promoted after its citation is clicked. */
 const FLASH_MS = 1200;
 
-export function Chat() {
+/** What each permission means to the person who was just bounced for lacking it. */
+const DENIED_COPY: Partial<Record<Permission, string>> = {
+  'dashboard:view':
+    'The dashboard is for administrators. Your account can search and ask questions.',
+  'documents:manage': 'Corpus management is for administrators.',
+  'ingestion:trigger': 'Running ingestion is for administrators.',
+};
+
+export function Chat({ denied }: { denied?: Permission }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [pending, setPending] = useState(false);
   const [flashed, setFlashed] = useState<string | null>(null);
@@ -121,26 +129,48 @@ export function Chat() {
           </p>
         </header>
 
-        {turns.length === 0 ? (
-          <EmptyState onPick={ask} disabled={pending} />
-        ) : (
-          <ol className="mt-8 grid gap-12">
-            {turns.map((turn, i) => (
-              <li
-                key={turn.id}
-                ref={i === turns.length - 1 ? tailRef : null}
-                className="scroll-mt-20"
-              >
-                <TurnView
-                  turn={turn}
-                  flashed={flashed}
-                  onCitationClick={(chunkId) => jumpToSource(turn.id, chunkId)}
-                  onRetry={() => ask(turn.query)}
-                />
-              </li>
-            ))}
-          </ol>
+        {/*
+         * Not an error card. Being sent here is the correct outcome of asking for a page
+         * your role does not hold, so it is stated as a fact in the neutral informational
+         * tone rather than dressed in clay.
+         */}
+        {denied && (
+          <p className="fade mt-4 border border-rule-strong bg-bg-sunken p-3 text-body-sm text-text">
+            {DENIED_COPY[denied] ?? 'That page is for administrators.'}
+          </p>
         )}
+
+        {/*
+         * The live region is mounted here, once, for the life of the page — not created
+         * along with each answer. A region inserted together with its content is not
+         * announced by most assistive tech, which meant pressing Ask produced silence.
+         *
+         * `grid-cols-[minmax(0,1fr)]` rather than a bare `grid`: an auto track takes its
+         * minimum from its content, and one unbreakable source path was enough to push the
+         * whole column past the viewport on a phone.
+         */}
+        <ol
+          aria-live="polite"
+          aria-busy={pending}
+          className={cx('grid grid-cols-[minmax(0,1fr)] gap-12', turns.length > 0 && 'mt-8')}
+        >
+          {turns.map((turn, i) => (
+            <li
+              key={turn.id}
+              ref={i === turns.length - 1 ? tailRef : null}
+              className="min-w-0 scroll-mt-20"
+            >
+              <TurnView
+                turn={turn}
+                flashed={flashed}
+                onCitationClick={(chunkId) => jumpToSource(turn.id, chunkId)}
+                onRetry={() => ask(turn.query)}
+              />
+            </li>
+          ))}
+        </ol>
+
+        {turns.length === 0 && <EmptyState onPick={ask} disabled={pending} />}
       </div>
 
       <Composer inputRef={composerRef} pending={pending} onSubmit={ask} />
@@ -156,9 +186,9 @@ function sourceDomId(turnId: number, chunkId: number): string {
  * One question and everything it produced.
  *
  * The two-column split is the show-your-work principle in layout form: the answer holds
- * to a readable measure and the evidence sits beside it, not behind a disclosure. Below
- * `lg` the evidence collapses to a count the reader opens, because a phone cannot show
- * both at once and the answer is what they asked for.
+ * to a readable measure and the evidence sits beside it, not behind a disclosure. Only a
+ * phone collapses the evidence to a count the reader opens, because only a phone genuinely
+ * cannot show both. A tablet can, and design.md §9 says so.
  */
 function TurnView({
   turn,
@@ -173,14 +203,34 @@ function TurnView({
 }) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const panelId = useId();
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const response = turn.response;
+
+  /** Escape closes the disclosure and returns focus to the control that opened it. */
+  function onPanelKeyDown(event: React.KeyboardEvent) {
+    if (event.key !== 'Escape' || !sourcesOpen) return;
+    setSourcesOpen(false);
+    toggleRef.current?.focus();
+  }
+
+  // Which passages the answer actually leaned on. Retrieval returns six; an answer
+  // typically cites one or two, and the reader should not have to work that out.
+  const citedChunkIds = new Set(response?.citations.map((citation) => citation.chunkId) ?? []);
 
   return (
     <article>
-      {/* The question, as a chip rather than a bubble — this is not a chat with a persona. */}
-      <div className="flex justify-end">
-        <h2 className="max-w-[560px] rounded-sm bg-bg-sunken px-3 py-2 text-body-sm text-text">
-          {turn.query}
-        </h2>
+      {/*
+       * The question, as a chip rather than a bubble — this is not a chat with a persona.
+       * Right-aligned to the answer column, not the outer container: aligned to the
+       * container it floated over the *sources* rail while its own answer sat diagonally
+       * opposite.
+       */}
+      <div className="lg:max-w-[720px]">
+        <div className="flex justify-end">
+          <h2 className="max-w-[560px] rounded-sm bg-bg-sunken px-3 py-2 text-body-sm text-text">
+            {turn.query}
+          </h2>
+        </div>
       </div>
 
       <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,720px)_360px] lg:items-start lg:gap-10">
@@ -191,53 +241,133 @@ function TurnView({
               detail={turn.error}
               onRetry={onRetry}
             />
-          ) : turn.response ? (
+          ) : response ? (
             <>
-              <Answer response={turn.response} onCitationClick={onCitationClick} />
-              <p className="text-mono-label tabular mt-4 font-mono uppercase text-text-muted">
-                {turn.response.abstained ? 'Abstained' : `${turn.response.citations.length} cited`}{' '}
-                · {turn.response.sources.length} passages · {formatMs(turn.response.latencyMs)}
-              </p>
+              <Answer response={response} onCitationClick={onCitationClick} />
+              {/*
+               * Three measurements, three columns. As one dot-delimited string
+               * (`3 CITED · 6 PASSAGES · 3.4S`) it read as a single opaque token, and
+               * `uppercase` turned `3.4s` into `3.4S`, mangling the unit in a brand whose
+               * rule is numbers over adjectives.
+               */}
+              <dl className="text-mono-label mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-text-muted">
+                <Stat label="citations">
+                  {response.abstained ? 'abstained' : response.citations.length}
+                </Stat>
+                <Stat label="passages">{response.sources.length}</Stat>
+                <Stat label="took">{formatMs(response.latencyMs)}</Stat>
+              </dl>
             </>
           ) : (
             <AnswerSkeleton />
           )}
         </div>
 
-        {(turn.response?.sources.length ?? 0) > 0 && turn.response && (
-          <aside className="mt-6 lg:mt-0" aria-label="Sources">
+        {response && response.sources.length > 0 && (
+          <aside
+            className="mt-6 min-w-0 lg:mt-0"
+            aria-labelledby={`${panelId}-heading`}
+            onKeyDown={onPanelKeyDown}
+          >
             <div className="flex items-center justify-between gap-3 border-b border-rule pb-2">
-              <Eyebrow>{turn.response.abstained ? 'Nearest passages' : 'Sources'}</Eyebrow>
+              <Eyebrow as="h3" id={`${panelId}-heading`}>
+                {response.abstained ? 'Nearest passages' : 'Sources'}
+              </Eyebrow>
               <button
                 type="button"
+                ref={toggleRef}
                 onClick={() => setSourcesOpen((open) => !open)}
                 aria-expanded={sourcesOpen}
                 aria-controls={panelId}
-                className="rounded-sm text-caption font-medium text-text lg:hidden"
+                className="hit-touch rounded-sm text-caption font-medium text-text md:hidden"
               >
-                {sourcesOpen ? 'Hide' : `Show ${turn.response.sources.length}`}
+                {sourcesOpen ? 'Hide' : `Show ${response.sources.length}`}
               </button>
             </div>
 
             <div
               id={panelId}
-              className={cx('mt-3 grid gap-3', sourcesOpen ? 'grid' : 'hidden lg:grid')}
+              className={cx(
+                'mt-3 grid grid-cols-[minmax(0,1fr)] gap-3',
+                sourcesOpen ? 'grid' : 'hidden md:grid',
+              )}
             >
-              {turn.response.sources.map((source, i) => (
+              {response.sources.map((source, i) => (
                 <SourceCard
                   key={source.chunkId}
                   result={source}
                   index={i + 1}
                   query={turn.query}
                   domId={sourceDomId(turn.id, source.chunkId)}
+                  cited={citedChunkIds.has(source.chunkId)}
                   flashed={flashed === sourceDomId(turn.id, source.chunkId)}
                 />
               ))}
+              <ScoreLegend />
             </div>
           </aside>
         )}
       </div>
     </article>
+  );
+}
+
+function Stat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-1.5">
+      <dt>{label}</dt>
+      <dd className="tabular text-text">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * What the three numbers on every source card mean.
+ *
+ * The product's whole promise is that a result can be interrogated, and it prints
+ * `vector 0.84 · bm25 0.99 · fused 0.174` to make that possible — then explained none of
+ * it anywhere. Exposing internals without a legend is not transparency, it is trivia. A
+ * `<details>` because the legend is needed once and then never again.
+ */
+function ScoreLegend() {
+  return (
+    <details className="border border-rule bg-bg p-3">
+      <summary className="hit-touch cursor-pointer text-caption font-medium text-text">
+        What these numbers mean
+      </summary>
+      <dl className="mt-3 grid gap-2 text-caption text-text-muted">
+        <div>
+          <dt className="font-medium text-text">Relevance</dt>
+          <dd>
+            An absolute grade from 0 to 1: how well this passage answers the question, judged after
+            retrieval. Below 0.67 nothing is answered from it, which is how abstention is decided.
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-text">vector</dt>
+          <dd>
+            Cosine similarity of meaning, 0 to 1. Finds passages that say the same thing in
+            different words. <span className="font-mono">none</span> means keyword search alone
+            surfaced this passage.
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-text">bm25</dt>
+          <dd>
+            Keyword match strength, normalised 0 to 1. Finds exact terms a paraphrase would miss,
+            which is what cuts through 78 near-identical delivery reports.
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-text">fused</dt>
+          <dd>
+            The combined ranking the two arms agreed on. Derived from positions rather than scores,
+            so it orders results and says nothing about how good the best one is. That is why it is
+            printed and not drawn as a bar.
+          </dd>
+        </div>
+      </dl>
+    </details>
   );
 }
 
@@ -258,8 +388,12 @@ function EmptyState({ onPick, disabled }: { onPick: (query: string) => void; dis
       <FernSpecimen />
       <h2 className="font-display text-h2 mt-4 text-text">Nothing asked yet.</h2>
       <p className="mt-2 max-w-[48ch] text-body-sm text-text-muted">
-        Ask in plain language. Press <kbd className="text-mono font-mono">/</kbd> to jump to the
-        question field.
+        Ask in plain language.
+        {/* Hidden where there is no keyboard to press it with. */}
+        <span className="hover-only">
+          {' '}
+          Press <kbd className="text-mono font-mono">/</kbd> to jump to the question field.
+        </span>
       </p>
 
       <ul className="mt-6 grid w-full max-w-[60ch] gap-2 text-left">
@@ -304,12 +438,22 @@ function Composer({
     event.preventDefault();
     onSubmit(value);
     setValue('');
+    // Keep the caret where the person put it. Disabling the field while the answer
+    // generated used to throw focus to <body>, so a keyboard user had to traverse six
+    // source cards and every citation chip to ask a second question.
+    inputRef.current?.focus();
   }
 
   return (
     <form
       onSubmit={submit}
-      className="sticky bottom-[var(--nav-h)] z-20 -mx-4 border-t border-rule bg-bg px-4 py-3 sm:-mx-6 sm:px-6"
+      // The inset belongs here as well as on the bottom nav: a regular user has only one
+      // nav destination, gets no bottom bar, and would otherwise have the field sitting
+      // underneath the home indicator.
+      className={cx(
+        'sticky bottom-[var(--nav-h)] z-[var(--z-sticky)] -mx-4 border-t border-rule bg-bg',
+        'px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6',
+      )}
     >
       <div className="flex gap-2">
         <label htmlFor="question" className="sr-only">
@@ -327,7 +471,10 @@ function Composer({
           maxLength={500}
           autoComplete="off"
           placeholder="Ask a question about the corpus…"
-          disabled={pending}
+          // Deliberately not disabled while pending. Overlapping submits are already
+          // refused by the `pendingRef` guard in `ask`, and disabling the one element the
+          // user is focused on is a worse cure than the disease.
+          readOnly={pending}
         />
         <Button type="submit" loading={pending} disabled={value.trim().length < 2}>
           Ask

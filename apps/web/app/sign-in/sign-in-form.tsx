@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { apiErrorSchema } from '@hatko/shared';
 import { API_URL } from '../../lib/api.ts';
-import { Button, Field, Input } from '../../components/ui.tsx';
+import { AlertIcon, Button, Field, Input } from '../../components/ui.tsx';
 
 /**
  * Sign-in posts straight to Better Auth, which sets the httpOnly session cookie. No
@@ -78,6 +78,15 @@ export function SignInForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={submit} noValidate className="mt-8 grid gap-5">
+      {/*
+       * Neither field is marked invalid on a failed sign-in.
+       *
+       * The server does not say which of the two was wrong, and it should not — that would
+       * leak which addresses have accounts. So the client cannot know either, and the first
+       * version put a danger border and `aria-invalid` on the *email* field for a wrong
+       * password, telling assistive tech that a correct value was malformed. The failure
+       * belongs to the attempt, not to a field, so it is reported once below the form.
+       */}
       <Field label="Email" htmlFor="email">
         <Input
           id="email"
@@ -88,26 +97,28 @@ export function SignInForm({ next }: { next: string }) {
           spellCheck={false}
           autoCapitalize="none"
           placeholder="you@studio.internal"
-          invalid={error !== null}
         />
       </Field>
 
-      <Field
-        label="Password"
-        htmlFor="password"
-        error={error ?? undefined}
-        hint="Minimum 8 characters."
-      >
+      <Field label="Password" htmlFor="password">
         <Input
           id="password"
           name="password"
           type="password"
           autoComplete="current-password"
           required
-          invalid={error !== null}
-          aria-describedby={error ? 'password-error' : undefined}
         />
       </Field>
+
+      {error && (
+        <p
+          role="alert"
+          className="flex items-start gap-2 border border-danger bg-danger-subtle p-3 text-body-sm text-text"
+        >
+          <AlertIcon className="mt-0.5 size-4 shrink-0 text-danger-text" />
+          {error}
+        </p>
+      )}
 
       <Button type="submit" size="lg" loading={busy} className="w-full">
         Sign in
