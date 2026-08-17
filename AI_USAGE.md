@@ -308,7 +308,7 @@ Recording this first, because most of it did.
 ### Defects found
 
 Ordered by how much damage they would do. None were known before the audit.
-**Defects 1–11 are fixed** (see "Fixes" below); 12 and 13 are recorded and open.
+**All thirteen are fixed** (see "Fixes" below).
 
 **1. Anyone can create an account and read the entire internal corpus.**
 `POST /api/auth/sign-up/email` is open. Verified over HTTP: a stranger registered
@@ -414,11 +414,10 @@ Correct from roughly 20 rows up.
   at module scope. A consumer that only wants `hybridSearch` inherits both. Step 7's
   MCP server is exactly that consumer.
 
-### Fixes for defects 1–11
+### Fixes for defects 1–13
 
-Fixed because they are cheap, two are security, and the rest bear on stated
-requirements. The remaining two are recorded above and triaged against the timebox,
-not silently dropped.
+Two are security, the rest bear on stated requirements, and all were cheap enough
+that triaging them out would have cost more argument than code.
 
 **1. Sign-up closed.** A route registered ahead of the Better Auth mount rejects
 `/api/auth/sign-up/*` with 403. Not Better Auth's `disableSignUp`, because that flag
@@ -537,6 +536,33 @@ short. LIKE reads `%` and `_` in the _value_, so searching for `_` returned ever
 document and `sdk_notes` matched `sdk-notes-v2.md` through the wildcard. Escaped, with
 `ESCAPE '\'` declared.
 
+**12. `maxChars` is a ceiling now, and a heading is not a passage.** Preferring
+paragraph and sentence boundaries is a quality choice; when no such boundary exists the
+old code gave up and emitted the section whole, so a single 10,000-character sentence
+became a single 10,000-character chunk. That is not a rounding problem —
+text-embedding-3-small accepts 8192 tokens, so an oversized chunk is a request that
+fails and a document that never gets indexed. There is now a word-boundary fallback
+below sentences, and a hard cut below that for a single unbroken token like a URL or a
+base64 blob. Separately, a heading line is its own paragraph and was being flushed as a
+standalone chunk — a 3-character passage reading `# T`, embedded and indexed as though
+it were prose — so it is glued to the text it labels before packing.
+
+Balanced piece sizes were tried too, to stop greedy packing leaving the remainder in a
+short trailing chunk. Measured across four pathological inputs it produced more chunks
+and _introduced_ a runt in the one case that previously had none, so it was dropped —
+the same discipline as defect 10, on a much smaller question. The residual is recorded
+in the code: a very long paragraph can still leave a short tail, and a heading followed
+by one unbroken multi-kilobyte token still orphans the heading, because there is no
+boundary at which anything could pack with it. Low-value passages rather than incorrect
+ones, on input no prose corpus produces.
+
+**13. p95 uses nearest rank.** The offset was `CAST(N * 0.95 AS INTEGER) - 1`, which
+truncates instead of rounding up and pointed one row too low — at two samples it
+reported the _minimum_ latency as the 95th percentile, wrong in the flattering
+direction on the one figure whose job is to show when things are slow. Now
+`ceil(0.95 * N) - 1`, computed in TypeScript because `total` is already known there and
+SQLite's `ceil` depends on a build-time math extension.
+
 Verified over HTTP against the running server, not just in-process: sign-up returns
 403 and creates no row, sign-in still works, both body routes return 400 with no
 stack trace logged, and search and answer still return grounded cited results. The
@@ -554,8 +580,10 @@ including `CLAUDE.md` and a dependency README, and reported two failures with on
 visible; the new tree indexes 142, names the exclusion, and reports two failures with
 two visible.
 
-Thirteen tests added, 128 pass, including the first coverage of the dashboard
-analytics and of category-filtered retrieval, neither of which had any.
+Sixteen tests added, 131 pass, including the first coverage of the dashboard analytics
+and of category-filtered retrieval, neither of which had any. The chunker edits leave
+the sample corpus byte-identical — still 142 documents, 142 chunks, longest 1029
+characters — because every path they touch is one this corpus never takes.
 
 Three of these fixes landed on assertions that could not fail: `durationMs >= 0` on a
 value that was always 0, a test whose name described a state the code never produced,
@@ -582,7 +610,7 @@ every document.
 
 ### What this says about the review discipline
 
-Nine of the thirteen defects are things that cannot happen on the sample corpus:
+Nine of the thirteen defects were things that cannot happen on the sample corpus:
 oversized sections, corpora containing a `README.md`, sub-second timing precision,
 analytics tables with enough rows for a percentile to mean anything. The tests are
 strong — 115 of them, aimed at silent failure rather than coverage — and they pass,

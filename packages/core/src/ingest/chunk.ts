@@ -97,10 +97,62 @@ function headingForGroup(group: Section[]): string | null {
 }
 
 /**
- * Split an oversized section on paragraph boundaries, falling back to sentence
- * boundaries for a single paragraph that is itself too long. Never splits
- * mid-sentence: a fragment ending halfway through a clause embeds poorly and
- * reads worse when shown as a citation.
+ * Cut text on whitespace so nothing can exceed the ceiling.
+ *
+ * The last resort, below paragraphs and sentences. Preferring not to split
+ * mid-sentence is a quality choice; never splitting at all is a correctness problem,
+ * because a chunk has to fit the embedding model's context — text-embedding-3-small
+ * takes 8192 tokens, so an unbounded chunk is a request that fails outright and a
+ * document that never gets indexed. A cut on a word boundary beats that.
+ *
+ * Whitespace runs are preserved as their own tokens, so the text stays verbatim
+ * rather than being reflowed.
+ */
+function splitOnWords(text: string, maxChars: number): string[] {
+  // Packs greedily to the ceiling. Aiming for equal-sized pieces instead was tried,
+  // to avoid leaving the remainder in a short trailing chunk, and measured worse: it
+  // produced more chunks and *introduced* a runt in the case that previously had
+  // none. A short trailing fragment survives here on pathological input; see the
+  // note on splitOversized.
+  const parts: string[] = [];
+  let current = '';
+
+  for (const token of text.split(/(\s+)/)) {
+    if (!current || current.length + token.length <= maxChars) current += token;
+    else {
+      parts.push(current);
+      current = token;
+    }
+  }
+  if (current) parts.push(current);
+
+  // A single unbroken token longer than the ceiling — a URL, a base64 blob, a
+  // minified line. There is no boundary left to respect, so cut it.
+  return parts
+    .flatMap((part) =>
+      part.length <= maxChars
+        ? [part]
+        : Array.from({ length: Math.ceil(part.length / maxChars) }, (_, i) =>
+            part.slice(i * maxChars, (i + 1) * maxChars),
+          ),
+    )
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Split an oversized section: paragraphs first, then sentences, then words.
+ *
+ * Preference order is about retrieval quality — a fragment ending halfway through a
+ * clause embeds poorly and reads worse as a citation — but the ceiling is honoured
+ * at the end regardless, because an oversized chunk is not indexable at all.
+ *
+ * Known residual, stated rather than hidden: greedy packing can leave the remainder
+ * of a very long paragraph in a short trailing chunk, and a document consisting of a
+ * heading followed by one unbroken multi-kilobyte token still orphans the heading,
+ * because there is no boundary at which anything could be packed with it. Both are
+ * low-value passages rather than incorrect ones, and neither arises in a corpus of
+ * prose — nothing in this one is oversized at all.
  */
 function splitOversized(section: Section, maxChars: number): RawChunk[] {
   const units = section.content.split(/\n{2,}/).filter((p) => p.trim());
@@ -118,12 +170,27 @@ function splitOversized(section: Section, maxChars: number): RawChunk[] {
     }
   };
 
+  // A heading line is its own paragraph, so on its own it would be flushed as a
+  // standalone chunk — measured, a 3-character passage reading `# T`, embedded and
+  // indexed as though it were prose. A heading labels what follows it, so it is
+  // glued to the next unit before packing rather than being allowed to stand alone.
+  const merged: string[] = [];
   for (const unit of units) {
+    const previous = merged.at(-1);
+    if (previous !== undefined && HEADING_RE.test(previous) && !previous.includes('\n')) {
+      merged[merged.length - 1] = `${previous}\n\n${unit}`;
+    } else {
+      merged.push(unit);
+    }
+  }
+
+  for (const unit of merged) {
     if (unit.length <= maxChars) {
       push(unit);
       continue;
     }
-    // One paragraph over the ceiling: fall back to sentence boundaries.
+    // One paragraph over the ceiling: fall back to sentence boundaries, and to word
+    // boundaries for a sentence that is itself too long.
     let sentence = '';
     for (const piece of unit.split(/(?<=[.!?])\s+/)) {
       if (sentence && sentence.length + piece.length + 1 > maxChars) {
@@ -140,7 +207,11 @@ function splitOversized(section: Section, maxChars: number): RawChunk[] {
   // Resolved the same way as a merged group, so an oversized level-1 section is
   // labelled null rather than repeating the document title.
   const heading = headingForGroup([section]);
-  return parts.map((content) => ({ heading, content }));
+  return parts
+    .flatMap((content) =>
+      content.length <= maxChars ? [content] : splitOnWords(content, maxChars),
+    )
+    .map((content) => ({ heading, content }));
 }
 
 export function chunkMarkdown(body: string, options: ChunkOptions = {}): RawChunk[] {

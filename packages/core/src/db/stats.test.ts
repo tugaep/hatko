@@ -97,6 +97,45 @@ test('an empty table reports zeroes rather than failing', () => {
 });
 
 /**
+ * p95 by nearest rank: the sample at 1-based index `ceil(0.95 * N)`.
+ *
+ * The offset was `CAST(N * 0.95 AS INTEGER) - 1`, which truncates rather than rounding
+ * up and so pointed one row too low. At two rows it returned the *minimum* latency as
+ * the 95th percentile — wrong in the flattering direction, on the one figure whose job
+ * is to show when things are slow.
+ */
+test('p95 latency uses nearest rank, including at small sample sizes', () => {
+  const cases: Array<[number[], number]> = [
+    [[100], 100],
+    [[100, 200], 200],
+    [[100, 200, 300], 300],
+    [[10, 20, 30, 40], 40],
+    // 20 samples: ceil(0.95 * 20) = 19, so the 19th of 20 ascending.
+    [Array.from({ length: 20 }, (_, i) => (i + 1) * 10), 190],
+    // 100 samples: the 95th.
+    [Array.from({ length: 100 }, (_, i) => i + 1), 95],
+  ];
+
+  for (const [latencies, expected] of cases) {
+    using ctx = tempDb();
+    for (const ms of latencies) {
+      ctx.db
+        .prepare(
+          `INSERT INTO search_queries (user_id, source, query, result_count, abstained, latency_ms)
+           VALUES ('u', 'web', 'q', 1, 0, ?)`,
+        )
+        .run(ms);
+    }
+
+    assert.equal(
+      getSearchStats(ctx.db).p95LatencyMs,
+      expected,
+      `n=${latencies.length} should report ${expected}`,
+    );
+  }
+});
+
+/**
  * The abstain rate is the figure the dashboard exists to surface — a rising one is a
  * list of documents the corpus is missing, not a fault report — so it has to be the
  * share of queries that actually abstained.

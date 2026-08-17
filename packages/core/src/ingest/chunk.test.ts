@@ -112,6 +112,63 @@ test('an oversized single section is split without cutting a sentence', () => {
   }
 });
 
+/**
+ * `maxChars` has to be a real ceiling, not a preference.
+ *
+ * Preferring paragraph and sentence boundaries is a quality choice, but when there is
+ * no such boundary the old code simply gave up and emitted the whole thing: a single
+ * 10,000-character sentence became one 10,000-character chunk. That is not a rounding
+ * problem — text-embedding-3-small accepts 8192 tokens, so an oversized chunk is a
+ * request that fails and a document that never gets indexed at all.
+ */
+test('a chunk never exceeds the ceiling, whatever the text refuses to split on', () => {
+  const ceiling = 600;
+  const cases: Array<[string, string]> = [
+    ['one enormous sentence', `# T\n\n${'word '.repeat(2000).trim()}.`],
+    ['one unbroken token', `# T\n\n${'x'.repeat(4000)}`],
+    ['no whitespace at all', `# T\n\n${'abc'.repeat(1000)}`],
+    ['sentence then giant token', `# T\n\nShort sentence. ${'y'.repeat(3000)}`],
+  ];
+
+  for (const [name, body] of cases) {
+    const chunks = chunkMarkdown(body, { targetChars: 400, maxChars: ceiling });
+
+    assert.ok(chunks.length > 0, `${name} produced nothing`);
+    for (const chunk of chunks) {
+      assert.ok(
+        chunk.content.length <= ceiling,
+        `${name}: chunk of ${chunk.content.length} exceeds the ${ceiling} ceiling`,
+      );
+    }
+    // Splitting must not lose text. Whitespace at the cut points is normalised away,
+    // so compare with whitespace stripped.
+    const strip = (s: string) => s.replace(/\s+/g, '');
+    assert.equal(
+      strip(chunks.map((c) => c.content).join('')),
+      strip(body),
+      `${name}: content was lost or duplicated`,
+    );
+  }
+});
+
+/**
+ * A heading line is its own paragraph, so an oversized section used to flush it as a
+ * standalone chunk — measured, a 3-character passage reading `# T`, embedded and
+ * indexed as though it were prose. A heading labels what follows; it is not a passage.
+ */
+test('an oversized section does not emit its heading as a chunk of its own', () => {
+  const body = `## Section\n\n${'alpha '.repeat(900).trim()}.`;
+
+  const chunks = chunkMarkdown(body, { targetChars: 400, maxChars: 600 });
+
+  assert.ok(chunks.length > 1, 'the section is oversized and must split');
+  assert.match(chunks[0]!.content, /^## Section/, 'the heading stays attached to its text');
+  assert.ok(
+    chunks[0]!.content.includes('alpha'),
+    `the first chunk is ${JSON.stringify(chunks[0]!.content)} — the heading with no text`,
+  );
+});
+
 test('a document with no headings still produces a chunk', () => {
   // 34 of the 142 corpus documents have no level-2 heading at all.
   const chunks = chunkMarkdown('Just a paragraph of prose with no heading whatsoever.');

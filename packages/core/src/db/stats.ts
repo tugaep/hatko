@@ -120,18 +120,24 @@ export function getSearchStats(db: Db): SearchStats {
 
   const total = Number(totals.total ?? 0);
 
-  // SQLite has no percentile function. Ordering and indexing is exact, and the
-  // row count here is small enough that a window over the whole table is cheap.
+  /**
+   * SQLite has no percentile function, so the row is selected by offset.
+   *
+   * Nearest-rank: the p95 sample sits at 1-based index `ceil(0.95 * N)`. The offset
+   * was `CAST(N * 0.95 AS INTEGER) - 1`, which truncates instead of rounding up and
+   * so pointed one row too low — at two rows it returned the *minimum* latency as
+   * the 95th percentile. Wrong in the flattering direction, on a figure whose only
+   * job is to show when things are slow.
+   *
+   * Computed here rather than in SQL because `total` is already known and SQLite's
+   * `ceil` needs a build-time math extension that cannot be relied on.
+   */
   const p95Row =
     total === 0
       ? undefined
       : (db
-          .prepare(
-            `SELECT latency_ms FROM search_queries
-              ORDER BY latency_ms
-              LIMIT 1 OFFSET max(0, CAST(? * 0.95 AS INTEGER) - 1)`,
-          )
-          .get(total) as { latency_ms: number } | undefined);
+          .prepare(`SELECT latency_ms FROM search_queries ORDER BY latency_ms LIMIT 1 OFFSET ?`)
+          .get(Math.ceil(total * 0.95) - 1) as { latency_ms: number } | undefined);
 
   const topQueries = (
     db
