@@ -1157,6 +1157,9 @@ on Nielsen's ten, 1 P0, 4 P1, 3 P2, five of eight cognitive-load checks failing.
 detector found **zero** findings in source and four rule families at runtime, three of
 which were false positives against this project's committed brand decisions.
 
+Version matters for a deterministic scan, so: everything in this section ran against
+**Impeccable 3.9.1**. It was re-run against 4.1.1 afterwards — see the end of the section.
+
 Three findings arrived by independent routes, which is the part worth recording.
 
 **Right-edge overflow on every phone.** The design review measured it: `/dashboard` laid
@@ -1323,16 +1326,62 @@ recognisable AI type tell in the project sits in the wordmark, defensible in one
 and only one. It is confined to display sizes in writing, since a display serif doing a
 label's job is the specific way this system would look cheap.
 
-**The Impeccable skill is still at 3.9.1, not 4.1.1.** `npx impeccable update` cannot do it:
-the skill is installed as a Claude Code _plugin_ from the `pbakaus/impeccable` marketplace,
-and the npm CLI reports "no impeccable skill folders found" and then offers to install an
-older 3.6.0 as a package. Plugin updates go through the interactive plugin panel, which a
-non-interactive session cannot open. Recorded so nobody assumes it was tried and worked.
-
 ### Verified after the fixes
 
-`npm run typecheck`, `npm test` (152 pass), `next build` all clean. Detector re-run: zero
-findings. Re-measured in a real browser at 375, 768 and 1280: no horizontal overflow on any
-page in any state, all three touch targets ≥44px, focus retained across a submit, the live
-region persistent, one of six sources marked cited, sources inline-expanded at 768 as §9
-requires, and the heading outline ordered on all three surfaces.
+`npm run typecheck`, `npm test` (152 pass), `next build` all clean. Detector re-run under
+the version available at the time, **Impeccable 3.9.1**: zero findings. Re-measured in a
+real browser at 375, 768 and 1280: no horizontal overflow on any page in any state, all
+three touch targets ≥44px, focus retained across a submit, the live region persistent, one
+of six sources marked cited, sources inline-expanded at 768 as §9 requires, and the heading
+outline ordered on all three surfaces.
+
+### Re-verified against Impeccable 4.1.1
+
+The reviews above ran against Impeccable 3.9.1, which was the installed version at the
+time. It is worth being precise about why, because I first recorded this wrongly.
+
+`npx impeccable update` could not update it: the skill was installed as a Claude Code
+_plugin_ from the `pbakaus/impeccable` marketplace, so the npm CLI reported "no impeccable
+skill folders found" and then offered to install an older 3.6.0 as a package. I recorded
+that as "cannot be updated", which was the wrong conclusion from a correct observation —
+it could not be updated _by that command_. The operator installed 4.1.1 directly as a
+user-level skill at `~/.claude/skills/impeccable`, which is the route the npm CLI was
+looking for and not finding.
+
+Re-running the 4.1.1 detector over `apps/web` surfaced exactly one finding that 3.9.1 had
+no rule for, and it is a false positive:
+
+**`codex-grid-background` at `app/globals.css:393`** — "hairline linear-gradient layers
+tiled by a fixed pixel cell". That line is the `notch` utility, brand motif 2, which draws
+the hairline back onto a card's clipped corner because `clip-path` cuts the border along
+the diagonal and leaves the notch with no visible edge. Measured in the live page rather
+than argued from the source: exactly **one** element on the whole dashboard carries any
+background image at all, its `background-repeat` is `no-repeat` so it cannot tile, its
+`background-size` is `15px 15px` on a 183×118 card, and its position is `100% 0`. That is
+one corner mark covering about 1% of one card, not a decorative grid field. The rule keys
+on `linear-gradient` plus a fixed-pixel `background-size` and does not consult
+`background-repeat`.
+
+Every other rule came back clean across `apps` and `packages`, so the findings acted on
+above stand under the newer ruleset.
+
+4.1.1 also ships a `doctor` command, which raised one advisory: "`docs/DESIGN.md` has no
+colors section". It has one — `## 1. Color` is the longest section in the file, carrying
+three raw scales, the semantic token layer, two hard rules and a table of computed contrast
+ratios. The heuristic looks for an unnumbered heading and this file numbers its sections,
+because `CLAUDE.md` and several commit messages cite it as "design.md §1", "§8", "§11".
+Renaming headings so a scanner recognises them would break those references to satisfy a
+tool, so the numbering stays.
+
+Both 4.1.1 findings are therefore tool-heuristic mismatches rather than defects, which is
+worth stating plainly: a clean scan is evidence, and a scan you have argued your way out of
+twice deserves more scepticism than this paragraph can give it. The measurements behind the
+first one are in the page and reproducible; the second is a filename-and-heading convention
+anyone can check in ten seconds.
+
+One piece of housekeeping left for the operator, not changed here because it is in their
+global configuration rather than this repository: the 3.9.1 plugin is still enabled in
+`~/.claude/settings.json` (`"impeccable@impeccable": true`) and its cache is still on disk
+alongside the 4.1.1 skill. Only 4.1.1 is currently exposed, so nothing is broken, but two
+installs of one skill is the kind of thing that resurfaces later as a version that will not
+die.

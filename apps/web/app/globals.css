@@ -389,6 +389,16 @@
  * `clip-path` alone cuts the card's 1px border along the diagonal, leaving the notch
  * with no edge; against a card fill 1.08:1 from the page ground it was invisible at
  * every width tested. The gradient draws the missing hairline back in.
+ *
+ * This trips Impeccable's `codex-grid-background` rule, which flags hairline
+ * linear-gradients tiled by a fixed pixel cell as a generated-UI signature. It is a false
+ * positive here and the rule is right to look: the distinguishing property is
+ * `background-repeat: no-repeat`, so this cannot tile. Measured in the page rather than
+ * argued: one element on the dashboard carries any background image, at 15x15 on a 183x118
+ * card, positioned `100% 0`. One corner mark, about 1% of one card, not a line field.
+ *
+ * Kept as a gradient rather than a rotated pseudo-element because the colour stop lands
+ * exactly on the `clip-path` diagonal at any zoom, which a rotation has to approximate.
  */
 @utility notch {
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
