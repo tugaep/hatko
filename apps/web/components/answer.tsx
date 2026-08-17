@@ -51,6 +51,33 @@ export function Answer({
 }
 
 /**
+ * The answer while it is still being written.
+ *
+ * Deliberately plainer than the finished article: no citation chips, no deprecation
+ * banner, no `rise` entrance. All three would be lies at this point — the markers in this
+ * text have not been checked against the passages yet, and the whole answer may still be
+ * withheld as an abstention once it turns out to cite nothing. So markers stay as the
+ * literal `[1]` the model wrote, and the caret says the text is not finished.
+ *
+ * Muted rather than full-strength body text, for the same reason: this is provisional, and
+ * it should not look identical to the version that has been through validation.
+ */
+export function AnswerDraft({ text }: { text: string }) {
+  const paragraphs = text.split(/\n{2,}/);
+
+  return (
+    <div className="max-w-[68ch] text-body text-text-muted">
+      {paragraphs.map((paragraph, i) => (
+        <p key={i} className={i > 0 ? 'mt-4' : undefined}>
+          {paragraph}
+          {i === paragraphs.length - 1 && <span className="caret" aria-hidden="true" />}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The most important state in the application, and not an error.
  *
  * No clay, no warning icon, no apology. Styling this as a failure would teach people

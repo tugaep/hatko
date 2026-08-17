@@ -8,12 +8,14 @@ import type { SearchResult } from '@hatko/shared';
 import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { ingest } from '../ingest/pipeline.ts';
+import { ProviderError } from '../providers/openai.ts';
 import { RELEVANCE } from '../retrieval/rerank.ts';
 import {
   ABSTAIN_MESSAGE,
   answerQuestion,
   deprecationNoticesFor,
   validateCitations,
+  type AnswerGenerator,
 } from './generate.ts';
 
 /**
@@ -52,11 +54,8 @@ const allRelevant = async (_q: string, c: SearchResult[]): Promise<Map<number, n
 const noneRelevant = async (_q: string, c: SearchResult[]): Promise<Map<number, number>> =>
   new Map(c.map((r) => [r.chunkId, RELEVANCE.UNRELATED]));
 
-const ask = (
-  query: string,
-  generator: (q: string, p: SearchResult[]) => Promise<string>,
-  grader = allRelevant,
-) => answerQuestion(db, query, { arm: 'keyword', generator, grader });
+const ask = (query: string, generator: AnswerGenerator, grader = allRelevant) =>
+  answerQuestion(db, query, { arm: 'keyword', generator, grader });
 
 // --- citation validation ----------------------------------------------------
 
@@ -193,6 +192,18 @@ test('a generator failure raises rather than masquerading as an abstention', asy
   );
 });
 
+test('a provider failure keeps its type so the API can answer 502, not 500', async () => {
+  // The API maps ProviderError to "the model provider could not be reached, try again in a
+  // moment". Wrapped in a plain Error it became a generic 500 instead, which tells the
+  // reader to wait for an engineer when what they should do is press the button again.
+  await assert.rejects(
+    ask('Why are sound assets built in a separate pass?', async () => {
+      throw new ProviderError('upstream 503');
+    }),
+    (error: unknown) => error instanceof ProviderError,
+  );
+});
+
 test('an unreachable grader does not cause a false abstention', async () => {
   // hasGroundedSupport returns null here, not false. Abstaining on a judgement
   // that never happened would turn an outage into a claim about the corpus.
@@ -239,6 +250,129 @@ test('a deprecated source produces a notice regardless of what the model wrote',
   const notice = response.deprecationNotices.find((n) => n.sourcePath === 'sdk-notes-v2.md');
   assert.ok(notice, 'the superseded document is reported');
   assert.equal(notice.supersededBy, 'Lumen SDK v3');
+});
+
+// --- streaming ---------------------------------------------------------------
+
+/**
+ * Streaming changes when an answer arrives, never what it is allowed to claim.
+ *
+ * That is the whole risk of the feature. Every guarantee in this file is enforced on the
+ * *complete* text, after the last fragment — so a streamed answer can be halfway through a
+ * confident sentence and still end as an abstention. The tests below are the ones that
+ * fail if someone ever "optimises" the abstain decision to run on partial text, or lets
+ * the deltas become the published answer.
+ */
+
+/** A generator that reports its text one word at a time, as a real one does. */
+const streaming =
+  (text: string): AnswerGenerator =>
+  async (_q, _p, onDelta) => {
+    for (const word of text.split(' ')) onDelta?.(`${word} `);
+    return text;
+  };
+
+test('the streamed fragments reassemble into the answer that was published', async () => {
+  const deltas: string[] = [];
+  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+    arm: 'keyword',
+    grader: allRelevant,
+    generator: streaming('Audio is encoded in a dedicated pass [1].'),
+    onDelta: (text) => deltas.push(text),
+  });
+
+  assert.ok(deltas.length > 1, 'the fragments arrived separately, not as one block');
+  assert.equal(deltas.join('').trim(), 'Audio is encoded in a dedicated pass [1].');
+  assert.equal(response.answer, 'Audio is encoded in a dedicated pass [1].');
+  assert.equal(response.citations.length, 1);
+});
+
+test('a streamed answer that cites nothing still abstains', async () => {
+  // The important one. Forty words of plausible prose reached the reader's screen, and the
+  // published result is still "no documents cover this" — because nothing in it can be
+  // checked against a passage. A client that treats the fragments as the answer publishes
+  // a claim this system refused to make.
+  const deltas: string[] = [];
+  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+    arm: 'keyword',
+    grader: allRelevant,
+    generator: streaming('Sound assets are built separately because the encoder is single-threaded.'),
+    onDelta: (text) => deltas.push(text),
+  });
+
+  assert.ok(deltas.length > 1, 'the unverifiable text was streamed');
+  assert.equal(response.abstained, true);
+  assert.equal(response.answer, ABSTAIN_MESSAGE);
+  assert.deepEqual(response.citations, []);
+});
+
+test('an invented marker is stripped from the published answer after being streamed', async () => {
+  // The deltas are raw model output, so `[42]` does reach the reader mid-stream. What must
+  // not happen is it surviving into the validated answer as a citation to nowhere.
+  let streamed = '';
+  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+    arm: 'keyword',
+    grader: allRelevant,
+    generator: streaming('Encoded in a dedicated pass [1], single-threaded [42].'),
+    onDelta: (text) => {
+      streamed += text;
+    },
+  });
+
+  assert.match(streamed, /\[42\]/, 'the raw fragment carried the invented marker');
+  assert.ok(!response.answer.includes('[42]'), 'the published answer does not');
+  assert.deepEqual(
+    response.citations.map((c) => c.index),
+    [1],
+  );
+});
+
+test('the passages are reported before generation starts', async () => {
+  // This is what lets a client show the evidence during the wait. The order matters: after
+  // generation it would be worthless, since the answer it was meant to accompany is
+  // already there.
+  const order: string[] = [];
+  let reported: SearchResult[] = [];
+
+  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+    arm: 'keyword',
+    grader: allRelevant,
+    onPassages: (passages) => {
+      order.push('passages');
+      reported = passages;
+    },
+    generator: async () => {
+      order.push('generate');
+      return 'Encoded in a dedicated pass [1].';
+    },
+  });
+
+  assert.deepEqual(order, ['passages', 'generate']);
+  assert.deepEqual(
+    reported.map((p) => p.chunkId),
+    response.sources.map((p) => p.chunkId),
+    'the rows shown early are the rows the answer was written from',
+  );
+});
+
+test('the passages are reported even when the answer is withheld', async () => {
+  // An abstention the reader cannot inspect is one they have to take on faith. The near
+  // misses are how they judge whether the corpus really lacks the answer.
+  let reported = 0;
+  const response = await answerQuestion(db, 'What is the starting salary for a junior developer?', {
+    arm: 'keyword',
+    grader: noneRelevant,
+    onPassages: (passages) => {
+      reported = passages.length;
+    },
+    generator: async () => {
+      throw new Error('the generator must not be called when support is absent');
+    },
+  });
+
+  assert.equal(response.abstained, true);
+  assert.ok(reported > 0, 'the nearest passages were reported before the abstain decision');
+  assert.equal(reported, response.sources.length);
 });
 
 test('no notice when nothing retrieved is deprecated', () => {

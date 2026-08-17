@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { searchResponseSchema, sessionResponseSchema } from '@hatko/shared';
+import {
+  answerResponseSchema,
+  answerStreamEventSchema,
+  searchResponseSchema,
+  sessionResponseSchema,
+  sseData,
+  type AnswerStreamEvent,
+} from '@hatko/shared';
 
 /**
  * The API surface, exercised through `app.request()`.
@@ -900,4 +907,85 @@ test('an anonymous flood cannot spend a real account’s allowance', async () =>
 
   const mine = await call('/api/search', { method: 'POST', cookie, body: { query: '' } });
   assert.equal(mine.status, 400, 'an anonymous flood consumed a real account’s allowance');
+});
+
+// --- streamed answers -------------------------------------------------------
+
+/**
+ * The same question, two representations, negotiated by `Accept`.
+ *
+ * These run with or without a provider key, which is the point. Without one the answer
+ * path fails at the first embedding call — and that is the case worth pinning: a failure
+ * *after* the 200 has gone out has no status code left to use, so it must arrive as an
+ * enveloped event rather than as a stream that simply stops. A truncated answer that looks
+ * complete is the worst outcome available here, and nothing about HTTP prevents it.
+ */
+
+async function streamAnswer(cookie: string, query: string) {
+  const response = await app.request('/api/answer', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'text/event-stream', cookie },
+    body: JSON.stringify({ query }),
+  });
+
+  assert.equal(response.status, 200, 'a stream begins before the outcome is known');
+  assert.match(response.headers.get('content-type') ?? '', /text\/event-stream/);
+  assert.ok(response.body, 'no stream body');
+
+  const events: AnswerStreamEvent[] = [];
+  for await (const data of sseData(response.body)) {
+    // Parsed against the shared schema, so an event shape the browser could not read is a
+    // failure here rather than a blank answer in the UI.
+    events.push(answerStreamEventSchema.parse(JSON.parse(data)));
+  }
+  return events;
+}
+
+test('a streamed answer ends in a terminal event, whatever happened', async () => {
+  const cookie = await throttleFixture('stream@test.local');
+  const events = await streamAnswer(cookie, 'Why are sound assets built in a separate pass?');
+
+  assert.ok(events.length > 0, 'the stream carried no events at all');
+
+  const last = events.at(-1);
+  assert.ok(
+    last?.type === 'answer' || last?.type === 'error',
+    `the stream ended on a "${last?.type}" event, so a client cannot tell it finished`,
+  );
+
+  // Only one terminal event, and nothing after it.
+  const terminal = events.filter((e) => e.type === 'answer' || e.type === 'error');
+  assert.equal(terminal.length, 1);
+
+  if (last.type === 'error') {
+    // No key on this machine. The envelope must be the same one every other route uses,
+    // and must not carry internals — a stack trace in an event body is a disclosure just
+    // as much as in a response body.
+    assert.ok(last.error.code, 'the failure event carries no code');
+    assert.ok(last.error.message.length > 0);
+    assert.ok(!/\n\s+at |node:internal/.test(last.error.message), 'the message leaks a stack');
+    return;
+  }
+
+  // A key is configured, so this is a real answer. The passages must have been reported
+  // before the deltas, and the deltas must reassemble into something — the abstain
+  // decision may still have replaced the text, which is exactly the point of the check in
+  // packages/core: nothing here asserts the deltas *are* the answer.
+  const kinds = events.map((e) => e.type);
+  assert.equal(kinds.indexOf('passages'), 0, 'the passages were not reported first');
+  assert.deepEqual(last.response.sources, events[0]?.type === 'passages' ? events[0].sources : []);
+});
+
+withProvider('the JSON representation is unchanged by the streaming one', async () => {
+  const cookie = await throttleFixture('json-answer@test.local');
+  const response = await call('/api/answer', {
+    method: 'POST',
+    cookie,
+    body: { query: 'Why are sound assets built in a separate pass?' },
+  });
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') ?? '', /application\/json/);
+  // Parses, so the one-body contract still holds for `curl` and the eval.
+  answerResponseSchema.parse(await response.json());
 });

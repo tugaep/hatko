@@ -1947,3 +1947,108 @@ fails silently: forget the call and MCP traffic is simply uncapped while everyth
 still passes.
 
 Typecheck clean, 208 tests passing.
+
+## Step 10: streaming answers (18 Aug 2026)
+
+The last search-experience item on `bonus.md`, and the one where the risk is not that it
+breaks but that it quietly weakens the guarantee the whole system rests on.
+
+**The invariant, stated before any code was written.** Streaming changes *when* an answer
+arrives, never *what* it is allowed to claim. Citation validation and the abstain decision
+run against the complete text, exactly as before — so a stream can deliver forty words of
+confident prose and still terminate in `abstained: true`, because none of it cited a
+passage. That is not an edge case to tolerate; it is the correct behaviour, and it is the
+one thing a naive implementation gets wrong by treating the fragments as the answer. Three
+tests in `packages/core` pin it, including one that streams an uncited sentence word by
+word and asserts the published result is still "No documents cover this."
+
+**Content negotiation rather than a second endpoint.** `Accept: text/event-stream` gets the
+streamed representation; anything else gets the same answer in one JSON body. The
+alternatives were a `/answer/stream` route or a `stream: true` flag in the body, and both
+would have meant two documented endpoints for one resource — `curl`, the eval and any
+future client keep working untouched, and the browser opts in with a header that already
+means this. Both branches call the same `answerQuestion` and record the same analytics, so
+there is no second code path to keep in step.
+
+**The JSON envelope had to go, and that was the AI's suggestion.** The answer model was
+being asked for `{"answer":"…"}` and unwrapped. Streaming makes that actively harmful: the
+deltas would be fragments of a JSON string literal, unrenderable until the closing quote
+arrives and carrying escape sequences to decode. A single free-text field gains nothing
+from being wrapped, so `chatText` returns prose. Structure is still validated where there
+is structure — the reranker's grades keep `chatJson`.
+
+**Always streamed, even when nobody is watching.** `chatText` streams unconditionally and
+callers that want the whole answer omit `onDelta`. Two paths would have meant the
+incremental one — the one with chunk boundaries mid-character, keep-alive frames and
+streams that end without a terminator — being the path with no test and no CLI exercising
+it. One path, exercised by everything.
+
+**One SSE reader, in `packages/shared`.** There are two consumers on opposite sides of the
+boundary: core reads OpenAI's stream, the browser reads ours. Both need the same thing and
+both have the same fiddly part. `EventSource` cannot serve either — GET only, no body, no
+cross-origin credentials — so this was code to write rather than a dependency to add, and
+the ten tests are all deliberately-chosen chunk boundaries: mid-payload, mid-separator, and
+one splitting an em dash across two reads. That class of bug does not fail loudly. It drops
+a word or emits a replacement character on some requests and not others, depending on how
+the network happened to split the response, and the only way to see it is to choose the
+splits yourself.
+
+**Writes are chained, not fired concurrently.** `onDelta` is synchronous and writing a
+frame is not, so unawaited writes could interleave the bytes of two SSE events — and half
+an event is not something a reader recovers from. Four lines of promise chaining, and
+awaiting the terminal event now awaits every event before it.
+
+**A failure after the first byte has no status code left.** The 200 goes out with the
+passages, so a provider dying mid-answer cannot be a 502 — it arrives as an `error` event
+carrying the same envelope every other route uses. It is classified by calling
+`toErrorResponse`, the existing function, and discarding the status it computes: a second
+hand-rolled translation in the streaming path is precisely how the streaming path becomes
+the one that leaks a stack trace.
+
+### What this found
+
+**A wrong status on an existing failure, made visible by streaming.** Forcing a provider
+failure mid-answer produced `500 internal` — "something went wrong on our side" — where the
+truthful answer is `502` and "try again in a moment". Cause: `answerQuestion` wrapped every
+generator failure in a plain `Error` to distinguish it from abstention, and that wrap cost a
+`ProviderError` its type. The JSON path had the same bug since step 4; nothing had exercised
+it. A provider outage now rethrows unchanged, with a test, because the distinction from
+abstention is made by throwing at all, not by the message. This is slightly outside step 10
+and was fixed rather than filed: it is a wrong status on the exact path the step touches.
+
+**The draft must not look like the answer.** The first UI draft rendered streaming text with
+the finished component, which would have shown citation chips built from markers not yet
+validated, and the deprecation banner before its notices were computed. The draft is now
+muted, chip-free, and carries a caret; the terminal event replaces it wholesale. The error
+path clears it too — a truncated answer left beside an error card reads as a partial result
+when nothing about it was ever checked.
+
+**Accessibility was already handled, by accident.** The turn list is an `aria-live` region
+with `aria-busy={pending}`, added in step 6 for a different reason. Because `aria-busy`
+suppresses announcements until it clears, screen readers get the finished answer once
+instead of ninety-nine delta announcements. It would have been an unpleasant bug and the
+existing markup prevented it.
+
+### Verified
+
+Against the running API, with a real key, printing each event and its timing:
+
+- Sample question 2: passages at 1550 ms (six sources, `sdk-notes-v2.md` among them), first
+  delta at 2036 ms, 99 deltas, terminal answer at 3000 ms, one citation, and the answer
+  states that `lumen.track` is deprecated in v3. The reader sees the evidence roughly a
+  second and a half before the answer exists.
+- The unanswerable question: passages reported, **zero deltas**, terminal
+  `abstained: true`. Abstention is decided before generation, so no false draft is ever
+  shown.
+- Provider unreachable: `200`, then a single `error` event with `upstream_failed` and no
+  internals in the message.
+- Provider dying *after* four deltas: the deltas arrive, then the `error` event, in that
+  order — the chained writes hold, and a truncated answer cannot masquerade as a complete
+  one. Both failures were forced by temporarily pointing `API_BASE` at a dead path and by
+  throwing mid-stream; the file was restored and the diff checked before committing.
+
+The route test asserts the stream ends in exactly one terminal event and that every event
+validates against the shared schema, and it runs with or without a provider key — without
+one it exercises the failure branch, which is the branch worth having on a fresh clone.
+
+Typecheck clean, 226 tests passing.

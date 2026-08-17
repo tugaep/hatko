@@ -425,6 +425,30 @@
   }
 }
 
+/*
+ * The answer is still arriving. A caret rather than a spinner: text is already on screen
+ * and readable, so the only thing left to say is that it is not finished — which is what a
+ * caret has always meant, and a spinner beside prose says it is not there yet.
+ *
+ * The blink dips out and comes back rather than fading away, so the reduced-motion rule
+ * below — one iteration, 1ms — leaves it drawn instead of invisible.
+ */
+@utility caret {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 0.15em;
+  translate: 0 0.12em;
+  background: var(--text-muted);
+  animation: caret 1s steps(1, end) infinite;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

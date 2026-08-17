@@ -1,11 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { answerResponseSchema, type AnswerResponse, type Permission } from '@hatko/shared';
-import { isAuthError, messageOf } from '../../../lib/api.ts';
-import { apiSend } from '../../../lib/client.ts';
+import {
+  answerStreamEventSchema,
+  type AnswerResponse,
+  type Permission,
+  type SearchResult,
+} from '@hatko/shared';
+import { ApiRequestError, isAuthError, messageOf } from '../../../lib/api.ts';
+import { apiStream } from '../../../lib/client.ts';
 import { formatMs } from '../../../lib/format.ts';
-import { Answer } from '../../../components/answer.tsx';
+import { Answer, AnswerDraft } from '../../../components/answer.tsx';
 import { FernSpecimen } from '../../../components/marks.tsx';
 import { SourceCard } from '../../../components/source-card.tsx';
 import { Button, ErrorCard, Eyebrow, Input, SkeletonLine, cx } from '../../../components/ui.tsx';
@@ -13,16 +18,25 @@ import { Button, ErrorCard, Eyebrow, Input, SkeletonLine, cx } from '../../../co
 /**
  * Ask a question, read the answer, check its sources.
  *
- * One request per question: `/api/answer` returns the answer, the citations and the
- * passages behind them together, so the sources on screen are provably the ones the
- * answer was generated from rather than a second retrieval that might differ.
+ * One request per question, streamed: `/api/answer` reports the retrieved passages as
+ * soon as they are reranked, then the answer as it is written, then the validated result.
+ * The sources on screen are provably the ones the answer was generated from rather than a
+ * second retrieval that might differ.
+ *
+ * The draft the stream produces is never treated as the answer. It is replaced wholesale
+ * by the terminal event, which is the only version that has been through citation
+ * validation and the abstain decision — an answer can stream forty words of confident
+ * prose and still end as "No documents cover this" if none of it cites a passage.
  */
 
 interface Turn {
   /** Local, monotonic. Also namespaces source-card element ids across turns. */
   id: number;
   query: string;
+  /** The validated answer. Null until the stream's terminal event arrives. */
   response: AnswerResponse | null;
+  /** What has arrived so far. Provisional, and discarded once `response` is set. */
+  draft: { sources: SearchResult[]; text: string } | null;
   error: string | null;
 }
 
@@ -61,16 +75,38 @@ export function Chat({ denied }: { denied?: Permission }) {
     if (trimmed.length < 2 || pendingRef.current) return;
 
     const id = nextId.current++;
-    setTurns((previous) => [...previous, { id, query: trimmed, response: null, error: null }]);
+    /** Update just this turn. `setTurns` is functional throughout, so deltas cannot race. */
+    const update = (fields: (turn: Turn) => Partial<Turn>) =>
+      setTurns((previous) =>
+        previous.map((turn) => (turn.id === id ? { ...turn, ...fields(turn) } : turn)),
+      );
+
+    setTurns((previous) => [
+      ...previous,
+      { id, query: trimmed, response: null, draft: null, error: null },
+    ]);
     setPending(true);
 
     try {
-      const response = await apiSend('POST', '/api/answer', answerResponseSchema, {
+      for await (const event of apiStream('/api/answer', answerStreamEventSchema, {
         query: trimmed,
-      });
-      setTurns((previous) =>
-        previous.map((turn) => (turn.id === id ? { ...turn, response } : turn)),
-      );
+      })) {
+        if (event.type === 'passages') {
+          // The rail can be read and checked while the answer is still being written,
+          // which is most of the wait.
+          update((turn) => ({ draft: { sources: event.sources, text: turn.draft?.text ?? '' } }));
+        } else if (event.type === 'delta') {
+          update((turn) => ({
+            draft: { sources: turn.draft?.sources ?? [], text: (turn.draft?.text ?? '') + event.text },
+          }));
+        } else if (event.type === 'answer') {
+          update(() => ({ response: event.response, draft: null }));
+        } else {
+          // A failure after the first byte. Status 0 because there is no status left to
+          // report — the 200 went out with the passages — so the code carries the meaning.
+          throw new ApiRequestError(0, event.error.code, event.error.message);
+        }
+      }
     } catch (error) {
       // A 401 here means the session expired mid-session. A full reload lets the server
       // gate make the call, rather than this component guessing at a redirect.
@@ -78,9 +114,9 @@ export function Chat({ denied }: { denied?: Permission }) {
         window.location.reload();
         return;
       }
-      setTurns((previous) =>
-        previous.map((turn) => (turn.id === id ? { ...turn, error: messageOf(error) } : turn)),
-      );
+      // The draft goes with it. A truncated answer left on screen beside an error card
+      // reads as a partial result, when in fact nothing about it was ever validated.
+      update(() => ({ error: messageOf(error), draft: null }));
     } finally {
       setPending(false);
     }
@@ -206,6 +242,11 @@ function TurnView({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const response = turn.response;
 
+  // The rail is drawn from whichever is available. The draft's passages are the same rows
+  // the finished response will carry — reported early precisely so they can be read during
+  // the wait — so the cards do not move or change when the answer lands.
+  const sources = response?.sources ?? turn.draft?.sources ?? [];
+
   /** Escape closes the disclosure and returns focus to the control that opened it. */
   function onPanelKeyDown(event: React.KeyboardEvent) {
     if (event.key !== 'Escape' || !sourcesOpen) return;
@@ -258,12 +299,15 @@ function TurnView({
                 <Stat label="took">{formatMs(response.latencyMs)}</Stat>
               </dl>
             </>
+          ) : turn.draft && turn.draft.text.length > 0 ? (
+            <AnswerDraft text={turn.draft.text} />
           ) : (
+            // Passages may already be on screen; the answer column has nothing yet.
             <AnswerSkeleton />
           )}
         </div>
 
-        {response && response.sources.length > 0 && (
+        {sources.length > 0 && (
           <aside
             className="mt-6 min-w-0 lg:mt-0"
             aria-labelledby={`${panelId}-heading`}
@@ -271,7 +315,7 @@ function TurnView({
           >
             <div className="flex items-center justify-between gap-3 border-b border-rule pb-2">
               <Eyebrow as="h3" id={`${panelId}-heading`}>
-                {response.abstained ? 'Nearest passages' : 'Sources'}
+                {response?.abstained ? 'Nearest passages' : 'Sources'}
               </Eyebrow>
               <button
                 type="button"
@@ -281,7 +325,7 @@ function TurnView({
                 aria-controls={panelId}
                 className="hit-touch rounded-sm text-caption font-medium text-text md:hidden"
               >
-                {sourcesOpen ? 'Hide' : `Show ${response.sources.length}`}
+                {sourcesOpen ? 'Hide' : `Show ${sources.length}`}
               </button>
             </div>
 
@@ -292,7 +336,7 @@ function TurnView({
                 sourcesOpen ? 'grid' : 'hidden md:grid',
               )}
             >
-              {response.sources.map((source, i) => (
+              {sources.map((source, i) => (
                 <SourceCard
                   key={source.chunkId}
                   result={source}

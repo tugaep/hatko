@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { documentCategorySchema } from './common.ts';
+import { apiErrorSchema, documentCategorySchema } from './common.ts';
 
 export const searchRequestSchema = z.object({
   query: z.string().trim().min(2).max(500),
@@ -98,3 +98,30 @@ export const answerResponseSchema = z.object({
   latencyMs: z.number().int().min(0),
 });
 export type AnswerResponse = z.infer<typeof answerResponseSchema>;
+
+/**
+ * One event on the streamed form of an answer.
+ *
+ * The sequence is `passages` once, then `delta` any number of times, then exactly one
+ * terminal event — `answer` or `error`. A client that renders nothing until the terminal
+ * event arrives is still correct; the two earlier kinds exist only to fill the wait.
+ *
+ * **The `answer` event is the authoritative one, and the deltas are not.** Delta text has
+ * not been through citation validation, so it may contain a marker pointing at a passage
+ * that does not exist, and the answer may yet be withheld entirely — an answer that cites
+ * nothing becomes an abstention, which means the terminal event can carry
+ * `abstained: true` after a hundred deltas of confident prose. Whatever a client shows
+ * from deltas must be labelled as in progress and replaced wholesale on arrival.
+ *
+ * `error` carries the same envelope as a non-2xx body, because by the time a failure is
+ * known the 200 and its headers are long gone: a stream that dies has no status line left
+ * to fail with, and a client that only handled HTTP status would see a truncated answer as
+ * a complete one.
+ */
+export const answerStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('passages'), sources: z.array(searchResultSchema) }),
+  z.object({ type: z.literal('delta'), text: z.string() }),
+  z.object({ type: z.literal('answer'), response: answerResponseSchema }),
+  z.object({ type: z.literal('error'), error: apiErrorSchema.shape.error }),
+]);
+export type AnswerStreamEvent = z.infer<typeof answerStreamEventSchema>;

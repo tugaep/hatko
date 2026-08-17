@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sseData } from '@hatko/shared';
 import { config } from '../config.ts';
 import { requireApiKey } from '../settings.ts';
 
@@ -42,7 +43,19 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /** 429 and 5xx are transient; 4xx otherwise means the request itself is wrong. */
 const isRetryableStatus = (status: number) => status === 429 || status >= 500;
 
-async function postJson(path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
+/**
+ * POST with the retry policy, returning the successful response unread.
+ *
+ * Split out from `postJson` when streaming arrived: a streaming call needs the response
+ * body as a stream, not as parsed JSON, and everything up to that point — the key, the
+ * timeout, the backoff, the status classification — is identical. The alternative was a
+ * second retry loop, and a retry policy that exists twice is one that will disagree with
+ * itself about 429s.
+ *
+ * Nothing here reads the body on the success path, so a retryable failure is still
+ * detected and retried before anything is consumed.
+ */
+async function post(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
   const apiKey = requireApiKey();
   let lastError: ProviderError | undefined;
 
@@ -74,7 +87,7 @@ async function postJson(path: string, body: unknown, signal?: AbortSignal): Prom
       throw lastError;
     }
 
-    if (response.ok) return response.json();
+    if (response.ok) return response;
 
     const detail = await response.text().catch(() => '');
     const retryable = isRetryableStatus(response.status);
@@ -104,6 +117,9 @@ async function postJson(path: string, body: unknown, signal?: AbortSignal): Prom
 
   throw lastError ?? new ProviderError(`Request to ${path} failed`);
 }
+
+const postJson = async (path: string, body: unknown, signal?: AbortSignal): Promise<unknown> =>
+  (await post(path, body, signal)).json();
 
 /**
  * Requests are capped by input count rather than token count. The whole sample
@@ -221,4 +237,82 @@ export async function chatJson(options: ChatOptions): Promise<unknown> {
       cause,
     });
   }
+}
+
+/** One streamed chunk. Every field is optional — a keep-alive chunk carries no delta. */
+const streamChunkSchema = z.object({
+  choices: z.array(z.object({ delta: z.object({ content: z.string().nullish() }).optional() })),
+});
+
+export interface ChatTextOptions extends ChatOptions {
+  /** Called with each fragment as it arrives. Omit to simply wait for the whole text. */
+  onDelta?: (text: string) => void;
+}
+
+/**
+ * A chat completion returning prose, streamed.
+ *
+ * **Always streamed, even when nobody is watching.** One code path rather than two, which
+ * matters more here than the handful of lines it saves: the incremental path is the one
+ * with the interesting failure modes — a chunk boundary inside a multi-byte character, a
+ * keep-alive with no delta, a stream that ends without its terminator — and if it were
+ * used only by the web UI it would be the path with no test and no CLI exercising it.
+ * Callers that want the whole answer just omit `onDelta` and await the return.
+ *
+ * **Prose rather than the JSON envelope `chatJson` uses.** The answer used to come back as
+ * `{"answer":"…"}` and be unwrapped, which bought nothing — a single free-text field gains
+ * no safety from being wrapped, and it actively obstructs streaming, since the deltas would
+ * be fragments of a JSON string literal that cannot be rendered until the closing quote
+ * arrives, complete with escape sequences to decode. Structure is still validated where
+ * there is structure to validate: the reranker's grades keep `chatJson`.
+ *
+ * The text carries no guarantees on its own. `validateCitations` decides which of its
+ * markers survive, and the answer layer decides whether it may be published at all.
+ */
+export async function chatText(options: ChatTextOptions): Promise<string> {
+  const response = await post(
+    '/chat/completions',
+    {
+      model: options.model,
+      temperature: options.temperature ?? 0,
+      max_tokens: options.maxTokens ?? 2000,
+      stream: true,
+      messages: [
+        { role: 'system', content: options.system },
+        { role: 'user', content: options.user },
+      ],
+    },
+    options.signal,
+  );
+
+  if (!response.body) throw new ProviderError('Streaming completion returned no body.');
+
+  let text = '';
+
+  for await (const data of sseData(response.body)) {
+    // OpenAI terminates with a literal sentinel rather than by closing the stream.
+    if (data === '[DONE]') break;
+
+    let chunk: unknown;
+    try {
+      chunk = JSON.parse(data);
+    } catch {
+      // A single malformed chunk is not worth losing an answer over, and skipping it
+      // degrades the text rather than the request. A stream of nothing but malformed
+      // chunks still fails, below, as an empty completion.
+      continue;
+    }
+
+    const parsed = streamChunkSchema.safeParse(chunk);
+    if (!parsed.success) continue;
+
+    const delta = parsed.data.choices[0]?.delta?.content;
+    if (!delta) continue;
+
+    text += delta;
+    options.onDelta?.(delta);
+  }
+
+  if (text.length === 0) throw new ProviderError('Streaming completion returned no content.');
+  return text;
 }
