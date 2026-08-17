@@ -27,3 +27,12 @@ export {
   ABSTAIN_MESSAGE,
   type AnswerOptions,
 } from './answer/generate.ts';
+export {
+  auth,
+  getSessionUser,
+  requirePermission,
+  requireUser,
+  AuthorizationError,
+} from './auth/index.ts';
+export { upsertAccount, demoAccounts, type DemoAccount } from './auth/accounts.ts';
+export { nodeSqliteDialect } from './db/kysely-dialect.ts';

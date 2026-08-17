@@ -20,7 +20,9 @@
     "db:reset": "npm run reset --workspace @sorrel/core",
     "ingest": "npm run ingest --workspace @sorrel/core",
     "eval": "npm run eval --workspace @sorrel/core",
-    "ask": "npm run ask --workspace @sorrel/core --"
+    "ask": "npm run ask --workspace @sorrel/core --",
+    "seed": "npm run seed --workspace @sorrel/core",
+    "setup": "npm run db:migrate && npm run seed && npm run ingest"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

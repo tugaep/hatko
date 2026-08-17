@@ -40,7 +40,31 @@ numbers contradicted it. Both times the numbers won; both are documented below.
 
 These are in rough order of how much damage they would have done.
 
-### 1. Claimed hybrid retrieval was better, then measured it as worse
+### 1. Wrote passwords to the database in plaintext
+
+The seed script is idempotent, so re-running it resets an existing account's
+password. The AI implemented that with Better Auth's
+`internalAdapter.updatePassword(id, password)` — which is the _storage_ step, not
+the credential step: it writes the value it is given. Handed the raw password, it
+replaced the scrypt hash created at sign-up with plaintext.
+
+Nothing failed. Sign-in kept working, because verification compared a hash against
+a value that happened to be sitting where a hash belongs. The only symptom was the
+row itself.
+
+**Caught by:** I asked for proof rather than accepting "seeding works", so the
+verification step queried the `account` table for rows containing the literal
+password. One did. On a security-graded case this is the single worst defect the
+project has had, and it would have shipped invisibly.
+
+**What changed beyond the fix:** the AI's first test for this did not actually
+cover it — it created accounts through sign-up only, which hashes correctly, so the
+broken path was never exercised. The upsert logic was pulled out of the CLI into
+`auth/accounts.ts` specifically so a test could drive the update path, and there
+are now assertions that no plaintext appears in either the `account` table or the
+database file, for both the create and the update route.
+
+### 2. Claimed hybrid retrieval was better, then measured it as worse
 
 The AI argued at length that hybrid vector + BM25 retrieval would beat either arm
 alone, with a plausible story: 78 near-identical delivery reports defeat pure
@@ -73,7 +97,7 @@ keep it anyway (insurance for vocabulary the corpus does not use, against an
 unseen private eval set). The first draft of that comment quietly implied hybrid
 had won.
 
-### 2. Wrote a deprecation detector that would have flagged the wrong document
+### 3. Wrote a deprecation detector that would have flagged the wrong document
 
 `sdk-notes-v2.md` is deprecated; `sdk-notes-v3.md` is current and says _"It
 supersedes v2."_ A regex matching "supersede" anywhere flags **v3** — inverting
@@ -84,7 +108,7 @@ still works, the wrong document just wears the badge.
 implementation was accepted. Only the passive direction now matches, asserted in
 both directions.
 
-### 3. Built a category enum from the sample corpus's folder names
+### 4. Built a category enum from the sample corpus's folder names
 
 `documentCategorySchema` was written as `z.enum(['guides', 'changelogs', ...])`.
 Both `TASK.md` and `RULES.md` require that pointing ingestion at the _real_ corpus
@@ -94,7 +118,7 @@ corpus organised differently.
 **Caught by:** the must-have audit before committing step 1. This is the concrete
 reason that checklist exists, and it is now drift rule #1.
 
-### 4. Tried to fix a requirement with prompt engineering, three times
+### 5. Tried to fix a requirement with prompt engineering, three times
 
 `sample_questions.md` requires that a good answer to question 2 says v2 is
 deprecated. The AI's answer was correct but never mentioned it. It rewrote the
@@ -115,7 +139,7 @@ second path.
 **What this changed:** the eval measures retrieval, not answers. That gap is real
 and still open — noted in "known gaps" below.
 
-### 5. Wrote a test that leaked my live API key into the terminal
+### 6. Wrote a test that leaked my live API key into the terminal
 
 A settings test asserted "no key is configured". `config.ts` loads `.env` from
 disk regardless of shell environment, so once I added a real key the test found
@@ -126,7 +150,7 @@ immediately and unprompted, and told me to rotate the key — which I did. The
 environment fallback is now an explicit parameter, so the test cannot read
 ambient state.
 
-### 6. Built ahead of the agreed scope
+### 7. Built ahead of the agreed scope
 
 Step 1 shipped a streaming-answer schema and a `users:manage` permission. Both
 belong to bonus items I had explicitly declined. Small — about ten lines — but
@@ -135,7 +159,7 @@ they imply features that will not exist.
 **Caught by:** the same must-have audit. Now drift rule #2: _a schema for an
 unselected bonus is drift even when it costs ten lines._
 
-### 7. Estimated 450 chunks; the real number is 142
+### 8. Estimated 450 chunks; the real number is 142
 
 Carried as an assumption from the first corpus analysis into schema comments and
 the working agreement, then repeated back to me as if measured. The chunker
@@ -147,7 +171,7 @@ figures are corrected everywhere they appeared. The outcome turned out to be
 _correct_ — `sample_questions.md` names expected answers as whole documents — but
 it was right by luck, not by design, until it was measured.
 
-### 8. Its own tooling polluted the provided dataset
+### 9. Its own tooling polluted the provided dataset
 
 The claude-mem plugin wrote `CLAUDE.md` context stubs into `sample_dataset/` and
 `sample_dataset/corpus/`, and they were committed with the initial scaffold. The
@@ -171,6 +195,9 @@ the corpus has 142. Removed, and the path is now gitignored.
   query rather than by review: `bm25()` is an FTS5 auxiliary function and cannot
   be called inside a window function's `ORDER BY`; and `node:sqlite` binds plain
   JavaScript numbers as doubles, so `vec0` rowids must be `BigInt`.
+- **A test that could not fail.** The first plaintext-password test exercised only
+  the code path that already worked. A test aimed at a bug has to run the code that
+  had the bug — obvious in hindsight, and it took a second look to notice.
 - **A test asserted the wrong premise twice.** Once assuming the porter stemmer
   conflates `built`/`building` (it does not — irregular verbs are not stemmed),
   once assuming "glyph" was unique to one document (it appears in 14). Both were
@@ -207,6 +234,9 @@ Stated plainly rather than left to be discovered.
 - **The vector arm's contribution is unproven on unseen queries.** It ties
   keyword-only on this eval set, where questions share vocabulary with their
   answers. Its value is a hypothesis about the private set.
+- **Authorization is enforced but not yet reachable over HTTP.** The permission
+  checks, roles and session handling are in place and tested; the API routes that
+  call them are the next commit. Until then nothing is actually exposed.
 - **The rerank grade threshold is calibrated on 12 questions.** Separation is
   clean today (answerable 1.00, unanswerable ≤0.33, threshold 0.67) but that is a
   small sample.

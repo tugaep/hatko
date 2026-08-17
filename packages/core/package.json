@@ -14,10 +14,13 @@
     "test": "node --test \"src/**/*.test.ts\"",
     "ingest": "node src/ingest/cli.ts",
     "eval": "node src/eval/run.ts",
-    "ask": "node src/answer/cli.ts"
+    "ask": "node src/answer/cli.ts",
+    "seed": "node src/auth/seed.ts"
   },
   "dependencies": {
     "@sorrel/shared": "*",
+    "better-auth": "^1.6.29",
+    "kysely": "^0.29.5",
     "sqlite-vec": "^0.1.9",
     "zod": "^4.4.3"
   }
