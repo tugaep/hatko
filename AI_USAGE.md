@@ -1744,3 +1744,46 @@ returned 401 — and that reactivating restored all three. The demo database was
 both accounts active.
 
 Typecheck clean, 192 tests passing.
+
+## Step 8b: production configuration and the deploy guide (18 Aug 2026)
+
+Target `hatko.tugrap.dev`, operator runs the deploy. The guide is
+[docs/deployment.md](docs/deployment.md).
+
+**One real blocker existed and would have been found the hard way.** The MCP server's
+DNS-rebinding guard accepted only loopback hostnames, which is correct on a laptop and
+fatal behind a reverse proxy: the proxy forwards the public hostname, the guard does not
+recognise it, and _every_ MCP request becomes a 403. The likely outcome of shipping that
+is not a bug report — it is an operator meeting a blanket 403 on a fresh deployment and
+switching the protection off, because that is the fastest way to make it work. So the
+control is now configurable via `MCP_ALLOWED_HOSTS`, with a test asserting both halves:
+a configured public host is accepted, and `evil.example.com` still is not. That is the
+second time in this session the same control has needed widening for the same reason —
+the first was for bare `localhost` and IPv6.
+
+**The topology is one origin, and that is the decision the guide argues for.** Splitting
+web and API across subdomains means the session cookie has to be widened to the parent
+domain and every browser request becomes cross-origin, so CORS, `SameSite` and cookie
+`Domain` all become things that must be right, each of them a way to lock yourself out or
+leak a cookie further than intended. Behind one origin none of those questions exist. The
+API already namespaces itself under `/api`, so nothing had to be renamed to get there.
+
+**A trap worth writing down rather than discovering.** The nginx default
+`proxy_set_header Host $proxy_host` would make the MCP server see `127.0.0.1:4100`
+instead of the public name. That _passes_, because loopback is always allowed — so the
+guard would appear to work while checking nothing at all. Noted in the guide beside the
+nginx instruction, because a control that silently stops checking is worse than one that
+fails loudly.
+
+**Claims were checked rather than written from memory.** Every `npm run` script the guide
+references was verified to exist, and the Node version requirement against
+`engines`. The one instruction I could not verify is the deployment itself: I have not
+run this on a server, so the guide is written from what the code does rather than from a
+completed deploy, and the verification section exists so the operator confirms rather
+than trusts it.
+
+The guide ends with what the deployment does not have — no rate limiting, no horizontal
+scaling past one SQLite file, no email, no alerting — because each is a real gap and
+listing them is cheaper than having them found.
+
+Typecheck clean, 193 tests passing.

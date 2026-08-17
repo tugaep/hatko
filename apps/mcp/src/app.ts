@@ -152,11 +152,17 @@ const RPC_INTERNAL = -32603;
  *
  * `evil.example.com` is still rejected, which is the entire point: a page in the
  * user's browser cannot make this server answer under an attacker-controlled name.
+ *
+ * Deployed behind a reverse proxy, the `Host` arriving here is the public hostname, so
+ * `MCP_ALLOWED_HOSTS` has to name it or every request becomes a 403. That is the failure
+ * mode this control dies of in practice — an operator meets a blanket 403 on a fresh
+ * deployment and turns the protection off rather than adding one hostname.
  */
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 const allowedHosts = [
   ...LOOPBACK_HOSTS,
   ...LOOPBACK_HOSTS.map((host) => `${host}:${config.mcpPort}`),
+  ...config.mcpAllowedHosts,
 ];
 
 /**

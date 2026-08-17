@@ -53,6 +53,17 @@ const envSchema = z.object({
    */
   MCP_URL: z.string().default('http://localhost:4100/mcp'),
 
+  /**
+   * Extra `Host` values the MCP server will answer to, comma-separated.
+   *
+   * The DNS-rebinding guard accepts every loopback spelling by default, which is right
+   * for a laptop and fatal behind a reverse proxy: the proxy forwards the public
+   * hostname, the guard does not recognise it, and every request becomes a 403. Adding
+   * the deployed hostname here is what makes the control survive deployment instead of
+   * being the first thing an operator switches off.
+   */
+  MCP_ALLOWED_HOSTS: z.string().default(''),
+
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
@@ -85,6 +96,9 @@ export const config = {
   webUrl: env.WEB_URL,
   mcpPort: env.MCP_PORT,
   mcpUrl: env.MCP_URL,
+  mcpAllowedHosts: env.MCP_ALLOWED_HOSTS.split(',')
+    .map((host) => host.trim())
+    .filter(Boolean),
 
   nodeEnv: env.NODE_ENV,
   isProduction: env.NODE_ENV === 'production',

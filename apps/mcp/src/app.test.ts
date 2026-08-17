@@ -25,6 +25,9 @@ import { createHash } from 'node:crypto';
  */
 
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-not-used-outside-node-test-runs';
+// Set before @hatko/core is imported: config.ts snapshots the environment at import, and
+// the DNS-rebinding allow-list is built from it at module scope.
+process.env.MCP_ALLOWED_HOSTS = 'hatko.example.test,hatko.example.test:8443';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-mcp-'));
 process.env.DATABASE_PATH = path.join(dir, 'mcp.db');
@@ -434,4 +437,38 @@ test('deleting a user takes their OAuth tokens with them', async () => {
     .prepare('SELECT count(*) n FROM "oauthAccessToken" WHERE "userId" = ?')
     .get(tempId) as { n: number };
   assert.equal(Number(remaining.n), 0, 'an OAuth token outlived the account it belonged to');
+});
+
+test('a configured public host is accepted, and others still are not', async () => {
+  /**
+   * The deployment case. Behind a reverse proxy the `Host` is the public hostname, so
+   * without `MCP_ALLOWED_HOSTS` a deployed server answers 403 to everything — the
+   * failure that gets a security control switched off rather than configured.
+   *
+   * A second app instance is built because `allowedHosts` is read at module scope from
+   * config, which snapshots the environment at import.
+   */
+  const { createApp: createConfigured } = await import('./app.ts');
+  const configured = createConfigured();
+
+  const send = (host: string) =>
+    configured.request('/mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        host,
+        ...bearer(userToken),
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: INITIALIZE }),
+    });
+
+  for (const host of config.mcpAllowedHosts) {
+    const response = await send(host);
+    assert.equal(response.status, 200, `configured host ${host} was rejected`);
+  }
+
+  // Widening the list must not turn the check off.
+  const foreign = await send('evil.example.com');
+  assert.equal(foreign.status, 403, 'a foreign Host was accepted');
 });
