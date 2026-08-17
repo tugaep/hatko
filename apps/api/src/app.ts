@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { auth, config, getDb, getSessionUser } from '@sorrel/core';
-import { toErrorResponse, notFound } from './errors.ts';
+import { HttpError, toErrorResponse, notFound } from './errors.ts';
 import { searchRoutes } from './routes/search.ts';
 import { adminRoutes } from './routes/admin.ts';
 
@@ -40,6 +40,24 @@ export function createApp() {
   app.get('/health', (c) => {
     const chunks = getDb().prepare('SELECT count(*) n FROM chunks').get() as { n: number };
     return c.json({ status: 'ok', indexedChunks: Number(chunks.n) });
+  });
+
+  /**
+   * Sign-up is closed, and this must be registered before the Better Auth mount
+   * below so it runs first.
+   *
+   * The corpus is internal. A login anyone may create an account for is not access
+   * control, it is a doorbell — and the audit confirmed the consequence: a stranger
+   * could register and read all 142 documents. Accounts are created deliberately,
+   * server-side, by `npm run seed`, for the same reason roles are.
+   *
+   * Blocked at the route rather than with Better Auth's `disableSignUp`, because
+   * that flag would also disable `auth.api.signUpEmail` — the call the seed script
+   * uses, and the one path whose password hashing is pinned by a test. Closing the
+   * public door is the requirement; breaking the tested way in is not.
+   */
+  app.on(['GET', 'POST'], '/api/auth/sign-up/*', () => {
+    throw new HttpError('forbidden', 'Sign-up is closed. Ask an administrator for an account.');
   });
 
   /**

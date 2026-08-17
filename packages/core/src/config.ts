@@ -83,6 +83,42 @@ export const config = {
 
 export type Config = typeof config;
 
+/** The value `.env.example` ships, so copying it unchanged is caught rather than accepted. */
+const PLACEHOLDER_SECRET = 'replace-me-with-a-random-32-byte-secret';
+
+/**
+ * The application secret, or an actionable error.
+ *
+ * One function because there are two consumers — Better Auth's session signing and
+ * the HKDF-derived settings encryption key — and they disagreed. Each had its own
+ * check: settings refused the `.env.example` placeholder by name, auth tested only
+ * the length. The placeholder is 39 characters, so it passed. Anyone who copied the
+ * example file unchanged got working sign-in with sessions signed by a value
+ * published in this repository, while the settings page correctly refused to
+ * encrypt anything. A single gate cannot develop that kind of gap.
+ *
+ * The secret is a parameter rather than read straight from `config` so a test can
+ * drive it. config.ts snapshots process.env at import and loads .env from disk, so
+ * a test asserting "the placeholder is refused" would otherwise be asserting
+ * something about the developer's machine. Same reason as `resolveApiKey`.
+ */
+export function requireAppSecret(secret: string | undefined = config.appSecret): string {
+  if (!secret || secret === PLACEHOLDER_SECRET) {
+    throw new Error(
+      'BETTER_AUTH_SECRET is not set to a real value.\n' +
+        'Generate one with:  openssl rand -base64 32\n' +
+        'then set BETTER_AUTH_SECRET in .env.',
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error(
+      `BETTER_AUTH_SECRET is ${secret.length} characters; at least 32 are required. ` +
+        'Generate one with:  openssl rand -base64 32',
+    );
+  }
+  return secret;
+}
+
 // The API key is resolved in settings.ts rather than here, because it can come
 // from the database as well as the environment and this module must not depend
 // on the database — db/client.ts imports it.

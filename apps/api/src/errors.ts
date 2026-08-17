@@ -39,6 +39,26 @@ export class HttpError extends Error {
 
 export const notFound = (message = 'Not found.') => new HttpError('not_found', message);
 
+/**
+ * Parse a JSON request body, or fail as a 400.
+ *
+ * `c.req.json()` throws a `SyntaxError` on a malformed or empty body. That is not a
+ * `ZodError`, so it fell through to the generic branch below and was answered with
+ * 500 `internal` plus a logged stack trace — the server taking blame for the
+ * client's malformed request, and reporting an outage where there was none.
+ *
+ * Every route that reads a required body goes through this. A route whose body is
+ * optional (`POST /admin/ingestion/run`) defaults instead, which is a different
+ * question and stays where it is.
+ */
+export async function jsonBody(c: Context): Promise<unknown> {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new HttpError('bad_request', 'The request body must be valid JSON.');
+  }
+}
+
 function envelope(code: ErrorCode, message: string, details?: Record<string, string>): ApiError {
   return { error: { code, message, ...(details ? { details } : {}) } };
 }

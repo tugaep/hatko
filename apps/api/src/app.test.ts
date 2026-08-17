@@ -216,6 +216,77 @@ test('a malformed search body is rejected with field-level detail', async () => 
   assert.ok(payload.error.details, 'validation failures name the offending field');
 });
 
+/**
+ * A malformed body is the client's mistake, and `c.req.json()` throws a
+ * `SyntaxError` rather than a `ZodError` — which reached the generic handler and was
+ * answered with 500 `internal` plus a logged stack trace. Every route that requires
+ * a body is checked, because the fix is per-route and one left out is one that still
+ * reports an outage when someone sends a stray character.
+ */
+test('a body that is not JSON is the caller’s fault, not a 500', async () => {
+  const routes = [
+    '/api/search',
+    '/api/answer',
+    '/api/admin/settings/api-key',
+  ] as const;
+
+  for (const route of routes) {
+    for (const body of ['not json at all', '', '{"unterminated":']) {
+      const response = await app.request(route, {
+        method: route.includes('settings') ? 'PUT' : 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body,
+      });
+
+      assert.equal(
+        response.status,
+        400,
+        `${route} answered ${response.status} to a malformed body (${JSON.stringify(body)})`,
+      );
+      const payload = (await response.json()) as { error: { code: string } };
+      assert.equal(payload.error.code, 'bad_request');
+    }
+  }
+});
+
+/**
+ * The corpus is internal, so the account list is not self-service. Better Auth
+ * mounts its own routes under a wildcard, so this proves the block is registered
+ * ahead of that mount and actually reached — a guard behind the wildcard would be
+ * inert and would look identical in the diff.
+ */
+test('sign-up is closed to the public', async () => {
+  const response = await app.request('/api/auth/sign-up/email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'stranger@nowhere.test',
+      password: 'stranger-password',
+      name: 'Stranger',
+    }),
+  });
+
+  assert.equal(response.status, 403);
+  const payload = (await response.json()) as { error: { code: string } };
+  assert.equal(payload.error.code, 'forbidden');
+
+  const created = db
+    .prepare('SELECT count(*) n FROM "user" WHERE email = ?')
+    .get('stranger@nowhere.test') as { n: number };
+  assert.equal(Number(created.n), 0, 'no account may be created through the public route');
+});
+
+/** Sign-in still works — closing sign-up must not close the door for seeded accounts. */
+test('sign-in is unaffected by the sign-up block', async () => {
+  const response = await app.request('/api/auth/sign-in/email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'user@test.local', password: 'user-password' }),
+  });
+
+  assert.equal(response.status, 200);
+});
+
 test('an unknown route returns the standard error envelope', async () => {
   const response = await call('/api/does-not-exist');
 

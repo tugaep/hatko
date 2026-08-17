@@ -15,7 +15,7 @@ import {
 import { listDocumentsQuerySchema, triggerIngestionRequestSchema } from '@sorrel/shared';
 import { z } from 'zod';
 import { requires } from '../middleware.ts';
-import { HttpError } from '../errors.ts';
+import { HttpError, jsonBody } from '../errors.ts';
 
 /**
  * Admin surfaces: corpus management, ingestion control, statistics and the
@@ -97,7 +97,7 @@ adminRoutes.get('/settings/api-key', requires('documents:manage'), (c) =>
 );
 
 adminRoutes.put('/settings/api-key', requires('documents:manage'), async (c) => {
-  const body = apiKeyBodySchema.parse(await c.req.json());
+  const body = apiKeyBodySchema.parse(await jsonBody(c));
   const db = getDb();
 
   setSecret(db, SETTING_KEYS.openaiApiKey, body.apiKey, c.get('user').id);

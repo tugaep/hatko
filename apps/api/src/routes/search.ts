@@ -9,6 +9,7 @@ import {
 } from '@sorrel/core';
 import { answerRequestSchema, searchRequestSchema } from '@sorrel/shared';
 import { requires } from '../middleware.ts';
+import { jsonBody } from '../errors.ts';
 
 /**
  * Search and grounded answers. Both require a signed-in user of any role.
@@ -22,7 +23,7 @@ import { requires } from '../middleware.ts';
 export const searchRoutes = new Hono();
 
 searchRoutes.post('/search', requires('search:run'), async (c) => {
-  const body = searchRequestSchema.parse(await c.req.json());
+  const body = searchRequestSchema.parse(await jsonBody(c));
   const db = getDb();
   const started = performance.now();
 
@@ -50,7 +51,7 @@ searchRoutes.post('/search', requires('search:run'), async (c) => {
 });
 
 searchRoutes.post('/answer', requires('answer:generate'), async (c) => {
-  const body = answerRequestSchema.parse(await c.req.json());
+  const body = answerRequestSchema.parse(await jsonBody(c));
   const db = getDb();
 
   const response = await answerQuestion(db, body.query);

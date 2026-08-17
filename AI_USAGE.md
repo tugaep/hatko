@@ -181,6 +181,11 @@ counts in a dataset I am not supposed to modify.
 **Caught by:** a file listing during step 2 that showed 143 markdown files where
 the corpus has 142. Removed, and the path is now gitignored.
 
+**This fix was incomplete, and the review below caught the recurrence.** Gitignoring
+the path stops the file being _committed_; it does nothing to stop it being
+_ingested_. The plugin recreated `sample_dataset/corpus/CLAUDE.md` twice during the
+step 1–5 review, and both times ingestion indexed it as a document. See defect 8.
+
 ---
 
 ## Smaller corrections
@@ -227,10 +232,9 @@ Being fair about this matters as much as the failures.
 
 Stated plainly rather than left to be discovered.
 
-- **The eval measures retrieval, not answer content.** It scores recall and MRR
-  over expected documents. Failure #4 passed retrieval while failing the actual
-  requirement. An answer-level assertion — "this answer must mention the
-  deprecation" — would have caught it, and is not built.
+- ~~**The eval measures retrieval, not answer content.**~~ Closed in `e479f6c`.
+  `--answers` now asserts required phrases, abstention on unanswerable questions,
+  and that every citation resolves to a retrieved document. 12/12 pass.
 - **The vector arm's contribution is unproven on unseen queries.** It ties
   keyword-only on this eval set, where questions share vocabulary with their
   answers. Its value is a hypothesis about the private set.
@@ -240,3 +244,217 @@ Stated plainly rather than left to be discovered.
 - **The rerank grade threshold is calibrated on 12 questions.** Separation is
   clean today (answerable 1.00, unanswerable ≤0.33, threshold 0.67) but that is a
   small sample.
+
+---
+
+## Audit of steps 1–5 (17 Aug 2026)
+
+Before starting step 6 I had Claude audit everything already built, with an
+explicit brief: find instability, find anything that only works on the sample
+corpus, and find mock implementations written to satisfy the evaluation rather than
+the requirement. It is AI reviewing its own prior output, which is worth
+discounting — so the rule was that no finding counts unless it is reproduced by
+something actually run.
+
+What was run: `npm run typecheck` and `npm test` (115 pass); the eval across all
+three arms, with and without rerank, plus `--answers` against the live provider; a
+fresh-machine bootstrap (`db:migrate`, `seed`, `ingest`) into an empty database;
+the API booted and driven over HTTP with `curl` as anonymous, `user` and `admin`;
+and five throwaway probe scripts covering ingestion, retrieval, the answer path,
+auth and the shared SQLite connection.
+
+### What held up
+
+Recording this first, because most of it did.
+
+- **The documented retrieval numbers reproduce exactly.** With the rerank pass:
+  keyword 100% recall@1 / MRR 1.000, vector 89% / 0.889, hybrid 100% / 1.000. The
+  relevance separation the abstain threshold depends on also reproduces —
+  answerable questions 1.00, unanswerable 0.00–0.33, threshold 0.67 between them.
+  Numbers claimed in a docstring that turn out to be real is not the default.
+- **12/12 answer checks pass live**, including all three abstentions.
+- **No mock implementations in production code.** Every corpus-specific string in
+  `packages/` and `apps/` outside tests is a comment explaining a decision; there
+  is no special-casing of the sample questions, no hardcoded answer, no `TODO`. The
+  stub embedders, graders and generators are injected through typed options used
+  only by tests and the eval, which is dependency injection, not a mock in the
+  shipping path.
+- **Session forgery fails.** Flipping the token's last character, stripping the
+  signature, replacing the signature, and an empty token all return 401.
+- **Authorization is decided server-side, per request.** The role is read live from
+  the database, so downgrading an admin mid-session takes effect on the next call.
+  `role` in a sign-up body is ignored (`input: false`), and a hand-edited unknown
+  role is refused by a CHECK constraint before the code's fail-closed fallback is
+  even reached.
+- **The shared single SQLite connection is safe.** This was the review's main
+  stability worry: Better Auth writes through the same connection ingestion holds
+  transactions on, and node:sqlite cannot nest them. Tracing `BEGIN`/`COMMIT`
+  during sign-in and sign-up showed Better Auth issues no transactions at all, and
+  two deliberately concurrent ingests left documents, chunks and vectors
+  consistent — the write phases are synchronous, so they cannot interleave
+  mid-transaction. Safe, and now known to be safe rather than assumed.
+- **Citation validation holds** against 12 hostile answer shapes, including a
+  prompt-injection document planted in the corpus that instructed the model to cite
+  `[99]`. The marker was stripped; no fabricated citation reached the response.
+- **The abstention decision table is correct on all eight paths**, including the two
+  that matter most: a model that cites nothing abstains, and a grader outage does
+  _not_ abstain.
+- Encryption round-trips 4000-character and emoji keys, rejects tampering loudly,
+  and leaves no plaintext in the database file. Every hostile FTS5 input is either
+  safely quoted or correctly null — the corpus survived a `DROP TABLE` attempt.
+  Ingestion idempotency, pruning across all three stores, and empty- and
+  unreadable-file handling all behave as documented.
+
+### Defects found
+
+Ordered by how much damage they would do. None were known before the audit.
+**Defects 1–4 are fixed** (see "Fixes" below); 5–13 are recorded and open.
+
+**1. Anyone can create an account and read the entire internal corpus.**
+`POST /api/auth/sign-up/email` is open. Verified over HTTP: a stranger registered
+and immediately searched the corpus successfully. Roles are enforced correctly —
+the gap is the authentication boundary, not authorization. For an internal document
+system with two documented demo accounts, nothing needs self-service sign-up.
+
+**2. The placeholder secret shipped in `.env.example` is accepted as the session
+signing key.** `settings.ts` refuses `PLACEHOLDER_SECRET` explicitly; `authSecret()`
+in `auth/index.ts` only checks length, and the placeholder is 39 characters.
+Verified: copying `.env.example` to `.env` unchanged yields working sign-in with
+sessions signed by a secret published in the repository. Two guards against the
+same mistake, and the one protecting sessions is the one that does not fire.
+
+**3. A malformed request body returns 500, not 400.** `/api/search` and
+`/api/answer` call `searchRequestSchema.parse(await c.req.json())`; `c.req.json()`
+throws a `SyntaxError`, which is not a `ZodError`, so it reaches the generic
+handler, logs a stack trace and returns `internal`. Verified over HTTP for both
+routes. `/api/admin/ingestion/run` already guards this with `.catch(() => ({}))`,
+so the fix pattern exists in the codebase and was simply not applied here. A client
+error reported as a server fault on a graded error-handling axis.
+
+**4. `npm run ingest -- --force` and `npm run eval -- --rerank --answers` silently
+do nothing.** The root scripts lack the trailing `--` that `ask` has, so npm
+swallows the flags and emits only a warning. Verified: `npm run ingest -- --help`
+prints _npm's_ help, not the CLI's. Every documented flag on the top-graded axis is
+inert from the repository root — the eval numbers in this file can only be
+reproduced by invoking the workspace script directly, which nobody would guess.
+
+**5. Ingestion indexes every `.md` under `CORPUS_PATH` with no exclusion list.**
+Demonstrated twice during the audit: a 43-byte tool-generated
+`sample_dataset/corpus/CLAUDE.md` was ingested as a retrievable document titled
+"CLAUDE", and the corpus counted 143 instead of 142. Gitignoring it was the wrong
+layer. Any real documentation tree containing a `README.md` or a `CONTRIBUTING.md`
+hits this, and "pointing ingestion at the real corpus is straightforward" is a
+stated requirement.
+
+**6. A document that fails during the write phase leaves no trace if it is new.**
+`markDocumentFailed` is only reached when the pre-run snapshot has the path, and the
+`upsertDocument` inside the failing transaction is rolled back with it. Verified: a
+run reported `docsFailed=2` while only one document appeared as failed anywhere in
+the database. The read phase has the same gap. Ingestion is required to be
+observable, and this is the case where it silently is not.
+
+**7. `getApiKeyStatus` reports a healthy key for a value that cannot be decrypted.**
+It never attempts decryption, so after a `BETTER_AUTH_SECRET` rotation the admin
+screen shows `configured: true, source: 'database'` while every provider call
+throws. `resolveApiKey` was carefully written to fail loudly here; the status
+endpoint beside it still says everything is fine. The test named _"reports rotation,
+not unset"_ only asserts that `resolveApiKey` throws — no code reports a rotation
+state, and `SecretStatus` has no way to express one.
+
+**8. The 7-day and 14-day analytics windows compare mismatched date formats.**
+`created_at` is stored as `2026-08-17T08:00:00Z`; the comparison is against
+`datetime('now','-7 days')`, which returns `2026-08-10 08:00:00` — space separator,
+no `Z`. Since `'T' > ' '`, rows up to a day older than the cutoff are included.
+Verified: a row 7 days 6 hours old is counted by the shipped query and correctly
+excluded by the `strftime('%Y-%m-%dT%H:%M:%SZ', ...)` form.
+
+**9. `durationMs` is quantised to whole seconds and reports 0 for any run under a
+second.** Both `started_at` and `finished_at` use second-resolution `strftime`. The
+live database has a real run recorded at 0 ms, and the CLI prints "0.0s" for an
+ingest that did measurable work. It is a dashboard field.
+
+**10. Category-filtered search runs in the RRF regime this project documents as
+pathological.** `poolSize = max(candidates * 4, 100)` draws 100 of 142 chunks per
+arm, where the tuning notes record that a 30-of-142 pool dropped recall@1 from 89%
+to 78% for exactly the reason described — mediocre-in-both beating first-in-one.
+The filter returns correct documents; its ranking is untuned and has no eval
+coverage.
+
+**11. Admin document search treats `%` and `_` as wildcards.** `q=%` returns all 142
+documents, `q=_` likewise. Parameterised, so not injectable — the comment claiming
+so is right — but the user's literal text is not matched literally. Needs an
+`ESCAPE` clause.
+
+**12. `maxChars` is not a ceiling, and an oversized section emits a junk chunk.** A
+single 10,000-character sentence yields one 10,000-character chunk, which is the
+deliberate "never split mid-sentence" trade-off; less deliberately, the split also
+emits the bare heading line as a separate 3-character chunk that then gets embedded
+and indexed. Never fires on this corpus, where nothing is oversized — which is
+precisely why it went unnoticed.
+
+**13. p95 latency under-reports at small N.** `CAST(total * 0.95 AS INTEGER) - 1`
+gives offset 0 for two rows, returning the _minimum_ as the 95th percentile.
+Correct from roughly 20 rows up.
+
+### Redundancy and coupling
+
+- **`search_queries_user_idx2` duplicates `search_queries_user_idx`** — byte-for-byte
+  the same index on `(user_id)`, both present in the live schema. Migration 003 adds
+  it to document that a foreign key was deliberately omitted. A SQL comment says
+  that; an index carries it as dead weight.
+- **Eval fixtures are exported from the core public barrel.** `EVAL_QUESTIONS`,
+  `ANSWERABLE` and `UNANSWERABLE` are part of `@sorrel/core`'s API, so the API app
+  ships the evaluation set.
+- **A configuration error is classified by regex on its message.** `errors.ts`
+  matches `/API key/i` and maps it to 400 `bad_request` — a server misconfiguration
+  reported as the client's fault, via string matching where `ProviderError` shows
+  the typed pattern already understood in this file.
+- **Importing `@sorrel/core` at all requires `BETTER_AUTH_SECRET` and opens the
+  database.** The barrel re-exports `auth/index.ts`, which calls `betterAuth({...})`
+  at module scope. A consumer that only wants `hybridSearch` inherits both. Step 7's
+  MCP server is exactly that consumer.
+
+### Fixes for defects 1–4
+
+Fixed immediately because all four are cheap and two are security. The remaining
+nine are recorded above and triaged against the timebox, not silently dropped.
+
+**1. Sign-up closed.** A route registered ahead of the Better Auth mount rejects
+`/api/auth/sign-up/*` with 403. Not Better Auth's `disableSignUp`, because that flag
+also disables `auth.api.signUpEmail` — the call the seed script makes, and the one
+account-creation path whose password hashing is pinned by a test after failure #1 in
+this file. Closing the public door should not mean rebuilding the tested way in.
+
+**2. One gate for the application secret.** `requireAppSecret()` in `config.ts` is
+now the single check, called by both Better Auth's `secret` and the settings
+encryption key. Net less code than the two divergent guards it replaces. The secret
+is a parameter defaulting to `config.appSecret`, mirroring `resolveApiKey`, so the
+test drives it instead of depending on the developer's `.env`.
+
+**3. Malformed bodies answered as 400.** A `jsonBody(c)` helper in `errors.ts`
+converts the `SyntaxError` into `bad_request`. Applied to the three routes that
+require a body; `POST /admin/ingestion/run` keeps its default-on-empty behaviour,
+which is a deliberately different rule rather than the same bug.
+
+**4. Root scripts forward their flags.** Added the trailing `--` that `ask` already
+had to `ingest` and `eval`. `npm run eval -- --rerank --answers` now works, which
+means the numbers quoted in this file are reproducible by the documented command.
+
+Verified over HTTP against the running server, not just in-process: sign-up returns
+403 and creates no row, sign-in still works, both body routes return 400 with no
+stack trace logged, and search and answer still return grounded cited results. The
+placeholder secret now aborts start-up with instructions for generating a real one.
+Four tests added, 119 pass. The two route tests exercise the API through
+`app.request` with real bodies — the gap that let defects 3 and 4 through was that
+every existing test called the code directly rather than the way a person would.
+
+### What this says about the review discipline
+
+Nine of the thirteen defects are things that cannot happen on the sample corpus:
+oversized sections, corpora containing a `README.md`, sub-second timing precision,
+analytics tables with enough rows for a percentile to mean anything. The tests are
+strong — 115 of them, aimed at silent failure rather than coverage — and they pass,
+because they test the corpus the system has. Defects 3 and 4 are different and worse:
+a 500 on malformed input and two documented commands that do nothing are both on the
+happy path of a reviewer's first ten minutes, and no test covers either because
+every test calls the code directly rather than the way a person would.

@@ -19,6 +19,7 @@ import path from 'node:path';
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-not-used-outside-node-test-runs';
 
 const { openDb } = await import('./db/client.ts');
+const { requireAppSecret } = await import('./config.ts');
 const {
   SETTING_KEYS,
   clearSecret,
@@ -160,4 +161,31 @@ test('a missing key produces an actionable error naming both ways to set it', ()
       return true;
     },
   );
+});
+
+/**
+ * The application secret gates two things — session signing and the settings
+ * encryption key — and for a while only one of them refused the placeholder that
+ * `.env.example` ships. It is 39 characters, so the length-only check that guarded
+ * sessions accepted it, and anyone who copied the example file unchanged signed
+ * their sessions with a value published in this repository.
+ *
+ * Both consumers now go through this one function, so guarding it here covers both.
+ * Asserted against the literal string read from `.env.example` rather than a copy,
+ * so editing that file without updating the guard fails here instead of silently
+ * reopening the hole.
+ */
+test('the secret shipped in .env.example is refused', () => {
+  const example = fs.readFileSync(new URL('../../../.env.example', import.meta.url), 'utf8');
+  const placeholder = /^BETTER_AUTH_SECRET=(.+)$/m.exec(example)?.[1];
+
+  assert.ok(placeholder, '.env.example must declare BETTER_AUTH_SECRET');
+  assert.ok(placeholder.length >= 32, 'the placeholder is long enough to pass a length-only check');
+
+  assert.throws(() => requireAppSecret(placeholder), /not set to a real value/);
+  assert.throws(() => requireAppSecret(''), /not set to a real value/);
+  assert.throws(() => requireAppSecret('too-short'), /at least 32/);
+
+  const real = 'x'.repeat(32);
+  assert.equal(requireAppSecret(real), real);
 });

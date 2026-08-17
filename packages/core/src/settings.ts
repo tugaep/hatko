@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
-import { config } from './config.ts';
+import { config, requireAppSecret } from './config.ts';
 import { getDb, type Db } from './db/client.ts';
 
 /**
@@ -36,8 +36,6 @@ export interface SecretStatus {
 
 // --- encryption -------------------------------------------------------------
 
-const PLACEHOLDER_SECRET = 'replace-me-with-a-random-32-byte-secret';
-
 /**
  * Derive the settings encryption key from the application secret.
  *
@@ -45,27 +43,16 @@ const PLACEHOLDER_SECRET = 'replace-me-with-a-random-32-byte-secret';
  * encrypt settings is independent of the one Better Auth uses to sign sessions
  * even though both descend from BETTER_AUTH_SECRET. One secret to configure,
  * two keys that cannot be substituted for one another.
+ *
+ * What counts as a usable secret is decided by `requireAppSecret` in config.ts, so
+ * this and Better Auth apply the same rule.
  */
 function encryptionKey(): Buffer {
-  const root = config.appSecret;
-
-  if (!root || root === PLACEHOLDER_SECRET) {
-    throw new Error(
-      'BETTER_AUTH_SECRET is not set to a real value, so secrets cannot be encrypted.\n' +
-        'Generate one with:  openssl rand -base64 32\n' +
-        'then set BETTER_AUTH_SECRET in .env.',
-    );
-  }
-  if (root.length < 32) {
-    throw new Error(
-      `BETTER_AUTH_SECRET is ${root.length} characters; at least 32 are required. ` +
-        'Generate one with:  openssl rand -base64 32',
-    );
-  }
-
   // A constant salt is acceptable here: HKDF's salt guards against a low-entropy
   // input, and the root secret is already 32+ random bytes.
-  return Buffer.from(hkdfSync('sha256', root, 'sorrel-settings', 'sorrel:settings:v1', 32));
+  return Buffer.from(
+    hkdfSync('sha256', requireAppSecret(), 'sorrel-settings', 'sorrel:settings:v1', 32),
+  );
 }
 
 /** AES-256-GCM. Output is base64 of iv(12) ‖ authTag(16) ‖ ciphertext. */

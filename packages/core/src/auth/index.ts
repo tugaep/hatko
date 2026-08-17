@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { can, roleSchema, type Permission, type Role, type SessionUser } from '@sorrel/shared';
-import { config } from '../config.ts';
+import { config, requireAppSecret } from '../config.ts';
 import { getDb } from '../db/client.ts';
 import { nodeSqliteDialect } from '../db/kysely-dialect.ts';
 
@@ -13,20 +13,11 @@ import { nodeSqliteDialect } from '../db/kysely-dialect.ts';
  * the session on the server.
  */
 
-function authSecret(): string {
-  const secret = config.appSecret;
-  if (!secret || secret.length < 32) {
-    throw new Error(
-      'BETTER_AUTH_SECRET must be set to at least 32 characters before authentication can start.\n' +
-        'Generate one with:  openssl rand -base64 32',
-    );
-  }
-  return secret;
-}
-
 export const auth = betterAuth({
   database: { dialect: nodeSqliteDialect(getDb()), type: 'sqlite' },
-  secret: authSecret(),
+  // Validated by the same gate that guards the settings encryption key, so the
+  // `.env.example` placeholder cannot sign sessions. See config.ts.
+  secret: requireAppSecret(),
   baseURL: config.apiUrl,
   // The browser app runs on a different origin from the API, so it must be named
   // explicitly; Better Auth rejects requests from origins not listed here.
