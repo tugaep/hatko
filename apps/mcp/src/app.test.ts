@@ -439,6 +439,38 @@ test('deleting a user takes their OAuth tokens with them', async () => {
   assert.equal(Number(remaining.n), 0, 'an OAuth token outlived the account it belonged to');
 });
 
+test('deactivating an account cuts off its OAuth token immediately', async () => {
+  /**
+   * The other half of the deactivation guarantee, and the half no web test can reach.
+   * The OAuth branch does not pass through `getSessionUser`, so it carries its own
+   * `disabled` check in `getUserById` — and the failure mode is silent: the token stays
+   * valid in `oauthAccessToken`, its expiry is untouched, so a missing check here would
+   * leave a disabled account querying the corpus through its MCP client for up to an
+   * hour, and up to seven days if the client refreshes. Deletion cascades, but
+   * deactivation is the operation an administrator actually performs.
+   */
+  await upsertAccount(db, {
+    email: 'switched-off@test.local',
+    password: 'switched-off-password',
+    name: 'Switched Off',
+    role: 'user',
+  });
+  const offId = (
+    db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('switched-off@test.local') as {
+      id: string;
+    }
+  ).id;
+  issueToken('deactivated-oauth-token', offId, 3_600_000);
+
+  const before = await rpc('initialize', INITIALIZE, bearer('deactivated-oauth-token'));
+  assert.equal(before.status, 200, 'an active account could not use its own token');
+
+  db.prepare('UPDATE "user" SET "disabled" = 1 WHERE "id" = ?').run(offId);
+
+  const after = await rpc('initialize', INITIALIZE, bearer('deactivated-oauth-token'));
+  assert.equal(after.status, 401, 'a deactivated account kept its MCP access');
+});
+
 test('a configured public host is accepted, and others still are not', async () => {
   /**
    * The deployment case. Behind a reverse proxy the `Host` is the public hostname, so

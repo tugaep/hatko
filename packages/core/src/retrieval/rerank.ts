@@ -15,12 +15,12 @@ import { chatJson } from '../providers/openai.ts';
  * document says "deprecated, see v3".
  *
  * **Absolute relevance, which is what makes abstention possible.** RRF scores
- * carry no information about match quality: the top result always scores
- * 1/(60+1) whether the passage answers the question or is merely the least bad of
- * 142. The eval confirms it — top-1 scores are identical for questions the corpus
- * answers and questions it cannot. So there is no threshold to set on retrieval
- * score, and "does the corpus actually cover this" has to be judged by reading
- * the passages. That judgement is this grade.
+ * carry no information about match quality: the top result always scores the same
+ * constant — 1/(k+1) for whatever k is in force — whether the passage answers the
+ * question or is merely the least bad of 142. The eval confirms it: top-1 scores are
+ * identical for questions the corpus answers and questions it cannot. So there is no
+ * threshold to set on retrieval score, and "does the corpus actually cover this" has to
+ * be judged by reading the passages. That judgement is this grade.
  *
  * Grades are absolute rather than a ranking, so a query where everything is
  * irrelevant returns all zeros rather than crowning a winner by default.

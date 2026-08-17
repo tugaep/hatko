@@ -114,22 +114,6 @@ export function Input({
   );
 }
 
-export function Textarea({
-  className,
-  ...rest
-}: Omit<ComponentProps<'textarea'>, 'className'> & { className?: string }) {
-  return (
-    <textarea
-      {...rest}
-      className={cx(
-        CONTROL,
-        'border-border-interactive resize-none py-2.5 leading-normal',
-        className,
-      )}
-    />
-  );
-}
-
 export function Field({
   label,
   hint,

@@ -205,8 +205,18 @@ export default async function ConsentPage({
 
       <ConsentForm consentCode={params.consent_code} />
 
+      {/*
+       * What this says was checked against what the code does, because the earlier
+       * version said "you can revoke access by signing out" and that was untrue: the MCP
+       * server validates an access token by looking it up, never consulting sessions, so
+       * signing out of the browser leaves an approved client working until its token
+       * expires. A consent screen that overstates the user's control is worse than one
+       * that admits its limits — it is the sentence someone would rely on.
+       */}
       <p className="text-caption text-text-muted mt-6">
-        Approving does not share your password. You can revoke access by signing out of Hatko.
+        Approving does not share your password. Access lasts until the token expires — an hour, or
+        up to seven days if the application renews it. To cut a client off sooner, ask an
+        administrator to deactivate the account.
       </p>
     </Shell>
   );

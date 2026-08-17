@@ -70,7 +70,6 @@ BETTER_AUTH_SECRET=<the value you just generated>
 
 API_URL=https://hatko.tugrap.dev
 WEB_URL=https://hatko.tugrap.dev
-BETTER_AUTH_URL=https://hatko.tugrap.dev
 NEXT_PUBLIC_API_URL=https://hatko.tugrap.dev
 MCP_URL=https://hatko.tugrap.dev/mcp
 MCP_ALLOWED_HOSTS=hatko.tugrap.dev

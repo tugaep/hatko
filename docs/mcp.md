@@ -10,7 +10,9 @@ be called by an external MCP client.
 
 Two ways in. **OIDC** is the one an MCP client uses on its own: it discovers the
 endpoints, registers itself, sends you to a consent screen, and gets its own scoped,
-revocable token. **A bearer session token** is the one for `curl`, scripts and CI,
+expiring token — scoped to that one client rather than being a copy of your session, and
+not individually revocable today (see §7). **A bearer session token** is the one for
+`curl`, scripts and CI,
 where a browser redirect makes no sense. Both land on the same server-side role check,
 so there is one authorization decision rather than two.
 
@@ -274,6 +276,16 @@ anything but trusted internal clients, and deliberately not built here.
 **No query cache.** Two identical questions pay for both model calls twice. The
 cheapest win available if traffic ever repeats itself.
 
+**An approved client cannot be revoked individually.** There is no "connected
+applications" surface, and signing out does not help: the MCP server validates an access
+token by looking it up in `oauthAccessToken`, so it never consults sessions. An approved
+client keeps working until its token expires — an hour, or up to seven days if it
+refreshes. The immediate cut-off is deactivating the account, which both surfaces honour
+at once. Tying tokens to the session instead would have been easy and wrong: a credential
+that dies with the user's session is exactly the bearer path's weakness, and losing that
+independence would remove the reason to prefer OIDC. The right fix is a per-client revoke
+list, and it is not built.
+
 **Analytics writes serialise.** `recordSearchQuery` writes one row per call, and SQLite
 takes a single writer. It swallows its own failures by design, so contention costs a
 metric rather than a search.
@@ -287,7 +299,7 @@ metric rather than a search.
 | `401` / `Sign in to continue.` | Missing, malformed, expired or revoked credential — an access token over an hour old, or a signed-out session. JSON-RPC code `-32002`. |
 | Consent says "not recognised"  | The `client_id` is unregistered or disabled, so there is nothing to approve. Reconnect the client.                                     |
 | Client keeps re-authorizing    | `MCP_URL` is not the address the client dials, so the token's audience does not match.                                                 |
-| `403 Invalid Host header`      | The DNS-rebinding guard. Reach the server as `localhost` or `127.0.0.1`.                                                               |
+| `403 Invalid Host header`      | The DNS-rebinding guard. Locally, reach the server as `localhost` or `127.0.0.1`; behind a proxy, add the public hostname to `MCP_ALLOWED_HOSTS`. |
 | `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                                                     |
 | `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                                                                |
 | Every query abstains           | The index is empty. Run `npm run ingest`.                                                                                              |

@@ -1787,3 +1787,87 @@ scaling past one SQLite file, no email, no alerting — because each is a real g
 listing them is cheaper than having them found.
 
 Typecheck clean, 193 tests passing.
+
+## Audit of the four bonus features (18 Aug 2026)
+
+A read of every file touched by steps 7b, 7c, 8 and 8b, plus a sweep for dead and
+duplicated code across the repository. Typecheck was clean and all 193 tests passed
+before it started, so nothing here was found by a failing test — which is the point of
+reading the code rather than running it.
+
+**The worst finding was a comment, and it was mine.** The module docblock at the top of
+[apps/mcp/src/app.ts](apps/mcp/src/app.ts) still said "There is no OIDC here. That is the
+stated bonus and it is deliberately not built", written when that was true. Step 7c built
+it, and the handler thirty lines below the comment implements the 401 and
+`WWW-Authenticate: resource_metadata` bootstrap that starts the OAuth flow. So the file
+opened by denying the feature it implements. Nothing tests a comment, and the cost is
+paid exactly once, in the worst place: an interviewer reading the MCP server top to bottom
+is told the significant bonus was skipped. Rewritten to describe the two credentials the
+file actually accepts.
+
+**A consent screen made a promise the code does not keep.** The last line of the OAuth
+consent page read "You can revoke access by signing out of Hatko." I checked it against
+the library rather than assuming, and it is false: Better Auth's `getMcpSession` resolves
+a token by looking it up in `oauthAccessToken` and never consults the session table, and
+the `mcp()` plugin re-exports only `oAuthConsent` from `oidcProvider` — so
+`/oauth2/endsession`, the one endpoint that deletes a user's tokens, is not mounted. An
+approved client therefore keeps working after sign-out for up to an hour, or seven days if
+it refreshes.
+
+The tempting fix was to make the sentence true by deleting the user's token rows on
+sign-out, about twelve lines mirroring the existing sign-in intercept. That would have
+been wrong, and [docs/mcp.md](docs/mcp.md) already contains the argument against it: a
+credential that dies with the user's session is precisely the bearer path's weakness, and
+it is the reason OIDC is the documented default. Tying OAuth tokens back to the session
+would have removed the property that justifies the whole flow. So the copy now states the
+real bound — tokens expire, and deactivating the account is the immediate cut-off — and
+`docs/mcp.md` §7 gains the limit it was missing: there is no per-client revoke surface,
+and that is the right fix rather than this one. A consent screen that overstates the
+user's control is worse than one that admits its limits, because that sentence is exactly
+what someone would rely on.
+
+**A comment claimed a transaction that did not exist.** `assertNotLastAdmin` in
+[packages/core/src/auth/users.ts](packages/core/src/auth/users.ts) said it was "counted
+inside the same transaction as the write so two concurrent requests cannot each see two
+admins and each remove one". There was no transaction anywhere in `updateUser` and no
+caller wrapping it. The invariant did hold — `node:sqlite` is synchronous and there is no
+`await` between the count and the `UPDATE`, so nothing can interleave in this process —
+but it held by accident of the driver rather than by design, and it would stop holding the
+day someone made that function await anything. The count and the write are now wrapped in
+the existing `transaction` helper, so the guarantee belongs to the code.
+
+**The test that was missing was on the half nothing else covers.** Step 8's commit claimed
+"one flag, both surfaces, immediately" for deactivation, and the API suite proves the web
+half thoroughly: the session goes null, search returns 401, reactivating restores both.
+The MCP half runs through a different function — `getUserById`, which the OAuth branch
+reaches without passing through `getSessionUser` — and had no test at all. That is the
+half that fails silently: the token row stays valid with its expiry untouched, so a
+missing check leaves a disabled account querying the corpus through its client for up to a
+week. Added, and verified as a real check by deleting the `isDisabled` line and confirming
+the test goes red.
+
+**Redundancy found and removed.** `Textarea` in the UI kit had no consumer anywhere — the
+chat composer is an `<input>` — so it was speculative surface and is gone.
+`listUsersQuerySchema` hand-wrote `limit` and `offset` instead of extending the shared
+`paginationSchema` the way `listDocumentsQuerySchema` does, and the two copies had already
+drifted to different defaults, which nothing intended. `.env.example` documented
+`WEB_PORT` and `BETTER_AUTH_URL`, neither of which any code reads: the web port is Next's
+own flag, and Better Auth's `baseURL` is passed explicitly from `API_URL`, so a second
+variable naming the same address could only disagree with the first. Both removed from the
+example file and from the deploy guide, since that file is the one a reviewer copies.
+
+**Two smaller inaccuracies.** The reranker's docblock illustrated its argument with
+`1/(60+1)` although `DEFAULT_RRF_K` is 10 and this project has a pinned test forbidding
+k=60; it now states the constant symbolically. And `docs/mcp.md`'s troubleshooting row for
+`403 Invalid Host header` still said only "reach the server as localhost", omitting
+`MCP_ALLOWED_HOSTS` — the exact failure step 8b was written to prevent, missing from the
+table someone hits it in.
+
+**What the audit did not find is worth recording too.** No authorization gap: every admin
+route is gated by middleware before its handler, both MCP credentials land on the single
+`authorize` call, and the role is never read from request data. No SQL injection surface:
+the one interpolated identifier is a sort key mapped through a closed record, and both
+`LIKE` filters escape their wildcards. No secret reachable by any read path. The retrieval
+and answer layers needed no changes.
+
+Typecheck clean, 194 tests passing.

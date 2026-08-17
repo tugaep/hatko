@@ -1,5 +1,5 @@
 import { adminUserSchema, roleSchema, type AdminUser, type Role } from '@hatko/shared';
-import type { Db } from '../db/client.ts';
+import { transaction, type Db } from '../db/client.ts';
 
 /**
  * Reading and changing accounts, for the admin user-management surface.
@@ -143,8 +143,8 @@ function assertNotSelf(id: string, currentUserId: string): void {
  *
  * The check has to count *active* admins, not admins: disabling the second-to-last
  * administrator is fine, disabling the last one locks the door with the keys inside.
- * Counted inside the same transaction as the write so two concurrent requests cannot
- * each see two admins and each remove one.
+ * Called inside the caller's transaction so the count and the write cannot be separated
+ * by another connection's commit.
  */
 function assertNotLastAdmin(db: Db, id: string): void {
   const activeAdmins = (
@@ -176,6 +176,12 @@ export interface UpdateUserChanges {
  * Both changes are applied in one statement so a request asking for both cannot half
  * apply — promoting someone and failing to re-enable them would be a confusing state to
  * debug from the UI, and there is no reason to allow it.
+ *
+ * The last-admin count and the write it guards are wrapped in one transaction. Within
+ * this process they could not be separated anyway — node:sqlite is synchronous and there
+ * is no `await` between them — but that is an accident of the driver rather than a rule,
+ * and it stops being true the day someone adds one. The transaction is what makes the
+ * guarantee belong to the code instead of to the runtime.
  */
 export function updateUser(
   db: Db,
@@ -185,36 +191,39 @@ export function updateUser(
 ): AdminUser {
   assertNotSelf(id, currentUserId);
 
-  const existing = db.prepare(`SELECT "id" FROM "user" WHERE "id" = ?`).get(id) as
-    { id: string } | undefined;
-  if (!existing) throw new UserManagementError('No such account.');
+  const updated = transaction(db, () => {
+    const existing = db.prepare(`SELECT "id" FROM "user" WHERE "id" = ?`).get(id) as
+      { id: string } | undefined;
+    if (!existing) throw new UserManagementError('No such account.');
 
-  // Only when the change actually removes an administrator. Promoting someone to admin,
-  // or disabling a regular user, cannot reduce the count.
-  const removesAnAdmin = changes.role === 'user' || changes.disabled === true;
-  if (removesAnAdmin) assertNotLastAdmin(db, id);
+    // Only when the change actually removes an administrator. Promoting someone to admin,
+    // or disabling a regular user, cannot reduce the count.
+    const removesAnAdmin = changes.role === 'user' || changes.disabled === true;
+    if (removesAnAdmin) assertNotLastAdmin(db, id);
 
-  const sets: string[] = [];
-  const params: unknown[] = [];
+    const sets: string[] = [];
+    const params: unknown[] = [];
 
-  if (changes.role !== undefined) {
-    sets.push('"role" = ?');
-    params.push(changes.role);
-  }
-  if (changes.disabled !== undefined) {
-    sets.push('"disabled" = ?');
-    params.push(changes.disabled ? 1 : 0);
-  }
+    if (changes.role !== undefined) {
+      sets.push('"role" = ?');
+      params.push(changes.role);
+    }
+    if (changes.disabled !== undefined) {
+      sets.push('"disabled" = ?');
+      params.push(changes.disabled ? 1 : 0);
+    }
 
-  // Better Auth stamps this on its own writes; a raw update has to keep it honest.
-  sets.push('"updatedAt" = ?');
-  params.push(new Date().toISOString());
+    // Better Auth stamps this on its own writes; a raw update has to keep it honest.
+    sets.push('"updatedAt" = ?');
+    params.push(new Date().toISOString());
 
-  db.prepare(`UPDATE "user" SET ${sets.join(', ')} WHERE "id" = ?`).run(
-    ...([...params, id] as never[]),
-  );
+    db.prepare(`UPDATE "user" SET ${sets.join(', ')} WHERE "id" = ?`).run(
+      ...([...params, id] as never[]),
+    );
 
-  const updated = getUser(db, id, currentUserId);
+    return getUser(db, id, currentUserId);
+  });
+
   if (!updated) throw new UserManagementError('No such account.');
   return updated;
 }

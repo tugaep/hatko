@@ -23,11 +23,13 @@ import { runSearchTool, searchToolInput } from './tool.ts';
  * tool needs a caller identity, and an identity needs somewhere to travel. Over HTTP
  * it travels in the `Authorization` header.
  *
- * There is no OIDC here. That is the stated bonus and it is deliberately not built:
- * an OIDC provider is a substantial subsystem, and the honest trade was to spend the
- * time making one authorization path correct across three surfaces instead of
- * building a second, weaker one. Bearer tokens are Better Auth sessions, so they
- * carry a real user, a real role, a 7-day expiry and revocation on sign-out.
+ * Two credentials are accepted, and neither is verified here. An OAuth 2.1 / OIDC
+ * access token is the normal path — the client discovers the endpoints from the 401
+ * below, registers itself, and gets its own scoped token after a human approves it on
+ * the consent screen. A Better Auth session token presented as a bearer is the path for
+ * `curl` and CI, where a browser redirect makes no sense. Both resolve through
+ * `requireMcpPermission` in @hatko/core, so there is one authorization decision rather
+ * than one per credential. The authorization server is the HTTP API; see docs/mcp.md.
  */
 
 /**

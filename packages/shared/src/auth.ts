@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { timestampSchema } from './common.ts';
+import { paginationSchema, timestampSchema } from './common.ts';
 
 /**
  * Two roles, checked server-side on every protected route.
@@ -72,9 +72,12 @@ export const adminUserSchema = z.object({
 });
 export type AdminUser = z.infer<typeof adminUserSchema>;
 
-export const listUsersQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
+/**
+ * Built on the shared `paginationSchema` rather than restating `limit` and `offset`,
+ * the same way `listDocumentsQuerySchema` is. Two hand-written copies of one concept had
+ * already drifted to different defaults, which is a difference nothing intended.
+ */
+export const listUsersQuerySchema = paginationSchema.extend({
   /** Substring match against name and email. */
   q: z.string().trim().max(200).optional(),
 });
