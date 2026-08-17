@@ -72,7 +72,16 @@ test('migrations apply cleanly and are idempotent', () => {
     .all()
     .map((r) => r.name);
 
-  assert.deepEqual(applied, ['001_init.sql']);
+  // Compared against the directory rather than a hardcoded list, so adding a
+  // migration does not require editing this test — and so a migration that
+  // silently fails to apply is still caught.
+  const onDisk = fs
+    .readdirSync(path.join(import.meta.dirname, 'migrations'))
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  assert.deepEqual(applied, onDisk);
+  assert.ok(onDisk.length > 0, 'there is at least one migration to apply');
 
   // Re-opening the same file must not attempt to re-apply anything.
   assert.doesNotThrow(() => {

@@ -19,12 +19,21 @@ try {
 
 const envSchema = z.object({
   /**
-   * Optional here on purpose. Migrations, the dashboard and every read path work
-   * without a key; only embedding and answer generation need one, and those
-   * modules assert it themselves with an actionable message. Requiring it here
-   * would make `npm run db:migrate` fail on a fresh clone for no reason.
+   * Optional here on purpose, and doubly so now that an admin can set the key
+   * from the web UI: at boot there may legitimately be no key anywhere yet.
+   * Migrations, the dashboard and every read path work without one. Only
+   * embedding and answer generation need it, and they resolve it through
+   * settings.ts, which reports an actionable error when it is missing.
    */
   OPENAI_API_KEY: z.string().min(1).optional(),
+
+  /**
+   * Root application secret. Better Auth signs sessions with it, and settings.ts
+   * HKDF-derives an independent key from it to encrypt stored secrets. Optional
+   * here so migrations and reads work on a fresh clone; the code paths that
+   * genuinely need it fail with instructions for generating one.
+   */
+  BETTER_AUTH_SECRET: z.string().optional(),
   EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(1536),
   ANSWER_MODEL: z.string().default('gpt-4o-mini'),
@@ -58,6 +67,7 @@ export const config = {
   corpusPath: absolute(env.CORPUS_PATH),
 
   openaiApiKey: env.OPENAI_API_KEY,
+  appSecret: env.BETTER_AUTH_SECRET,
   embeddingModel: env.EMBEDDING_MODEL,
   embeddingDimensions: env.EMBEDDING_DIMENSIONS,
   answerModel: env.ANSWER_MODEL,
@@ -73,16 +83,6 @@ export const config = {
 
 export type Config = typeof config;
 
-/**
- * Call from any code path that talks to the model provider. Throws with a fix,
- * rather than letting an undefined key surface as a 401 from OpenAI.
- */
-export function requireApiKey(): string {
-  if (!config.openaiApiKey) {
-    throw new Error(
-      'OPENAI_API_KEY is not set. Copy .env.example to .env and add your key:\n' +
-        '  cp .env.example .env',
-    );
-  }
-  return config.openaiApiKey;
-}
+// The API key is resolved in settings.ts rather than here, because it can come
+// from the database as well as the environment and this module must not depend
+// on the database — db/client.ts imports it.

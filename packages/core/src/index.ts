@@ -1,4 +1,5 @@
-export { config, requireApiKey, REPO_ROOT, type Config } from './config.ts';
+export { config, REPO_ROOT, type Config } from './config.ts';
+export * from './settings.ts';
 export * from './db/index.ts';
 export * from './db/repository.ts';
 export * from './ingest/corpus.ts';

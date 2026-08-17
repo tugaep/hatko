@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { config, requireApiKey } from '../config.ts';
+import { config } from '../config.ts';
+import { requireApiKey } from '../settings.ts';
 
 /**
  * Minimal OpenAI client over stdlib fetch.

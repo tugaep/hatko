@@ -59,6 +59,11 @@ Decided with the user. Do not expand without asking.
 - MCP search tool
 - Better Auth, `user` / `admin` roles
 - Eval script over the sample questions
+- **Admin-managed OpenAI API key**, entered in the web UI and stored encrypted.
+  The environment variable stays supported and documented: `RULES.md` requires
+  keys to be suppliable that way, the CLI needs it before anyone can sign in, and
+  a fresh machine has to be able to ingest before the UI exists. Database value
+  wins when both are present; the UI names the active source.
 
 **Out — deliberately, do not build:**
 
