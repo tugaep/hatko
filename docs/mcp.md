@@ -129,6 +129,18 @@ than erroring, because category is an open string rather than an enum of the sam
 corpus's folder names. Note that documents at the corpus root are `uncategorised`,
 not a folder name — filtering to `guides` will not find `localization-guide.md`.
 
+**On failure** the tool returns `isError: true` with a message chosen at the boundary,
+never the raw exception. The SDK's default is to forward `error.message` verbatim,
+which put `SQLITE_ERROR: no such column … /Users/…/hatko.db` into a tool result during
+review; the HTTP API has refused to leak that since step 3 and this surface now
+matches it. A provider outage is named so the caller retries instead of concluding the
+corpus is empty, a configuration error is forwarded because it _is_ the fix, and
+anything unrecognised is logged server-side and generalised to the caller.
+
+An abstention is deliberately **not** an error — it is a successful result whose text
+says the corpus does not cover the question. A client that saw `isError` there would
+report the system being honest as the system being broken.
+
 ---
 
 ## 5. Why it is built this way
@@ -172,13 +184,45 @@ whole system rather than only the browser.
 
 ---
 
-## 6. Troubleshooting
+## 6. Limits
+
+Where this stops scaling, in the order it would actually bite:
+
+**One machine, because of SQLite.** The protocol layer is stateless, so nothing stops
+several MCP processes running behind a load balancer — but they would all need the same
+database file. SQLite is a deliberate trade for a system that must install with
+`npm install` and no service to run; the migration path is Postgres + pgvector, and it
+is a storage swap rather than a redesign because retrieval is confined to
+`packages/core/src/retrieval`.
+
+**Latency is two model round trips, not our code.** A call spends roughly 200 ms
+embedding the query and 1–2 s in the rerank pass. The per-request `McpServer` and
+transport allocation is noise against that — and it is not optional anyway: the SDK
+throws `Stateless transport cannot be reused across requests`. Retrieval itself scans
+all 142 chunks exhaustively in about 1 ms, which beats an approximate index at this
+size; revisit around two orders of magnitude more.
+
+**No rate limiting.** A valid token can drive unbounded rerank calls, which is real
+money. The same is true of the HTTP API's `/answer`. Worth adding before this faces
+anything but trusted internal clients, and deliberately not built here.
+
+**No query cache.** Two identical questions pay for both model calls twice. The
+cheapest win available if traffic ever repeats itself.
+
+**Analytics writes serialise.** `recordSearchQuery` writes one row per call, and SQLite
+takes a single writer. It swallows its own failures by design, so contention costs a
+metric rather than a search.
+
+---
+
+## 7. Troubleshooting
 
 | Symptom                        | Cause                                                                                               |
 | ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `401` / `Sign in to continue.` | Missing, malformed, expired or revoked token. Mint a new one (step 2).                              |
+| `401` / `Sign in to continue.` | Missing, malformed, expired or revoked token. Mint a new one (step 2). JSON-RPC code `-32002`.      |
 | `403 Invalid Host header`      | The DNS-rebinding guard. Reach the server as `localhost` or `127.0.0.1`.                            |
 | `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                  |
+| `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                             |
 | Every query abstains           | The index is empty. Run `npm run ingest`.                                                           |
 | `OPENAI_API_KEY is not set`    | Queries are embedded and reranked at call time. Set the key in `.env`, or from the admin dashboard. |
 

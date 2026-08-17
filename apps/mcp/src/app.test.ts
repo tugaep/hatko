@@ -38,8 +38,18 @@ fs.writeFileSync(
     'Japanese. Language is auto-detected from the device locale, with English as the fallback.\n',
 );
 
-const { getDb, closeDb, ingest, config, getAuth, upsertAccount } = await import('@hatko/core');
-const { createApp } = await import('./app.ts');
+const {
+  getDb,
+  closeDb,
+  ingest,
+  config,
+  getAuth,
+  upsertAccount,
+  resolveApiKey,
+  ProviderError,
+  ConfigurationError,
+} = await import('@hatko/core');
+const { createApp, toToolErrorText } = await import('./app.ts');
 
 const db = getDb();
 
@@ -125,6 +135,8 @@ interface RpcEnvelope {
   result?: {
     serverInfo?: { name?: string };
     tools?: { name: string; inputSchema: JsonSchema; annotations?: Record<string, unknown> }[];
+    content?: { text?: string }[];
+    isError?: boolean;
   };
   error?: { code?: number; message?: string };
 }
@@ -158,7 +170,9 @@ test('an anonymous caller cannot initialize a session', async () => {
   assert.match(response.headers.get('www-authenticate') ?? '', /Bearer/);
 
   const body = await envelope(response);
-  assert.equal(body.error?.code, -32001);
+  // Implementation-defined, and deliberately not -32000 or -32001: the SDK's own
+  // ErrorCode enum already uses those for ConnectionClosed and RequestTimeout.
+  assert.equal(body.error?.code, -32002);
 });
 
 test('a forged bearer token is refused rather than trusted', async () => {
@@ -252,4 +266,66 @@ test('an out-of-range argument is rejected by the protocol layer', async () => {
 
   const body = await response.json();
   assert.match(JSON.stringify(body), /validation|too big|maxLength/i);
+});
+
+// --- the error boundary -----------------------------------------------------
+
+/**
+ * The SDK answers a throwing tool callback with `error.message` verbatim, which was
+ * measured putting `SQLITE_ERROR: no such column: secret_key in /Users/…/hatko.db`
+ * into a tool result. These assert the boundary that stops it, and they are the
+ * reason `toToolErrorText` is exported at all: forcing a real provider outage or a
+ * corrupt database through the transport is far more machinery than checking the
+ * function that decides what a caller is allowed to read.
+ */
+
+test('an unexpected failure is generalised rather than forwarded', () => {
+  const leak = 'SQLITE_ERROR: no such column: secret_key in /Users/someone/private/hatko.db';
+  const text = toToolErrorText(new Error(leak));
+
+  assert.doesNotMatch(text, /SQLITE|secret_key|\/Users\//, 'internal detail reached the caller');
+  assert.match(text, /unexpected/i);
+});
+
+test('a provider outage is named without leaking the provider response', () => {
+  const text = toToolErrorText(
+    new ProviderError('OpenAI 401: Incorrect API key provided: sk-proj-abc123', { status: 401 }),
+  );
+
+  assert.doesNotMatch(text, /sk-proj|401/, 'the upstream response reached the caller');
+  // Still actionable: the caller should retry rather than conclude the corpus is empty.
+  assert.match(text, /provider/i);
+});
+
+test('a configuration error is forwarded, because it is the fix', () => {
+  // Written to be actionable and carrying nothing internal — the one class of message
+  // worth passing through. A caller who cannot see this reads a broken retriever as
+  // an empty corpus.
+  const text = toToolErrorText(new ConfigurationError('No OpenAI API key is set. Set it in .env.'));
+  assert.match(text, /No OpenAI API key is set/);
+});
+
+/**
+ * A tool call embeds and reranks the query, so it reaches the model provider and
+ * there is no seam to inject a stub through HTTP. Skipped without a key so the suite
+ * stays green — and free — on a fresh clone, the same convention
+ * `apps/api/src/app.test.ts` uses. Nothing above depends on it: the gate and the
+ * published schema never touch the network.
+ */
+const withProvider = resolveApiKey(getDb()) !== null ? test : test.skip;
+
+withProvider('an abstention is not routed through the error boundary', async () => {
+  // The product's most important behaviour must stay a *successful* result. If it
+  // were ever answered with isError, every client would report the corpus being
+  // honest as the tool being broken.
+  const response = await rpc(
+    'tools/call',
+    { name: 'search_corpus', arguments: { query: 'parental leave policy in Portugal', limit: 2 } },
+    bearer(userToken),
+  );
+  assert.equal(response.status, 200);
+
+  const { result } = await envelope(response);
+  assert.notEqual(result?.isError, true, 'an abstention was reported as an error');
+  assert.match(result?.content?.[0]?.text ?? '', /does not cover|do not answer/i);
 });

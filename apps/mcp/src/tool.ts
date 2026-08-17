@@ -45,8 +45,18 @@ export const searchToolInput = {
     .unwrap()
     .optional()
     .describe('Passages to return after reranking. Defaults to 8.'),
+  /**
+   * Described without naming any category, on purpose. Categories are derived from
+   * the corpus's own top-level folder names, so "guides" and "postmortems" are facts
+   * about the sample data rather than about the tool — and pointing ingestion at a
+   * different corpus has to stay straightforward. Shipping the sample's folder names
+   * in a description every client reads is the soft version of the category enum
+   * this project already rejected once.
+   */
   category: searchRequestSchema.shape.category.describe(
-    'Restrict to one corpus category, e.g. "guides" or "postmortems". Omit to search everything; a wrong guess here silently hides the answer.',
+    'Restrict results to one category. Categories come from the top-level folder names of ' +
+      'the corpus, and documents at its root have none. Prefer omitting this and searching ' +
+      'everything: a category that does not match hides the answer rather than erroring.',
   ),
 };
 
@@ -104,16 +114,14 @@ function renderAbstention(query: string, results: SearchResult[]): string {
   ].join('\n');
 }
 
-/** What `search_corpus` gives back: passage text plus an explicit abstention signal. */
-export interface SearchToolResult {
-  text: string;
-  /** True when the corpus does not support an answer. A correct outcome, not an error. */
-  abstained: boolean;
-  results: SearchResult[];
-}
-
 /**
- * Run a search on behalf of `user`.
+ * Run a search on behalf of `user`, and render it for a language model to read.
+ *
+ * Returns the text and nothing else. An earlier version also returned `abstained`
+ * and the raw `SearchResult[]`, which no caller ever read — an MCP tool result is
+ * text, and an abstention is not an error the transport needs to know about. The
+ * fields were there in case something later wanted them, which is the definition of
+ * speculative surface.
  *
  * Takes the already-authorized user rather than the request, so the authorization
  * decision cannot be made here — it has been made before this function is reachable.
@@ -121,7 +129,7 @@ export interface SearchToolResult {
 export async function runSearchTool(
   user: SessionUser,
   input: { query: string; limit?: number | undefined; category?: string | undefined },
-): Promise<SearchToolResult> {
+): Promise<string> {
   // Back through the shared schema, which is where `limit`'s default of 8 and the
   // trimming and length bounds live. The SDK has already validated the shape; this
   // applies the contract the HTTP route applies.
@@ -153,18 +161,12 @@ export async function runSearchTool(
     latencyMs,
   });
 
-  if (abstained) {
-    return { text: renderAbstention(query, results), abstained, results };
-  }
+  if (abstained) return renderAbstention(query, results);
 
-  return {
-    text: [
-      `${results.length} passage${results.length === 1 ? '' : 's'} for "${query}".`,
-      'Answer only from these passages, and cite the source path of each one you use.',
-      '',
-      results.map(renderPassage).join('\n\n'),
-    ].join('\n'),
-    abstained,
-    results,
-  };
+  return [
+    `${results.length} passage${results.length === 1 ? '' : 's'} for "${query}".`,
+    'Answer only from these passages, and cite the source path of each one you use.',
+    '',
+    results.map(renderPassage).join('\n\n'),
+  ].join('\n');
 }

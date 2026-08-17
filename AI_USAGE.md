@@ -1479,3 +1479,78 @@ gate that stops checking still initializes, lists and answers — it just answer
 and a published input schema derived with `.unwrap()` keeps type-checking after it stops
 carrying the shared bounds. Both are asserted through the real router. Full suite 167
 passing, typecheck clean.
+
+### Reviewing step 7 (17 Aug 2026)
+
+A deliberate second pass over the MCP server looking for redundancy, dishonesty and
+things that would not scale. It found six items, three of which were real defects
+rather than tidying.
+
+**The tool result leaked internals.** The worst of them. The SDK catches a throwing
+tool callback and answers with `error.message` verbatim — verified by registering a
+tool that throws and reading what a client receives:
+
+```
+{"content":[{"type":"text","text":"SQLITE_ERROR: no such column: secret_key in /Users/tugaep/private/hatko.db"}],"isError":true}
+```
+
+A schema fragment and an absolute filesystem path, handed to whoever called the tool.
+`apps/api/src/errors.ts` has refused to do exactly this since step 3, and I had built a
+second surface onto the same database with no equivalent boundary — the kind of gap that
+only appears when you check what the framework does _instead_ of what you wrote. Fixed
+with `toToolErrorText`, mirroring the API's classification: provider failures named,
+configuration errors forwarded because they are the fix, everything else logged
+server-side and generalised. Verified twice — three unit tests on the classifier, and
+live against a deliberately invalid `OPENAI_API_KEY`, where the client got "The model
+provider could not be reached" and the operator's log got the OpenAI response.
+
+**An error code that meant something else.** I had written `-32001` with the comment
+"the SDK's convention for unauthorized". Checking the SDK's `ErrorCode` enum:
+`-32001` is `RequestTimeout`, and `-32000` is `ConnectionClosed`. The comment was
+wrong twice — there is no such convention, and that number already means a timeout in
+this very library. Now `-32002`, documented as an implementation-defined code from the
+reserved band, with the HTTP 401 noted as the signal clients actually act on. A comment
+that confidently cites a convention is worth more scepticism than one that admits a
+guess, and this one had survived a commit message too.
+
+**No `onError`, so a fault answered non-JSON.** The API app registers one; the MCP app
+did not. A database failure during the session lookup would have escaped the handler
+into Hono's default plain-text "Internal Server Error", which a JSON-RPC client cannot
+parse — so a broken server would have been reported as a broken protocol. Added, and
+the per-request error path collapsed into it: the old code closed the server in two
+places and duplicated the envelope and the logging in the second. Now one `finally`.
+
+**Sample folder names in the shipped tool description.** It read `e.g. "guides" or
+"postmortems"`. Those are facts about the sample data, not about the tool, and this
+project already rejected a category enum built from those same folder names in step 1
+for the same reason. Pointing ingestion at a real corpus has to stay straightforward,
+and a description every client reads is the soft version of that mistake. Rewritten to
+describe where categories come from without naming any.
+
+**Two dead fields and a pointless wrapper.** `runSearchTool` returned `{text,
+abstained, results}` and no caller ever read the last two — an MCP tool result is text,
+and an abstention is not something the transport needs to know. It now returns a
+string. `authorize()` was a one-line single-use wrapper around `requirePermission`;
+inlined, comment kept.
+
+**What the review cleared.** No mocks, stubs or placeholders in the shipped paths —
+the only test double is the deterministic embedder in the test file, matching the API
+suite's existing pattern. And one thing I had recorded as a design preference turned
+out to be a requirement: reusing a stateless transport throws `Stateless transport
+cannot be reused across requests`, so the per-request construction I had justified on
+concurrency grounds is simply how the SDK works. The comment now says so.
+
+Also corrected a _measurement_ habit while here: an earlier "no processes running"
+conclusion came from `ps aux | grep -c "[s]rc/server.ts"` returning 0 while a server
+was demonstrably answering curl, and a server log that stayed empty because Node
+buffers stdout to a pipe and the process was being killed before it flushed. Both made
+a live process look dead. `lsof -ti :4100` is the check that actually answers the
+question, and `EADDRINUSE` is now in the troubleshooting table.
+
+Scale limits are written down in [docs/mcp.md](docs/mcp.md) §6 rather than left
+implied: one machine because of SQLite, latency dominated by two model round trips
+rather than anything in this code, and no rate limiting — a valid token can drive
+unbounded rerank spend, which is true of the HTTP API's `/answer` too and is worth
+fixing before either faces untrusted clients.
+
+Typecheck clean, 171 tests passing.

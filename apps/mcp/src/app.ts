@@ -1,7 +1,15 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { Hono } from 'hono';
-import { AuthorizationError, config, requirePermission, type SessionUser } from '@hatko/core';
+import { z } from 'zod';
+import {
+  AuthorizationError,
+  ConfigurationError,
+  ProviderError,
+  config,
+  requirePermission,
+  type SessionUser,
+} from '@hatko/core';
 import { runSearchTool, searchToolInput } from './tool.ts';
 
 /**
@@ -23,13 +31,58 @@ import { runSearchTool, searchToolInput } from './tool.ts';
  */
 
 /**
+ * Turn a thrown value into text the caller may see.
+ *
+ * This function exists because of what the SDK does without it. A tool callback that
+ * throws is caught upstream and answered with `error.message` verbatim — measured, a
+ * raw `SQLITE_ERROR: no such column: secret_key in /Users/…/hatko.db` arrives at the
+ * client as the tool's result. The HTTP API has refused to do that since step 3, and
+ * the MCP surface reaching the same database had no equivalent boundary, so the same
+ * failure disclosed a schema fragment and an absolute path to whoever asked.
+ *
+ * The classification mirrors `apps/api/src/errors.ts` deliberately, including which
+ * messages are safe to forward:
+ *
+ * - A provider failure is worth naming, because the fix is to retry or check the key.
+ * - A configuration error is written to be actionable and carries nothing internal,
+ *   so it is forwarded as-is — a caller who cannot see "no API key is set" will read
+ *   a broken retriever as an empty corpus.
+ * - Anything unrecognised is logged here and generalised there. An unexpected error
+ *   is exactly the case where the message is most likely to carry a path, a query or
+ *   a credential.
+ */
+export function toToolErrorText(error: unknown): string {
+  if (error instanceof ProviderError) {
+    // Logged as well as reported, which the HTTP API does not bother doing for this
+    // case — and the difference is justified. On the web a failure is visible to the
+    // person who triggered it; this server is headless, so its log is the only place
+    // an operator can find out the provider has been failing all afternoon.
+    console.error('[mcp] provider failure:', error.message);
+    return 'The model provider could not be reached, so this search could not run. Try again in a moment.';
+  }
+
+  if (error instanceof ConfigurationError) return error.message;
+
+  if (error instanceof z.ZodError) {
+    // Describes the arguments the caller just sent, not the server's internals.
+    const detail = error.issues
+      .map((i) => `${i.path.join('.') || 'input'}: ${i.message}`)
+      .join('; ');
+    return `Those arguments could not be used: ${detail}`;
+  }
+
+  console.error('[mcp] search_corpus failed:', error);
+  return 'The search failed for an unexpected reason. The error has been logged.';
+}
+
+/**
  * Build the MCP server for one authorized user.
  *
  * Constructed per request rather than once at module scope, which is what lets the
  * tool handler close over `user` instead of re-deriving the caller inside itself.
- * The alternative — one long-lived server that reads identity from ambient
- * request state — is how a tool ends up running with the wrong caller's
- * permissions under concurrency.
+ * The alternative — one long-lived server that reads identity from ambient request
+ * state — is how a tool ends up running with the wrong caller's permissions under
+ * concurrency.
  */
 function buildServer(user: SessionUser): McpServer {
   const server = new McpServer(
@@ -56,8 +109,14 @@ function buildServer(user: SessionUser): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => {
-      const { text } = await runSearchTool(user, input);
-      return { content: [{ type: 'text', text }] };
+      try {
+        return { content: [{ type: 'text', text: await runSearchTool(user, input) }] };
+      } catch (error) {
+        // `isError` rather than a throw, so the caller gets our message instead of
+        // the SDK's verbatim copy of the exception. An abstention is deliberately
+        // *not* routed here: "the corpus does not cover this" is a successful result.
+        return { content: [{ type: 'text', text: toToolErrorText(error) }], isError: true };
+      }
     },
   );
 
@@ -65,21 +124,19 @@ function buildServer(user: SessionUser): McpServer {
 }
 
 /**
- * Resolve and authorize the caller, or throw.
+ * JSON-RPC codes for the two failures this file answers itself.
  *
- * The header is passed to `requirePermission` untouched: the bearer plugin
- * HMAC-verifies the token and turns it into a session, and the permission check is
- * the same call the HTTP API's middleware makes with the same `search:run`
- * permission. Nothing here parses a token, compares a secret, or reads a role from
- * the request — a second implementation of any of those is a second place for
- * authorization to be wrong.
+ * JSON-RPC has no code for "unauthorized", and the MCP spec puts that signal in the
+ * HTTP status instead — the 401 and its `WWW-Authenticate` header are what a client
+ * acts on. So this is an implementation-defined code from the reserved -32000..-32099
+ * band, chosen not to collide with the two the SDK's own `ErrorCode` enum already
+ * occupies there (`ConnectionClosed` -32000 and `RequestTimeout` -32001). An earlier
+ * version used -32001 and described it as the SDK's convention for unauthorized,
+ * which was wrong twice: it is not a convention, and in this SDK that number already
+ * means a timeout.
  */
-async function authorize(headers: Headers): Promise<SessionUser> {
-  return requirePermission(headers, 'search:run');
-}
-
-/** JSON-RPC error codes used below. -32001 is the SDK's convention for unauthorized. */
-const RPC_UNAUTHORIZED = -32001;
+const RPC_UNAUTHORIZED = -32002;
+/** This one is standard: JSON-RPC's own internal-error code. */
 const RPC_INTERNAL = -32603;
 
 /**
@@ -124,10 +181,32 @@ export function createApp() {
    */
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
+  /**
+   * Anything that escapes the handler below.
+   *
+   * Without this, Hono's default answers a plain-text "Internal Server Error", which
+   * a JSON-RPC client cannot parse — so a database fault during the session lookup
+   * would reach the client as a parse error and be reported as a broken protocol
+   * rather than a broken server.
+   */
+  app.onError((error, c) => {
+    console.error('[mcp] unhandled error:', error);
+    const { status, body } = rpcError(500, RPC_INTERNAL, 'Internal server error.');
+    return c.json(body, status);
+  });
+
   app.all('/mcp', async (c) => {
     let user: SessionUser;
     try {
-      user = await authorize(c.req.raw.headers);
+      /**
+       * The headers go to `requirePermission` untouched: the bearer plugin
+       * HMAC-verifies the token and turns it into a session, and this is the same
+       * call the HTTP API's middleware makes with the same `search:run` permission.
+       * Nothing here parses a token, compares a secret, or reads a role from the
+       * request — a second implementation of any of those is a second place for
+       * authorization to be wrong.
+       */
+      user = await requirePermission(c.req.raw.headers, 'search:run');
     } catch (error) {
       if (error instanceof AuthorizationError) {
         /**
@@ -143,10 +222,11 @@ export function createApp() {
     }
 
     /**
-     * Stateless: no session id, so no server-side session map to grow, to evict, or
-     * to leak a transport into when a client disconnects mid-stream. Every request
-     * carries its own bearer token and is authorized on its own, which is also what
-     * makes the transport disposable.
+     * Stateless, and a fresh transport per request because the SDK requires exactly
+     * that — reusing one throws "Stateless transport cannot be reused across
+     * requests". So there is no server-side session map to grow, to evict, or to
+     * leak a transport into when a client disconnects. Every request carries its own
+     * bearer token and is authorized on its own.
      *
      * `enableJsonResponse` answers each POST with a complete JSON body instead of
      * holding an SSE stream open. This tool is strictly request/response — it never
@@ -168,20 +248,14 @@ export function createApp() {
 
     try {
       await server.connect(transport);
-      const response = await transport.handleRequest(c.req.raw);
-      // Both are per-request. Closing them is what keeps a long-running server from
-      // accumulating one connected McpServer per call it has ever served.
+      return await transport.handleRequest(c.req.raw);
+    } finally {
+      // `finally`, so the one close covers both paths — it runs after the response
+      // is in hand but before control leaves, which is why it does not truncate a
+      // body. Without it, a long-running process accumulates one connected
+      // McpServer per call it has ever served. The previous version closed in two
+      // places and duplicated `onError`'s envelope and logging in the second.
       await server.close();
-      return response;
-    } catch (error) {
-      await server.close().catch(() => {});
-      // The transport owns the response, so a throw here means no response was
-      // produced. Logged server-side and answered generically: an unexpected error
-      // is exactly the case where the message is most likely to carry a file path
-      // or a query.
-      console.error('[mcp] unhandled error:', error);
-      const { status, body } = rpcError(500, RPC_INTERNAL, 'Internal server error.');
-      return c.json(body, status);
     }
   });
 
