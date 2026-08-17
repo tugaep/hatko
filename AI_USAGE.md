@@ -403,13 +403,13 @@ Correct from roughly 20 rows up.
   it to document that a foreign key was deliberately omitted. A SQL comment says
   that; an index carries it as dead weight.
 - **Eval fixtures are exported from the core public barrel.** `EVAL_QUESTIONS`,
-  `ANSWERABLE` and `UNANSWERABLE` are part of `@sorrel/core`'s API, so the API app
+  `ANSWERABLE` and `UNANSWERABLE` are part of `@hatko/core`'s API, so the API app
   ships the evaluation set.
 - **A configuration error is classified by regex on its message.** `errors.ts`
   matches `/API key/i` and maps it to 400 `bad_request` — a server misconfiguration
   reported as the client's fault, via string matching where `ProviderError` shows
   the typed pattern already understood in this file.
-- **Importing `@sorrel/core` at all requires `BETTER_AUTH_SECRET` and opens the
+- **Importing `@hatko/core` at all requires `BETTER_AUTH_SECRET` and opens the
   database.** The barrel re-exports `auth/index.ts`, which calls `betterAuth({...})`
   at module scope. A consumer that only wants `hybridSearch` inherits both. Step 7's
   MCP server is exactly that consumer.
@@ -601,8 +601,8 @@ by side over identical rows for the window comparison, where the old form counte
 three and the new one two.
 
 One trap worth recording: the scratch worktree needs the repository's `node_modules`
-symlinked in to resolve workspace packages, and that symlink points `@sorrel/core`
-back at the _fixed_ tree. A "before" run of anything importing `@sorrel/core` by
+symlinked in to resolve workspace packages, and that symlink points `@hatko/core`
+back at the _fixed_ tree. A "before" run of anything importing `@hatko/core` by
 package name therefore tests the new code while looking like it tests the old. It
 caught me on the LIKE-escaping check, which passed in the worktree; the real
 comparison imports the pre-fix modules by absolute path, and there `%` and `_` matched
@@ -719,7 +719,7 @@ BOM is what Windows tooling and Confluence exports produce. One `.replace(/^﻿/
 in `readDocument` closes it.
 
 **18. Response contracts are declared and never enforced.** `searchResponseSchema`,
-`answerResponseSchema` and `sessionResponseSchema` exist in `@sorrel/shared` and no
+`answerResponseSchema` and `sessionResponseSchema` exist in `@hatko/shared` and no
 route parses against them. Verified by mutation: renaming `results` to `resultz` in
 the `/api/search` response passes `npm run typecheck` clean, because `c.json()`
 accepts any object. The inbound direction is strict — every database row goes
@@ -774,9 +774,9 @@ and not acted on. All four are still present, and one now blocks the next step:
 - **`errors.ts` still classifies a configuration error by `/API key/i`** on the
   message text.
 - **`EVAL_QUESTIONS`, `ANSWERABLE` and `UNANSWERABLE` are still exported from the
-  `@sorrel/core` barrel**, so the API ships the evaluation set.
-- **Importing `@sorrel/core` still requires `BETTER_AUTH_SECRET` and opens the
-  database.** Verified: `import('@sorrel/core')` with the secret unset throws
+  `@hatko/core` barrel**, so the API ships the evaluation set.
+- **Importing `@hatko/core` still requires `BETTER_AUTH_SECRET` and opens the
+  database.** Verified: `import('@hatko/core')` with the secret unset throws
   `BETTER_AUTH_SECRET is not set to a real value` before any export is reachable.
   Step 7's MCP server wants `hybridSearch` and nothing else, and cannot have it
   without inheriting Better Auth and a database handle.
@@ -819,7 +819,7 @@ counting. A fresh-machine bootstrap into an empty database — migrate, seed, in
 is one this corpus never takes.
 
 **14. The category is clamped where it is produced.** `CATEGORY_MAX_CHARS` moved
-into `@sorrel/shared`, the schema is built from it, and `categoryOf` truncates to
+into `@hatko/shared`, the schema is built from it, and `categoryOf` truncates to
 it — so the one place a category is derived cannot emit a value the read side
 rejects. The test asserts the output against `documentCategorySchema` rather than
 against the number 64, so the bound and the clamp cannot drift apart. Truncation
@@ -881,8 +881,8 @@ the schema test now checks for duplicate indexes as a rule rather than by name, 
 the next one is caught too. `ConfigurationError` replaces the `/API key/i` regex in
 `errors.ts`, which put a message and its matcher in two different files and would
 have forwarded any internal error mentioning an API key. The evaluation set is no
-longer re-exported from the `@sorrel/core` barrel. And `auth` became `getAuth()`,
-built on first use — `import('@sorrel/core')` no longer throws
+longer re-exported from the `@hatko/core` barrel. And `auth` became `getAuth()`,
+built on first use — `import('@hatko/core')` no longer throws
 `BETTER_AUTH_SECRET is not set to a real value` before any export is reachable,
 which is what step 7's MCP server needed. The lazy version had to be written as a
 factory with an inferred return type: annotating it `ReturnType<typeof betterAuth>`
@@ -995,7 +995,7 @@ page and dashboard being written right now. Deleting them would be deleting
 someone's work mid-sentence, so none of it is in this commit.
 
 I did check that nothing removed here breaks it: it imports only from
-`@sorrel/shared`, uses none of the symbols this pass deleted, and its own
+`@hatko/shared`, uses none of the symbols this pass deleted, and its own
 `requireUser` is a Next.js session helper unrelated to the core one that went. Its
 typecheck reports one error — `sign-in/page.tsx` imports a `sign-in-form.tsx` that
 has not been written yet — which is unfinished work rather than damage. Worth
@@ -1018,7 +1018,7 @@ below.
 
 ### Where it was wrong
 
-**The mark was a striped pill, not a leaf.** `brand.md` specifies the sorrel leaf as
+**The mark was a striped pill, not a leaf.** `brand.md` specifies the hatko leaf as
 three solid shapes and a centre vein. The first attempt left 1-unit gaps between the
 blades and the vein on a 24 grid — at the 20px the header renders it, that is 0.8px of
 negative space, so the three shapes fused and the mark read as an oval with a dark band
@@ -1091,3 +1091,57 @@ document table, the ingestion trigger and the provider-key panel all exercised i
 browser at 375, 768 and 1280. Role gating checked by signing in as the seeded regular
 user: no dashboard link, and `/dashboard` redirects to `/chat` server-side while the API
 independently returns 403.
+
+---
+
+## Renamed to Hatko (17 Aug 2026)
+
+The product was called Sorrel through steps 1–6 and is now **Hatko**. The rename is
+mechanical everywhere except one place, and that place is the interesting one.
+
+### The one thing a find-and-replace could not do
+
+`docs/brand.md` opened by arguing _from_ the old name: "Sorrel is a wild green you
+forage — you find it by knowing where to look." That sentence justified the palette
+("a dark green brand named Sorrel is coherent") and the whole botanical field-guide
+visual world. Substituting the new name into it produces a claim that is simply false:
+Hatko is not a plant.
+
+So the rationale was rewritten rather than substituted. The name section now says
+plainly that Hatko is coined and means nothing — a brand document whose first section
+is a false etymology cannot be trusted for the rest of its claims — and the field-guide
+metaphor is re-derived from what the product does: a large collection where everything
+must be findable, labelled and traceable is the problem a botanical plate solves,
+drawn in 1850. The section also states what that decision costs, which the original
+did not: the green palette no longer follows from the name, so it is a defensible
+preference rather than a deduction, and it should be argued as one.
+
+### Where the replacement went wrong, and how that was caught
+
+The first attempt ran `perl -pi -e 's/@sorrel\//@hatko\//g'` across 51 files. In Perl,
+`@sorrel` inside a regex is an array variable; it interpolated to nothing, so the
+pattern collapsed to `s/\//@hatko\//g` — **replace every forward slash in the file**.
+`docs/brand.md` became `docs@hatko/brand.md`, every `//` comment became `@hatko/@hatko/`,
+and `@types/node` became `@types@hatko/node`.
+
+Caught immediately because the tool that applied the edit echoed the rewritten files
+back, and `"name": "@hatko@hatko/web"` is not a thing. The recovery was free only
+because `apps/web` had been committed minutes earlier: `git checkout -- .` restored all
+51 files, and the rename was redone in Python where a sigil has no meaning. The lesson
+is not about Perl. It is that a 51-file mechanical rewrite should be one restorable
+commit away from its starting point before it runs.
+
+A second, quieter miss survived the redo: `\bSorrel\b` does not match in
+`_Sorrel only answers…` because `_` is a word character, so one occurrence in
+`docs/design.md` §8 stayed behind. Found by re-grepping for the old name afterwards
+instead of trusting the replacement count — the grep is the check, not the script.
+
+### Verified
+
+Deleted `data/` entirely and re-bootstrapped rather than renaming the SQLite file, so
+the fresh-machine path is the one actually tested: `npm install` → migrate (5
+migrations) → seed (`admin@hatko.local`, `user@hatko.local` created) → ingest (142
+documents embedded, 2.0s, 0 failed). `npm run typecheck` and `npm test` clean (152
+tests), `next build` clean. Leaving the old `@sorrel.local` accounts behind in a
+renamed database would have left two sets of demo credentials with published
+passwords, which is why the database was rebuilt rather than moved.

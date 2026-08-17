@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { CATEGORY_MAX_CHARS, CATEGORY_UNCATEGORISED } from '@sorrel/shared';
+import { CATEGORY_MAX_CHARS, CATEGORY_UNCATEGORISED } from '@hatko/shared';
 
 /** A source file read from disk, before chunking or embedding. */
 export interface SourceDocument {

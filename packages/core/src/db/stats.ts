@@ -5,7 +5,7 @@ import {
   type DashboardStats,
   type IndexHealth,
   type SearchStats,
-} from '@sorrel/shared';
+} from '@hatko/shared';
 import { config } from '../config.ts';
 import type { Db } from './client.ts';
 import { listIngestionRuns } from './repository.ts';

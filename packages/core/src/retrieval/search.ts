@@ -1,4 +1,4 @@
-import { searchResultSchema, type SearchResult } from '@sorrel/shared';
+import { searchResultSchema, type SearchResult } from '@hatko/shared';
 import { toVectorBlob, type Db } from '../db/client.ts';
 import { embedOne } from '../providers/openai.ts';
 import { toFtsQuery } from './query.ts';

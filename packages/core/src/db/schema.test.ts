@@ -18,7 +18,7 @@ import { config } from '../config.ts';
  */
 
 function tempDb() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-test-'));
   const db = openDb(path.join(dir, 'test.db'));
   return {
     db,

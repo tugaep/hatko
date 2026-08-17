@@ -16,7 +16,7 @@ import { getSearchStats } from './stats.ts';
  */
 
 function tempDb() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-stats-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-stats-'));
   const db = openDb(path.join(dir, 'test.db'));
   return {
     db,

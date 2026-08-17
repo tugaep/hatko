@@ -43,7 +43,7 @@ const stubEmbedder: Embedder = async (texts) =>
   });
 
 function tempDb() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-ingest-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-ingest-'));
   const db = openDb(path.join(dir, 'test.db'));
   return {
     db,
@@ -56,7 +56,7 @@ function tempDb() {
 
 /** A throwaway copy of the corpus, so tests that delete files leave the real one alone. */
 function tempCorpus() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-corpus-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-corpus-'));
   fs.cpSync(config.corpusPath, dir, { recursive: true });
   return {
     path: dir,
@@ -311,7 +311,7 @@ test('tooling files sharing the corpus directory are not indexed', async () => {
  */
 test('a failure on a document new this run is still visible afterwards', async () => {
   using ctx = tempDb();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-failvis-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-failvis-'));
 
   fs.writeFileSync(path.join(dir, 'a.md'), '# A\n\nAlpha content about widgets.\n');
   fs.writeFileSync(path.join(dir, 'b.md'), '# B\n\nBeta content about gadgets.\n');
@@ -383,7 +383,7 @@ test('an embedding failure marks the run failed rather than leaving it running',
  */
 test('a second run started while one is in flight is refused, not run alongside it', async () => {
   using ctx = tempDb();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-concurrent-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-concurrent-'));
   for (let i = 0; i < 3; i++) {
     fs.writeFileSync(path.join(dir, `d${i}.md`), `# D${i}\n\nContent number ${i}.\n`);
   }

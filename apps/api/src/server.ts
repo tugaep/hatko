@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { closeDb, config, getApiKeyStatus, getDb } from '@sorrel/core';
+import { closeDb, config, getApiKeyStatus, getDb } from '@hatko/core';
 import { createApp } from './app.ts';
 
 /**
@@ -18,7 +18,7 @@ const keyStatus = getApiKeyStatus(db);
 const app = createApp();
 
 const server = serve({ fetch: app.fetch, port: config.apiPort }, (info) => {
-  console.log(`Sorrel API on http://localhost:${info.port}`);
+  console.log(`Hatko API on http://localhost:${info.port}`);
   console.log(`  corpus     ${Number(chunks)} passages indexed`);
   console.log(
     `  model key  ${keyStatus.configured ? `${keyStatus.source} (${keyStatus.hint})` : 'not configured — set it in the admin settings page'}`,

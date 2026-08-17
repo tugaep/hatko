@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ingestionRunSchema, type IngestionRun } from '@sorrel/shared';
+import { ingestionRunSchema, type IngestionRun } from '@hatko/shared';
 import { z } from 'zod';
 import { messageOf } from '../../../lib/api.ts';
 import { apiSend } from '../../../lib/client.ts';

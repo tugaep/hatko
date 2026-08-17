@@ -18,14 +18,14 @@ import path from 'node:path';
 
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-not-used-outside-node-test-runs';
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-auth-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-auth-'));
 const dbFile = path.join(dir, 'auth.db');
 process.env.DATABASE_PATH = dbFile;
 
 const { getDb, closeDb } = await import('../db/client.ts');
 const { getAuth, getSessionUser, requirePermission, AuthorizationError } =
   await import('./index.ts');
-const { can } = await import('@sorrel/shared');
+const { can } = await import('@hatko/shared');
 const { upsertAccount } = await import('./accounts.ts');
 
 /** Structural shape of AuthorizationError; the class arrives via dynamic import. */

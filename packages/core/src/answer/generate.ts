@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AnswerResponse, Citation, DeprecationNotice, SearchResult } from '@sorrel/shared';
+import type { AnswerResponse, Citation, DeprecationNotice, SearchResult } from '@hatko/shared';
 import { config } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { chatJson } from '../providers/openai.ts';

@@ -1,4 +1,4 @@
--- Sorrel initial schema.
+-- Hatko initial schema.
 --
 -- Storage is SQLite via node:sqlite (stdlib) plus the sqlite-vec extension.
 -- Three physical stores share one integer key space:

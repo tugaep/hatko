@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { searchResponseSchema, sessionResponseSchema } from '@sorrel/shared';
+import { searchResponseSchema, sessionResponseSchema } from '@hatko/shared';
 
 /**
  * The API surface, exercised through `app.request()`.
@@ -20,7 +20,7 @@ import { searchResponseSchema, sessionResponseSchema } from '@sorrel/shared';
 
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-not-used-outside-node-test-runs';
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-api-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-api-'));
 process.env.DATABASE_PATH = path.join(dir, 'api.db');
 // Keep the corpus small: these tests are about routing and authorization, and
 // ingesting all 142 documents for each would only slow them down.
@@ -38,7 +38,7 @@ fs.writeFileSync(
 );
 
 const { getDb, closeDb, ingest, config, getAuth, upsertAccount, resolveApiKey } =
-  await import('@sorrel/core');
+  await import('@hatko/core');
 const { createApp } = await import('./app.ts');
 
 const db = getDb();

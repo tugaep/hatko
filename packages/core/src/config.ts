@@ -39,7 +39,7 @@ const envSchema = z.object({
   ANSWER_MODEL: z.string().default('gpt-4o-mini'),
   RERANK_MODEL: z.string().default('gpt-4o-mini'),
 
-  DATABASE_PATH: z.string().default('./data/sorrel.db'),
+  DATABASE_PATH: z.string().default('./data/hatko.db'),
   CORPUS_PATH: z.string().default('./sample_dataset/corpus'),
 
   API_PORT: z.coerce.number().int().positive().default(4000),

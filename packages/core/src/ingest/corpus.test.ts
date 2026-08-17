@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { documentCategorySchema } from '@sorrel/shared';
+import { documentCategorySchema } from '@hatko/shared';
 import { categoryOf, detectDeprecation, readDocument, scanCorpus, titleOf } from './corpus.ts';
 
 test('category comes from the top-level directory', () => {
@@ -37,7 +37,7 @@ test('a directory name too long for the schema is clamped, not written whole', (
 // --- scanCorpus --------------------------------------------------------------
 
 const corpusFixture = (): string => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-scan-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-scan-'));
   fs.mkdirSync(path.join(root, 'corpus', 'guides'), { recursive: true });
   fs.writeFileSync(path.join(root, 'corpus', 'guides', 'real.md'), '# Real\n\nbody');
   return root;
@@ -139,7 +139,7 @@ test('title falls back to a humanised filename when there is no heading', () => 
  * the strip happens at the decode and this is the boundary that has to hold.
  */
 test('a byte-order mark does not cost a document its title', (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-bom-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-bom-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   fs.writeFileSync(path.join(dir, 'notes.md'), '﻿# Release Notes\n\nbody');
 

@@ -11,14 +11,14 @@ import {
   listDocumentsFiltered,
   listIngestionRuns,
   setSecret,
-} from '@sorrel/core';
+} from '@hatko/core';
 import {
   documentSchema,
   listDocumentsQuerySchema,
   paginated,
   setApiKeyRequestSchema,
   triggerIngestionRequestSchema,
-} from '@sorrel/shared';
+} from '@hatko/shared';
 import { z } from 'zod';
 import { requires } from '../middleware.ts';
 import { HttpError, jsonBody } from '../errors.ts';

@@ -6,13 +6,13 @@ import {
   hybridSearch,
   recordSearchQuery,
   rerank,
-} from '@sorrel/core';
+} from '@hatko/core';
 import {
   answerRequestSchema,
   answerResponseSchema,
   searchRequestSchema,
   searchResponseSchema,
-} from '@sorrel/shared';
+} from '@hatko/shared';
 import { requires } from '../middleware.ts';
 import { jsonBody } from '../errors.ts';
 

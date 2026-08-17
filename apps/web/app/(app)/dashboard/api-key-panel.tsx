@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { secretStatusSchema, type SecretStatus } from '@sorrel/shared';
+import { secretStatusSchema, type SecretStatus } from '@hatko/shared';
 import { messageOf } from '../../../lib/api.ts';
 import { apiSend } from '../../../lib/client.ts';
 import { formatDateTime } from '../../../lib/format.ts';

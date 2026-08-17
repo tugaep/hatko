@@ -7,7 +7,7 @@ import {
   paginated,
   type Document,
   type DocumentStatus,
-} from '@sorrel/shared';
+} from '@hatko/shared';
 import { catalogNumber, formatBytes, formatDateTime } from '../../../lib/format.ts';
 import { useApi } from '../../../lib/use-api.ts';
 import { SeedSpecimen } from '../../../components/marks.tsx';

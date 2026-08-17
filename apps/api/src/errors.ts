@@ -4,8 +4,8 @@ import {
   ConfigurationError,
   IngestionInProgressError,
   ProviderError,
-} from '@sorrel/core';
-import type { ApiError } from '@sorrel/shared';
+} from '@hatko/core';
+import type { ApiError } from '@hatko/shared';
 import type { Context } from 'hono';
 
 /**

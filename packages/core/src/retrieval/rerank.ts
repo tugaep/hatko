@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SearchResult } from '@sorrel/shared';
+import type { SearchResult } from '@hatko/shared';
 import { config } from '../config.ts';
 import { chatJson } from '../providers/openai.ts';
 

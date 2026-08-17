@@ -10,7 +10,7 @@ import { cx } from './ui.tsx';
  */
 
 /**
- * A sorrel leaf reduced to three solid shapes and a centre vein, on a 24 grid.
+ * A hatko leaf reduced to three solid shapes and a centre vein, on a 24 grid.
  * At 16px and below the two blades stop reading and the vein alone reads as a text
  * caret — leaf at large sizes, search cursor at small. One shape, two readings.
  */

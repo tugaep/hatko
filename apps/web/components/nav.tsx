@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { can, type SessionUser } from '@sorrel/shared';
+import { can, type SessionUser } from '@hatko/shared';
 import { API_URL } from '../lib/api.ts';
 import { Logo, Wordmark } from './marks.tsx';
 import { Badge, Button, cx } from './ui.tsx';

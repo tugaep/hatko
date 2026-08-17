@@ -8,14 +8,14 @@ import {
   type IngestionRun,
   type IngestionTrigger,
   type SearchSource,
-} from '@sorrel/shared';
+} from '@hatko/shared';
 import { toVectorBlob, type Db } from './client.ts';
 
 /**
  * Persistence for documents, chunks and ingestion runs.
  *
  * Rows come back from SQLite as snake_case with 0/1 for booleans; the contracts
- * in @sorrel/shared are camelCase with real booleans. Every read goes through a
+ * in @hatko/shared are camelCase with real booleans. Every read goes through a
  * mapper and then the Zod schema, so a column renamed in a migration fails here
  * with a clear message instead of surfacing as an undefined field in the UI.
  */

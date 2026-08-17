@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { can, sessionResponseSchema, type Permission, type SessionUser } from '@sorrel/shared';
+import { can, sessionResponseSchema, type Permission, type SessionUser } from '@hatko/shared';
 import { API_URL, parseResponse } from './api.ts';
 
 /**

@@ -35,7 +35,7 @@ const {
 const REAL_KEY = 'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789a91f';
 
 function tempDb() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-settings-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-settings-'));
   const file = path.join(dir, 'test.db');
   const db = openDb(file);
   return {

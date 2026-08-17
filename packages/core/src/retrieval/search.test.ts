@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { SearchResult } from '@sorrel/shared';
+import type { SearchResult } from '@hatko/shared';
 import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { ingest } from '../ingest/pipeline.ts';
@@ -31,7 +31,7 @@ const stubEmbedder = async (text: string) => {
 };
 
 // Ingesting the corpus takes ~70ms, so one index is shared across the file.
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-search-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-search-'));
 const db = openDb(path.join(dir, 'search.db'));
 await ingest(db, {
   trigger: 'cli',
@@ -144,8 +144,8 @@ test('an unknown category returns nothing, without paying for an embedding', asy
  * first version of this test fooled me. BM25 over these fixtures is deterministic.
  */
 test('a category filter finds a passage that ranks low across the whole corpus', async () => {
-  const corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-deep-'));
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-deep-db-'));
+  const corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-deep-'));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-deep-db-'));
   const deepDb = openDb(path.join(scratch, 'deep.db'));
 
   fs.mkdirSync(path.join(corpus, 'filler'));

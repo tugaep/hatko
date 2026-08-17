@@ -1,5 +1,5 @@
 {
-  "name": "sorrel",
+  "name": "hatko",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,22 +12,22 @@
     "apps/*"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit && npm run typecheck --workspace @sorrel/web",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace @hatko/web",
     "test": "node --test \"packages/**/*.test.ts\" \"apps/api/src/**/*.test.ts\" \"apps/web/lib/**/*.test.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:migrate": "npm run migrate --workspace @sorrel/core",
-    "db:reset": "npm run reset --workspace @sorrel/core",
-    "ingest": "npm run ingest --workspace @sorrel/core --",
-    "eval": "npm run eval --workspace @sorrel/core --",
-    "ask": "npm run ask --workspace @sorrel/core --",
-    "seed": "npm run seed --workspace @sorrel/core",
+    "db:migrate": "npm run migrate --workspace @hatko/core",
+    "db:reset": "npm run reset --workspace @hatko/core",
+    "ingest": "npm run ingest --workspace @hatko/core --",
+    "eval": "npm run eval --workspace @hatko/core --",
+    "ask": "npm run ask --workspace @hatko/core --",
+    "seed": "npm run seed --workspace @hatko/core",
     "setup": "npm run db:migrate && npm run seed && npm run ingest",
-    "dev:api": "npm run dev --workspace @sorrel/api",
-    "start:api": "npm run start --workspace @sorrel/api",
-    "dev:web": "npm run dev --workspace @sorrel/web",
-    "build:web": "npm run build --workspace @sorrel/web",
-    "start:web": "npm run start --workspace @sorrel/web"
+    "dev:api": "npm run dev --workspace @hatko/api",
+    "start:api": "npm run start --workspace @hatko/api",
+    "dev:web": "npm run dev --workspace @hatko/web",
+    "build:web": "npm run build --workspace @hatko/web",
+    "start:web": "npm run start --workspace @hatko/web"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -1,4 +1,4 @@
-import type { Role } from '@sorrel/shared';
+import type { Role } from '@hatko/shared';
 import type { Db } from '../db/client.ts';
 import { getAuth } from './index.ts';
 
@@ -64,14 +64,14 @@ export async function upsertAccount(db: Db, account: DemoAccount): Promise<Upser
 export function demoAccounts(): DemoAccount[] {
   return [
     {
-      email: process.env.SEED_ADMIN_EMAIL ?? 'admin@sorrel.local',
-      password: process.env.SEED_ADMIN_PASSWORD ?? 'sorrel-admin-demo',
+      email: process.env.SEED_ADMIN_EMAIL ?? 'admin@hatko.local',
+      password: process.env.SEED_ADMIN_PASSWORD ?? 'hatko-admin-demo',
       name: 'Demo Admin',
       role: 'admin',
     },
     {
-      email: process.env.SEED_USER_EMAIL ?? 'user@sorrel.local',
-      password: process.env.SEED_USER_PASSWORD ?? 'sorrel-user-demo',
+      email: process.env.SEED_USER_EMAIL ?? 'user@hatko.local',
+      password: process.env.SEED_USER_PASSWORD ?? 'hatko-user-demo',
       name: 'Demo User',
       role: 'user',
     },

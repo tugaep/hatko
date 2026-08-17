@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { config, getAuth, getDb, getSessionUser } from '@sorrel/core';
-import { sessionResponseSchema } from '@sorrel/shared';
+import { config, getAuth, getDb, getSessionUser } from '@hatko/core';
+import { sessionResponseSchema } from '@hatko/shared';
 import { HttpError, toErrorResponse, notFound } from './errors.ts';
 import { searchRoutes } from './routes/search.ts';
 import { adminRoutes } from './routes/admin.ts';

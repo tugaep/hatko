@@ -1,5 +1,5 @@
-import { requirePermission, type SessionUser } from '@sorrel/core';
-import type { Permission } from '@sorrel/shared';
+import { requirePermission, type SessionUser } from '@hatko/core';
+import type { Permission } from '@hatko/shared';
 import type { MiddlewareHandler } from 'hono';
 
 /**

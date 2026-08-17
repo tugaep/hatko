@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { answerResponseSchema, type AnswerResponse } from '@sorrel/shared';
+import { answerResponseSchema, type AnswerResponse } from '@hatko/shared';
 import { isAuthError, messageOf } from '../../../lib/api.ts';
 import { apiSend } from '../../../lib/client.ts';
 import { formatMs } from '../../../lib/format.ts';

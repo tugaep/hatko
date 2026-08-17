@@ -1,4 +1,4 @@
-import type { IngestionRun, IngestionTrigger } from '@sorrel/shared';
+import type { IngestionRun, IngestionTrigger } from '@hatko/shared';
 import { config } from '../config.ts';
 import { transaction, type Db } from '../db/client.ts';
 import {

@@ -1,4 +1,4 @@
-import { apiErrorSchema, type ApiError } from '@sorrel/shared';
+import { apiErrorSchema, type ApiError } from '@hatko/shared';
 import type { z } from 'zod';
 
 /**

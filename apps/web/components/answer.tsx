@@ -1,6 +1,6 @@
 'use client';
 
-import type { AnswerResponse, Citation, SearchResult } from '@sorrel/shared';
+import type { AnswerResponse, Citation, SearchResult } from '@hatko/shared';
 import { PressedLeafSpecimen } from './marks.tsx';
 import { Eyebrow, cx } from './ui.tsx';
 

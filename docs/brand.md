@@ -1,21 +1,33 @@
-# Sorrel — Brand
+# Hatko — Brand
 
 ## What it is
 
-Sorrel is a semantic search and grounded-answer tool for a studio's internal document corpus. You ask a question in plain language; it finds the passages that actually answer it and writes an answer that cites them. When the corpus doesn't hold the answer, it says so.
+Hatko is a semantic search and grounded-answer tool for a studio's internal document corpus. You ask a question in plain language; it finds the passages that actually answer it and writes an answer that cites them. When the corpus doesn't hold the answer, it says so.
 
 ## The name
 
-Sorrel is a wild green you forage — you find it by knowing where to look, not by walking into a shop. That is the product: the answer already exists somewhere in the corpus, and the work is knowing where to look.
+Hatko is coined. It means nothing, and that is stated here rather than dressed up, because a brand document whose first section is a false etymology cannot be trusted for the rest of its claims. Two syllables, hard consonants, easy to say out loud, unclaimed in developer tooling, and short enough to sit in a sticky header at 20px without abbreviating.
 
-It also earns the palette. A dark green brand named Sorrel is coherent; a dark green brand named Cortex or Nexus is a color bolted onto a word. And it opens a visual world — botanical field guides, seed packets, apothecary labels — that maps unusually well onto a document index: labeled specimens, catalog numbers, plates, provenance.
+Because the name carries no meaning, it also imposes no aesthetic. That makes the visual world below a decision rather than a translation, so it needs its own reason.
 
-Two syllables, easy to say out loud, unclaimed in developer tooling.
+## Why a field guide
+
+The metaphor comes from what the product does, not from what the name sounds like.
+
+A botanical field guide and a document index solve the same problem: a large collection where every item must be findable, labelled, and traceable back to where it was collected. Plates, specimen numbers, provenance notes, pressed samples mounted on a sheet — that is retrieval infrastructure, drawn in 1850. The answer already exists somewhere in the corpus; the work is knowing where to look, which is the skill a field guide exists to hand you.
+
+This is the load-bearing brand decision, so it is worth being explicit about what it buys and what it costs.
+
+**It buys:** an honest place to put catalog numbers, which a retrieval system needs anyway because every result must be traceable to a source. It buys the pressed-specimen plate that makes the abstain state read as a filed outcome instead of a hole. It buys ink-on-paper as the material, which rules out the glass-and-glow aesthetic every RAG product ships.
+
+**It costs:** the palette is now green with no name to justify it. Green is defensible on its own terms — printed, archival, low-chroma, nothing to do with the AI-purple monoculture — but it is a preference, not a deduction, and it should be defended as one.
+
+**What it does not license:** decoration. A catalog number belongs on a specimen, never on the drawer it sits in. If a panel numbers itself `IDX-02`, the motif has stopped identifying things and started patterning surfaces, and it should be deleted.
 
 ## Positioning
 
 **For** teams whose knowledge is scattered across hundreds of documents nobody has read end to end,
-**Sorrel** is an internal retrieval tool
+**Hatko** is an internal retrieval tool
 **that** answers questions with passages you can verify,
 **unlike** a chat assistant that sounds confident and cites nothing.
 
@@ -31,7 +43,7 @@ This is a design constraint, not a slogan. It rules out the confident-blob-of-pr
 
 ## Voice
 
-Plain, precise, quietly certain. Sorrel sounds like a good technical writer, not a product marketer.
+Plain, precise, quietly certain. Hatko sounds like a good technical writer, not a product marketer.
 
 | Do                                    | Don't                                           |
 | ------------------------------------- | ----------------------------------------------- |
@@ -51,15 +63,17 @@ That last rule is the whole product. The system's most important behavior is ref
 
 ## The mark
 
-A sorrel leaf reduced to flat geometry: a shield-shaped leaf built from three solid shapes, one center vein, no outline, no gradient.
+A specimen leaf reduced to flat geometry: a shield-shaped leaf built from three solid shapes, one center vein, no outline, no gradient. Not a species — the leaf is the field guide's unit of study, which is the whole point of it.
 
 The vein is drawn as a vertical bar with a slight taper. At 16px and below the leaf silhouette drops away and the vein reads as a text caret — a search cursor. Leaf at large sizes, cursor at small. One shape, two readings, which is what a mark should do.
 
-**Construction**: 24×24 grid, 2px minimum stroke equivalent, all curves on 4px increments. Solid `--color-green-800` on light, `--color-green-200` on dark. One-color only — never a two-tone or gradient version.
+**Construction**: 24×24 grid, all curves on 4px increments. Solid `--color-green-800`. One-color only, never two-tone or gradient. The negative space between each blade and the vein is **1.5 units**, not 1: at 1 unit the three shapes fuse below about 24px and the mark reads as a striped oval. That number is a rendering requirement, not a preference.
 
 **Clear space**: one leaf-width on all sides. **Minimum size**: 16px. Below that, use the caret alone.
 
-**Wordmark**: `Sorrel` set in Fraunces, weight 500, optical size at display, tracking `-0.02em`. Lowercase-sensitive — always capital S, never all-caps, never all-lowercase.
+**Wordmark**: `Hatko` set in Fraunces, weight 500, optical size at display, tracking `-0.02em`. Always capital H, never all-caps, never all-lowercase.
+
+Fraunces is the one place this system uses a font that generic AI output also reaches for. It is kept because the brand names it and because the field-guide register genuinely wants a display serif with some wonk in it — but it is confined to display sizes and page titles. Every label, button, table cell and number is Inter or Plex Mono. A display serif doing a label's job is the failure this note exists to prevent.
 
 ## Visual world: flat vector packaging
 
@@ -88,7 +102,7 @@ Flat vector botanical plates for empty states and the sign-in page. Specimen-sty
 
 Each empty state gets a different specimen so the surfaces are distinguishable at a glance: a fern frond for empty search, a seed for an empty corpus, a pressed leaf for no results.
 
-## What Sorrel is not
+## What Hatko is not
 
 - Not a chatbot. There is no avatar, no typing indicator with three bouncing dots, no personality.
 - Not a wellness brand. The botanical world is _field guide_, not _herbal tea_. Precise, archival, slightly severe — not soft or soothing.

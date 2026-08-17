@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { SearchResult } from '@sorrel/shared';
+import type { SearchResult } from '@hatko/shared';
 import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { ingest } from '../ingest/pipeline.ts';
@@ -33,7 +33,7 @@ const stubEmbedder = async (text: string) => {
   });
 };
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-answer-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-answer-'));
 const db = openDb(path.join(dir, 'answer.db'));
 await ingest(db, {
   trigger: 'cli',

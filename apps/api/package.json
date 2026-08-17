@@ -1,5 +1,5 @@
 {
-  "name": "@sorrel/api",
+  "name": "@hatko/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
-    "@sorrel/core": "*",
-    "@sorrel/shared": "*",
+    "@hatko/core": "*",
+    "@hatko/shared": "*",
     "hono": "^4.13.2",
     "zod": "^4.4.3"
   }

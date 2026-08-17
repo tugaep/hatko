@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { SearchResult } from '@sorrel/shared';
+import type { SearchResult } from '@hatko/shared';
 import { catalogNumber, highlightSegments } from '../lib/format.ts';
 import { Badge, Eyebrow, cx } from './ui.tsx';
 

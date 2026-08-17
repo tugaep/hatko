@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { z } from 'zod';
-import { apiErrorSchema } from '@sorrel/shared';
+import { apiErrorSchema } from '@hatko/shared';
 import { API_URL } from '../../lib/api.ts';
 import { Button, Field, Input } from '../../components/ui.tsx';
 

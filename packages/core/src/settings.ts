@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
-import type { SecretSource, SecretStatus } from '@sorrel/shared';
+import type { SecretSource, SecretStatus } from '@hatko/shared';
 import { config, requireAppSecret } from './config.ts';
 import { getDb, type Db } from './db/client.ts';
 
@@ -41,7 +41,7 @@ export class ConfigurationError extends Error {
 }
 
 /**
- * The status shape and the source enum live in @sorrel/shared, because the admin
+ * The status shape and the source enum live in @hatko/shared, because the admin
  * settings panel renders exactly what this module produces. Re-exported so callers of
  * core do not need to know which package the contract is declared in.
  */
@@ -64,7 +64,7 @@ function encryptionKey(): Buffer {
   // A constant salt is acceptable here: HKDF's salt guards against a low-entropy
   // input, and the root secret is already 32+ random bytes.
   return Buffer.from(
-    hkdfSync('sha256', requireAppSecret(), 'sorrel-settings', 'sorrel:settings:v1', 32),
+    hkdfSync('sha256', requireAppSecret(), 'hatko-settings', 'hatko:settings:v1', 32),
   );
 }
 

@@ -35,3 +35,7 @@ documentation.md
 # and inside sample_dataset they would also be ingested as corpus documents.
 CLAUDE.md
 !/CLAUDE.md
+
+# Design-review tool output. The findings that mattered are in AI_USAGE.md; the
+# snapshot itself is a local backlog, not a deliverable.
+.impeccable/

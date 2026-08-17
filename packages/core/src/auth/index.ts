@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth';
-import { can, roleSchema, type Permission, type Role, type SessionUser } from '@sorrel/shared';
+import { can, roleSchema, type Permission, type Role, type SessionUser } from '@hatko/shared';
 import { config, requireAppSecret } from '../config.ts';
 import { getDb } from '../db/client.ts';
 import { nodeSqliteDialect } from '../db/kysely-dialect.ts';
@@ -77,9 +77,9 @@ let instance: ReturnType<typeof buildAuth> | undefined;
 /**
  * The Better Auth instance, built on first use.
  *
- * Lazy because this module is re-exported from the `@sorrel/core` barrel, and at
+ * Lazy because this module is re-exported from the `@hatko/core` barrel, and at
  * module scope the construction above both opens the database and calls
- * `requireAppSecret()`. That made `import('@sorrel/core')` throw
+ * `requireAppSecret()`. That made `import('@hatko/core')` throw
  * "BETTER_AUTH_SECRET is not set to a real value" before any export was
  * reachable — so a consumer wanting only `hybridSearch` inherited a database
  * handle and a mandatory session secret. Step 7's MCP server is exactly that

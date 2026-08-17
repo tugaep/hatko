@@ -1,6 +1,6 @@
 'use client';
 
-import { dashboardStatsSchema, type DashboardStats, type IndexHealth } from '@sorrel/shared';
+import { dashboardStatsSchema, type DashboardStats, type IndexHealth } from '@hatko/shared';
 import { formatBytes, formatDateTime, formatMs, formatPercent } from '../../../lib/format.ts';
 import { useApi } from '../../../lib/use-api.ts';
 import {

@@ -15,7 +15,7 @@ export type SecretSource = z.infer<typeof secretSourceSchema>;
 /**
  * Status of a stored secret. There is deliberately no field carrying the value.
  *
- * This shape crosses the boundary — `getApiKeyStatus` in @sorrel/core produces it and
+ * This shape crosses the boundary — `getApiKeyStatus` in @hatko/core produces it and
  * the admin settings panel renders it — so it is defined once, here, rather than as an
  * interface in core and a parser in the web app that agree only by inspection.
  */
