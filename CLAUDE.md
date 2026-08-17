@@ -65,13 +65,29 @@ Decided with the user. Do not expand without asking.
   a fresh machine has to be able to ingest before the UI exists. Database value
   wins when both are present; the UI names the active source.
 
+**Added to scope on 17 Aug 2026, by the user, after step 7 review.** These four were
+on the "out" list below and were moved deliberately, not drifted into. The reason to
+record that: each one was previously argued _against_ in this file, so anyone reading
+the history needs to know the decision changed rather than that the rule was ignored.
+
+- **OIDC on the MCP server.** Better Auth's own `mcp` + `oidcProvider` plugins, so
+  Hatko _is_ the authorization server. An external IdP is not an option: the brief
+  requires the system to run on a fresh machine, and a hosted dependency would break
+  that. Bearer sessions stay supported for `curl` and CI — both paths land on the same
+  `requirePermission`, so there is still one authorization decision, not two.
+- **Autonomous ingestion.** The hash-diff engine already detected new, changed and
+  removed documents; what was missing was a trigger. A stdlib `fs.watch` with
+  debounce, off by default, plus the existing CLI and dashboard triggers.
+- **Live deployment** to `hatko.tugrap.dev`. Production config and a full deploy guide
+  are in scope; the operator runs the deploy.
+- **Admin user-management UI** — list, invite, change role, deactivate. This is
+  **step 8**; the README/AI-usage/history step moved to **step 9**.
+
 **Out — deliberately, do not build:**
 
-- OIDC on the MCP server (plain bearer auth instead; say so plainly in the README rather than dressing it up)
-- File watcher / self-updating ingestion (hash-diff idempotency yes; a watcher no)
-- Live deployment (README section only)
-- Admin user-management UI
-- Streaming answers, result highlighting — only if the final hours are quiet
+- Streaming answers. Result highlighting is done; streaming is the only search-experience
+  item left and it stays out unless the final hours are quiet.
+- Anything else not named above.
 
 If a task seems to need something from the "out" list, stop and ask. Do not
 quietly widen scope, and do not quietly narrow it either.
@@ -242,10 +258,19 @@ Each step ends somewhere demonstrable.
 | 5   | Better Auth, roles, server-side gating               | **done**                                       |
 | 6   | Chat page, then dashboard                            | **done** — Next 16, light theme only, reviewed |
 | 7   | MCP server                                           | **done** — HTTP + bearer, verified live        |
-| 8   | README, AI usage log, history cleanup                |                                                |
+| 7b  | Autonomous ingestion trigger — completes a bonus     |                                                |
+| 7c  | OIDC on the MCP server — completes a bonus           |                                                |
+| 8   | Admin user management: list, invite, role, disable   |                                                |
+| 8b  | Production config + deploy guide, hatko.tugrap.dev   |                                                |
+| 9   | README, AI usage log, history cleanup                |                                                |
 
 Step 3 lands **before** step 4 on purpose: retrieval is the top-graded axis, and
 tuning should be driven by measured recall@k, not by impressions from a chat box.
+
+Steps 7b, 7c, 8 and 8b were added on 17 Aug 2026 — see the note in §3. 7b and 7c
+finish two bonuses that were already half-built, which is why they come before the new
+feature: an incomplete thing already in the repository costs more to leave than a
+missing thing nobody has started.
 
 ---
 

@@ -19,6 +19,7 @@
     "db:migrate": "npm run migrate --workspace @hatko/core",
     "db:reset": "npm run reset --workspace @hatko/core",
     "ingest": "npm run ingest --workspace @hatko/core --",
+    "ingest:watch": "npm run ingest --workspace @hatko/core -- --watch",
     "eval": "npm run eval --workspace @hatko/core --",
     "ask": "npm run ask --workspace @hatko/core --",
     "seed": "npm run seed --workspace @hatko/core",

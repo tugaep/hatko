@@ -44,7 +44,17 @@ export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 export const ingestionStatusSchema = z.enum(['running', 'succeeded', 'failed']);
 export type IngestionStatus = z.infer<typeof ingestionStatusSchema>;
 
-export const ingestionTriggerSchema = z.enum(['cli', 'api', 'startup']);
+/**
+ * Why a run happened, which is the question the dashboard's run list exists to
+ * answer. `watch` is the file watcher; `startup` is its initial catch-up pass, which
+ * is a genuinely different event — one says "someone changed a document", the other
+ * says "the watcher came up and found the index behind".
+ *
+ * `startup` had no producer until the watcher landed. It was declared here in step 1
+ * and left unused, which is the kind of speculative surface this project keeps
+ * cutting; it earned its place rather than being removed.
+ */
+export const ingestionTriggerSchema = z.enum(['cli', 'api', 'startup', 'watch']);
 export type IngestionTrigger = z.infer<typeof ingestionTriggerSchema>;
 
 /** Where a search came from. Separates MCP tool traffic from web traffic in analytics. */
