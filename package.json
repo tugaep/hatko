@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit && npm run typecheck --workspace @hatko/web",
-    "test": "node --test \"packages/**/*.test.ts\" \"apps/api/src/**/*.test.ts\" \"apps/web/lib/**/*.test.ts\"",
+    "test": "node --test \"packages/**/*.test.ts\" \"apps/api/src/**/*.test.ts\" \"apps/mcp/src/**/*.test.ts\" \"apps/web/lib/**/*.test.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:migrate": "npm run migrate --workspace @hatko/core",
@@ -25,6 +25,8 @@
     "setup": "npm run db:migrate && npm run seed && npm run ingest",
     "dev:api": "npm run dev --workspace @hatko/api",
     "start:api": "npm run start --workspace @hatko/api",
+    "dev:mcp": "npm run dev --workspace @hatko/mcp",
+    "start:mcp": "npm run start --workspace @hatko/mcp",
     "dev:web": "npm run dev --workspace @hatko/web",
     "build:web": "npm run build --workspace @hatko/web",
     "start:web": "npm run start --workspace @hatko/web"

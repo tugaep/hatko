@@ -1,0 +1,20 @@
+{
+  "name": "@hatko/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server exposing corpus search as a tool for external MCP clients",
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "start": "node src/server.ts",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@hatko/core": "*",
+    "@hatko/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "hono": "^4.13.2",
+    "zod": "^4.4.3"
+  }
+}

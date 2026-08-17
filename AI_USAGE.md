@@ -1385,3 +1385,97 @@ global configuration rather than this repository: the 3.9.1 plugin is still enab
 alongside the 4.1.1 skill. Only 4.1.1 is currently exposed, so nothing is broken, but two
 installs of one skill is the kind of thing that resurfaces later as a version that will not
 die.
+
+## Step 7: the MCP server (17 Aug 2026)
+
+A fourth workspace, `apps/mcp`: Streamable HTTP on port 4100, one tool
+(`search_corpus`), bearer auth. Connection instructions and the reasoning behind each
+choice are in [docs/mcp.md](docs/mcp.md).
+
+AI wrote the transport wiring, the passage formatting and the test file. What I did by
+hand was the four decisions that actually shape it — transport, credential, tool count,
+and statefulness — and the corrections below.
+
+### The decisions, and what they cost
+
+**Streamable HTTP rather than stdio.** stdio is less code and the obvious lazy choice,
+and it was the wrong one: a stdio server is spawned by the client as a local
+subprocess, so there is no caller to authenticate. The brief gates access by role, and a
+role needs an identity, and an identity needs a header to travel in. Taking the more
+expensive transport is what made the security requirement satisfiable at all.
+
+**The bearer token is a Better Auth session, not a shared secret.** A static
+`MCP_TOKEN` in `.env` was the first instinct and would have been about six lines. It
+carries no user, which means MCP queries land in the analytics table with a null user id
+and the role check has nothing to check — a second, weaker authorization scheme sitting
+beside the real one. Adding `bearer()` to the existing auth config was _one_ line and
+let the MCP server call the same `requirePermission(headers, 'search:run')` the HTTP
+API's middleware calls. The laziest option and the strongest option turned out to be the
+same option, which is not usually how that goes.
+
+The step-5 commit had already made `getAuth()` lazy specifically so this consumer could
+import `@hatko/core` without a session secret. That paid off here exactly as written.
+
+**One tool, not two.** The API also exposes `/answer`. An MCP client is itself an LLM
+holding the user's real question and its own instructions, so handing it passages lets
+it synthesise with all of that context, while handing it our pre-written paragraph
+throws that away and asks it to trust a summary it cannot check.
+
+**Stateless, with `enableJsonResponse`.** Not for simplicity's sake but because the hard
+part of a per-request transport is knowing when it may be closed. With a complete JSON
+body instead of a held-open SSE stream, `handleRequest` resolving _is_ that moment, so
+the server does not accumulate one connected `McpServer` per call it has ever served.
+
+### Where it was wrong
+
+**The DNS-rebinding guard was a footgun before it was a control.** I pinned
+`allowedHosts` to `localhost:4100` and `127.0.0.1:4100`, which is what the MCP spec's
+example looks like. The new test then failed 403 on every authenticated case, because
+`app.request()` sends no `Host` header at all and the SDK rejects a missing one. Chasing
+that surfaced the real problem: the list was also wrong for anyone who reached the server
+as bare `localhost`, over IPv6, or on a different port — a security control that blocks
+legitimate callers is a control that gets switched off, which is worse than a wider one
+that stays on. Now built from every loopback spelling with and without the configured
+port, and both halves are asserted: `evil.example.com` is refused, and all three loopback
+forms are accepted. The missing-`Host` behaviour is real but unreachable over a socket,
+so the test helper sends a `Host` like an actual client and says why.
+
+**A bad test nearly deleted a true comment.** I had written that signing out revokes the
+MCP client's access, and the first check appeared to disprove it — the MCP call still
+succeeded after sign-out. The sign-out had returned `415 Unsupported Media Type` because
+I sent no `content-type`, so no session was ever revoked. Retried correctly: sign-out
+returns 200 and the next MCP `initialize` returns 401. The claim was right and the
+verification was wrong, which is the more dangerous direction — one more step and I would
+have "corrected" accurate documentation to match a broken probe.
+
+**A typecheck that reported success while failing.** I ran
+`npm run typecheck 2>&1 | tail -12 && echo "TYPECHECK OK"` and got the errors _and_ the
+OK, because in a pipeline the exit status is `tail`'s, not `tsc`'s. Four real type errors
+in the new test file were sitting in that output. Re-ran writing to a file and echoing
+`$?`, which is how the exit code gets checked in this repo from now on: `&&` after a pipe
+proves nothing.
+
+**A category filter that looked broken and was not.** Filtering to `guides` returned an
+abstention for a localization query, with `asset-naming.md` at 0.012 as the top hit. The
+tempting read was a bug in the category clause. `localization-guide.md` lives at the
+corpus root, so its category is `uncategorised`, not `guides` — the filter was exactly
+right and my test input was wrong. It is the failure mode the tool's own description
+warns about ("a wrong guess here silently hides the answer"), reproduced by the person
+who wrote the warning, so `docs/mcp.md` now states the root-document rule explicitly.
+
+### How it was verified
+
+Not by asserting the protocol works. `claude mcp add --transport http` against a running
+server reported `✔ Connected`, then two `claude -p` runs through that client: the sample
+question about the minimum language set came back with the seven languages, the English
+fallback and `localization-guide.md` cited, and the unanswerable question about parental
+leave in Portugal came back as "the corpus doesn't cover it" with no invented answer.
+Abstention surviving the trip through a _foreign_ LLM was the one behaviour I most wanted
+evidence for, since nothing in our prompt controls what that client does with the result.
+The probe registration was removed afterwards.
+
+Nine tests in `apps/mcp/src/app.test.ts` cover the two things that fail silently here: a
+gate that stops checking still initializes, lists and answers — it just answers anyone —
+and a published input schema derived with `.unwrap()` keeps type-checking after it stops
+carrying the shared bounds. Both are asserted through the real router. Full suite 167
+passing, typecheck clean.

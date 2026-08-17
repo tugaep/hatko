@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { bearer } from 'better-auth/plugins/bearer';
 import { can, roleSchema, type Permission, type Role, type SessionUser } from '@hatko/shared';
 import { config, requireAppSecret } from '../config.ts';
 import { getDb } from '../db/client.ts';
@@ -69,6 +70,26 @@ function buildAuth() {
         secure: config.isProduction,
       },
     },
+
+    /**
+     * `Authorization: Bearer <session token>` as an alternative to the cookie.
+     *
+     * This exists for the MCP server. An MCP client is not a browser: it has no
+     * cookie jar, and its config file holds headers. Without this, the MCP
+     * surface would have needed an authentication scheme of its own — a shared
+     * static token, or a new API-key table — and a second scheme is a second
+     * place for authorization to be wrong. With it, the MCP server calls the
+     * same `requirePermission` the HTTP API does, against the same sessions,
+     * with the same roles, expiry and revocation. Signing out kills the MCP
+     * client's access too, which is the behaviour you would want and would not
+     * get from a static token in an env var.
+     *
+     * The plugin HMAC-verifies the token against `secret` before it becomes a
+     * session, so an arbitrary bearer string is rejected rather than trusted.
+     * It does not widen CSRF exposure: browsers do not attach `Authorization`
+     * headers automatically, which is the whole reason cookies need SameSite.
+     */
+    plugins: [bearer()],
   });
 }
 

@@ -241,7 +241,7 @@ Each step ends somewhere demonstrable.
 | 4   | RAG answers, citations, abstain path                 | **done**                                       |
 | 5   | Better Auth, roles, server-side gating               | **done**                                       |
 | 6   | Chat page, then dashboard                            | **done** — Next 16, light theme only, reviewed |
-| 7   | MCP server                                           |                                                |
+| 7   | MCP server                                           | **done** — HTTP + bearer, verified live        |
 | 8   | README, AI usage log, history cleanup                |                                                |
 
 Step 3 lands **before** step 4 on purpose: retrieval is the top-graded axis, and

@@ -45,6 +45,7 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
   API_URL: z.string().default('http://localhost:4000'),
   WEB_URL: z.string().default('http://localhost:3000'),
+  MCP_PORT: z.coerce.number().int().positive().default(4100),
 
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
@@ -76,6 +77,7 @@ export const config = {
   apiPort: env.API_PORT,
   apiUrl: env.API_URL,
   webUrl: env.WEB_URL,
+  mcpPort: env.MCP_PORT,
 
   nodeEnv: env.NODE_ENV,
   isProduction: env.NODE_ENV === 'production',
