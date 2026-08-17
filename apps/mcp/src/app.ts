@@ -7,7 +7,7 @@ import {
   ConfigurationError,
   ProviderError,
   config,
-  requirePermission,
+  requireMcpPermission,
   type SessionUser,
 } from '@hatko/core';
 import { runSearchTool, searchToolInput } from './tool.ts';
@@ -199,23 +199,31 @@ export function createApp() {
     let user: SessionUser;
     try {
       /**
-       * The headers go to `requirePermission` untouched: the bearer plugin
-       * HMAC-verifies the token and turns it into a session, and this is the same
-       * call the HTTP API's middleware makes with the same `search:run` permission.
-       * Nothing here parses a token, compares a secret, or reads a role from the
-       * request — a second implementation of any of those is a second place for
-       * authorization to be wrong.
+       * The headers go through untouched. `requireMcpPermission` accepts either an
+       * OAuth access token from the OIDC flow or a Better Auth session token as a
+       * bearer, and lands both on the same role check the HTTP API's middleware uses
+       * with the same `search:run` permission. Nothing here parses a token, compares
+       * a secret, or reads a role from the request — a second implementation of any
+       * of those is a second place for authorization to be wrong.
        */
-      user = await requirePermission(c.req.raw.headers, 'search:run');
+      user = await requireMcpPermission(c.req.raw.headers, 'search:run');
     } catch (error) {
       if (error instanceof AuthorizationError) {
         /**
-         * `WWW-Authenticate` on a 401 is what tells a client *how* to
-         * authenticate rather than merely that it failed. Without it, a client
-         * that supports several schemes has to guess.
+         * `WWW-Authenticate` on a 401 is what starts the OAuth flow, not just a
+         * statement that authentication failed. `resource_metadata` is the pointer
+         * the MCP spec has clients follow to find the authorization server, so a
+         * client meeting this server for the first time can discover, register and
+         * get a token without anyone editing a config file. Omit it and the only way
+         * in is a hand-pasted token.
          */
         const { status, body } = rpcError(error.status, RPC_UNAUTHORIZED, error.message);
-        if (status === 401) c.header('WWW-Authenticate', 'Bearer realm="hatko"');
+        if (status === 401) {
+          c.header(
+            'WWW-Authenticate',
+            `Bearer realm="hatko", resource_metadata="${config.apiUrl}/.well-known/oauth-protected-resource"`,
+          );
+        }
         return c.json(body, status);
       }
       throw error;

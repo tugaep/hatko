@@ -329,3 +329,109 @@ withProvider('an abstention is not routed through the error boundary', async () 
   assert.notEqual(result?.isError, true, 'an abstention was reported as an error');
   assert.match(result?.content?.[0]?.text ?? '', /does not cover|do not answer/i);
 });
+
+// --- the OAuth branch of the gate -------------------------------------------
+
+/**
+ * `requireMcpPermission` accepts two credentials, and the OAuth one is the branch a
+ * session token can never exercise. What fails silently here is the *user* lookup: an
+ * access token names a user id, and trusting that name without loading the row would
+ * mean a token outliving its account keeps working. Rows are inserted directly because
+ * running the whole authorization-code flow in-process to obtain one would test Better
+ * Auth rather than this gate.
+ */
+
+const OAUTH_CLIENT_ID = 'test-client-fixture';
+
+db.prepare(
+  `INSERT INTO "oauthApplication"
+     ("id", "name", "clientId", "redirectUrls", "type", "disabled", "createdAt", "updatedAt")
+   VALUES (?, ?, ?, ?, 'public', 0, ?, ?)`,
+).run(
+  'app-fixture',
+  'Fixture Client',
+  OAUTH_CLIENT_ID,
+  'http://localhost:9999/callback',
+  new Date().toISOString(),
+  new Date().toISOString(),
+);
+
+/** Issue an access token row directly. `expiresInMs` may be negative to make it stale. */
+function issueToken(token: string, userId: string, expiresInMs: number): void {
+  const now = new Date();
+  db.prepare(
+    `INSERT INTO "oauthAccessToken"
+       ("id", "accessToken", "refreshToken", "accessTokenExpiresAt", "refreshTokenExpiresAt",
+        "clientId", "userId", "scopes", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'openid profile email', ?, ?)`,
+  ).run(
+    `id-${token}`,
+    token,
+    `refresh-${token}`,
+    new Date(now.getTime() + expiresInMs).toISOString(),
+    new Date(now.getTime() + 604_800_000).toISOString(),
+    OAUTH_CLIENT_ID,
+    userId,
+    now.toISOString(),
+    now.toISOString(),
+  );
+}
+
+/** The seeded user's id, which the token has to name for the lookup to resolve. */
+const fixtureUserId = (
+  db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('user@test.local') as { id: string }
+).id;
+
+test('a valid OAuth access token authorizes an MCP session', async () => {
+  issueToken('valid-oauth-token', fixtureUserId, 3_600_000);
+
+  const response = await rpc('initialize', INITIALIZE, bearer('valid-oauth-token'));
+  assert.equal(response.status, 200, 'a live OAuth token was refused');
+
+  const body = await envelope(response);
+  assert.equal(body.result?.serverInfo?.name, 'hatko');
+});
+
+test('an expired OAuth access token is refused', async () => {
+  issueToken('expired-oauth-token', fixtureUserId, -1_000);
+
+  const response = await rpc('initialize', INITIALIZE, bearer('expired-oauth-token'));
+  assert.equal(response.status, 401, 'an expired token still worked');
+});
+
+test('a token cannot name a user who does not exist', () => {
+  /**
+   * Written first as "an orphan token is refused with 401", which failed — the insert
+   * itself is impossible: `FOREIGN KEY constraint failed`. That is the stronger
+   * guarantee, so it is what gets asserted. `requireMcpPermission` still handles the
+   * null user, because `getUserById` returns `SessionUser | null` and something has to;
+   * it fails closed, and the schema means it should never be reached.
+   */
+  assert.throws(
+    () => issueToken('orphan-oauth-token', 'user-id-that-was-never-created', 3_600_000),
+    /FOREIGN KEY/,
+    'an access token could be created for a user who does not exist',
+  );
+});
+
+test('deleting a user takes their OAuth tokens with them', async () => {
+  // The cascade itself, since the check above depends on it being the belt rather than
+  // the braces. A token surviving its account is a credential nobody can revoke.
+  await upsertAccount(db, {
+    email: 'temp@test.local',
+    password: 'temp-password',
+    name: 'Temporary',
+    role: 'user',
+  });
+  const tempId = (
+    db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('temp@test.local') as { id: string }
+  ).id;
+  issueToken('doomed-oauth-token', tempId, 3_600_000);
+
+  db.prepare('DELETE FROM "user" WHERE "id" = ?').run(tempId);
+
+  const remaining = db
+    .prepare('SELECT count(*) n FROM "oauthAccessToken" WHERE "userId" = ?')
+    .get(tempId) as { n: number };
+  assert.equal(Number(remaining.n), 0, 'an OAuth token outlived the account it belonged to');
+});

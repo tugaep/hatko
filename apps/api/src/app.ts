@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { config, getAuth, getDb, getSessionUser } from '@hatko/core';
-import { sessionResponseSchema } from '@hatko/shared';
+import {
+  config,
+  getAuth,
+  getDb,
+  getSessionUser,
+  oauthAuthorizationServerMetadata,
+  oauthProtectedResourceMetadata,
+} from '@hatko/core';
+import { oauthClientSchema, sessionResponseSchema } from '@hatko/shared';
 import { HttpError, toErrorResponse, notFound } from './errors.ts';
 import { searchRoutes } from './routes/search.ts';
 import { adminRoutes } from './routes/admin.ts';
@@ -62,9 +69,96 @@ export function createApp() {
   });
 
   /**
-   * Better Auth owns sign-in, sign-out and session endpoints under this prefix.
-   * Its handler is a Web fetch handler and Hono speaks the same interface, so it
-   * mounts directly with no adapter in between.
+   * Force a consent screen on every OAuth authorization, and register this before the
+   * Better Auth mount below so it runs first.
+   *
+   * Measured, not assumed: the mcp plugin's authorize endpoint decides consent with
+   * `requireConsent: query.prompt === "consent"`, so by default it issues an
+   * authorization code and redirects without asking anyone anything. Combined with
+   * open dynamic client registration — which the MCP flow requires — that is a real
+   * hole rather than a theoretical one. Anybody can register a client, and a signed-in
+   * user who follows one crafted link then silently hands that client a token good for
+   * reading the whole corpus. PKCE and `state` do not help here: they protect the
+   * client from token interception, not the user from authorizing a stranger.
+   *
+   * Rewriting the query is what closes it for *every* caller. Advertising a different
+   * `authorization_endpoint` in the discovery document would only redirect
+   * well-behaved clients, while the consent-free endpoint stayed mounted and reachable
+   * by exactly the crafted link this is meant to stop.
+   *
+   * The cost is that a client is re-asked on each new authorization rather than only
+   * the first, because that endpoint treats `prompt=consent` as "always ask". Refresh
+   * tokens mean this is rare in practice, and for an internal corpus being asked twice
+   * is the better failure.
+   */
+  app.get('/api/auth/mcp/authorize', (c) => {
+    const url = new URL(c.req.url);
+    url.searchParams.set('prompt', 'consent');
+    return getAuth().handler(new Request(url, c.req.raw));
+  });
+
+  /**
+   * Who is asking, for the consent screen.
+   *
+   * The authorize redirect carries only `client_id`, so without this the consent page
+   * could show a user nothing but a 32-character random string and ask them to trust
+   * it. A consent screen that cannot say *which application* is asking is decoration:
+   * people approve what they cannot identify, and the control that was added to stop a
+   * crafted link becomes a formality.
+   *
+   * Requires a session but no particular permission. A user whose role cannot search
+   * still reaches this page — the page tells them so — and gating it on `search:run`
+   * would replace that explanation with a bare failure.
+   */
+  app.get('/api/oauth/client/:clientId', async (c) => {
+    const user = await getSessionUser(c.req.raw.headers);
+    if (!user) throw new HttpError('unauthorized', 'Sign in to continue.');
+
+    const row = getDb()
+      .prepare(
+        `SELECT "clientId", "name", "redirectUrls" FROM "oauthApplication"
+         WHERE "clientId" = ? AND "disabled" = 0`,
+      )
+      .get(c.req.param('clientId')) as
+      { clientId: string; name: string; redirectUrls: string } | undefined;
+
+    if (!row) throw notFound('No such application.');
+
+    return c.json(
+      oauthClientSchema.parse({
+        clientId: row.clientId,
+        name: row.name,
+        // Stored as one comma-joined string by the library, not as JSON.
+        redirectUris: row.redirectUrls.split(',').filter(Boolean),
+      }),
+    );
+  });
+
+  /**
+   * OAuth 2.1 / OIDC discovery, for MCP clients.
+   *
+   * These live at the domain root rather than under `/api/auth`, because RFC 8414 and
+   * RFC 9728 specify these exact paths and clients fetch them without being told
+   * where to look — that is the whole point of discovery. The MCP server's 401 points
+   * at `oauth-protected-resource`, which names this API as the authorization server,
+   * and `oauth-authorization-server` then describes its endpoints.
+   *
+   * Both are unauthenticated by specification, and correctly so: they carry no user
+   * data, only the addresses of endpoints that do their own checking. A client cannot
+   * begin authenticating without them.
+   */
+  app.get('/.well-known/oauth-protected-resource', (c) =>
+    oauthProtectedResourceMetadata(c.req.raw),
+  );
+  app.get('/.well-known/oauth-authorization-server', (c) =>
+    oauthAuthorizationServerMetadata(c.req.raw),
+  );
+
+  /**
+   * Better Auth owns sign-in, sign-out and session endpoints under this prefix, plus
+   * the OAuth authorize, token, register and consent endpoints added by the mcp
+   * plugin. Its handler is a Web fetch handler and Hono speaks the same interface, so
+   * it mounts directly with no adapter in between.
    */
   app.on(['GET', 'POST'], '/api/auth/*', (c) => getAuth().handler(c.req.raw));
 

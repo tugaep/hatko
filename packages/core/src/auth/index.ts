@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { bearer } from 'better-auth/plugins/bearer';
+import { mcp, oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from 'better-auth/plugins';
 import { can, roleSchema, type Permission, type Role, type SessionUser } from '@hatko/shared';
 import { config, requireAppSecret } from '../config.ts';
 import { getDb } from '../db/client.ts';
@@ -13,6 +14,9 @@ import { nodeSqliteDialect } from '../db/kysely-dialect.ts';
  * role lives, and the rule that every protected operation resolves that role from
  * the session on the server.
  */
+
+/** Sign-in page an unauthenticated OAuth authorize request is sent to. */
+const MCP_LOGIN_PAGE = `${config.webUrl}/sign-in`;
 
 /**
  * Written as a factory whose return type is inferred rather than annotated.
@@ -72,24 +76,94 @@ function buildAuth() {
     },
 
     /**
-     * `Authorization: Bearer <session token>` as an alternative to the cookie.
-     *
-     * This exists for the MCP server. An MCP client is not a browser: it has no
-     * cookie jar, and its config file holds headers. Without this, the MCP
-     * surface would have needed an authentication scheme of its own — a shared
-     * static token, or a new API-key table — and a second scheme is a second
-     * place for authorization to be wrong. With it, the MCP server calls the
-     * same `requirePermission` the HTTP API does, against the same sessions,
-     * with the same roles, expiry and revocation. Signing out kills the MCP
-     * client's access too, which is the behaviour you would want and would not
-     * get from a static token in an env var.
-     *
-     * The plugin HMAC-verifies the token against `secret` before it becomes a
-     * session, so an arbitrary bearer string is rejected rather than trusted.
-     * It does not widen CSRF exposure: browsers do not attach `Authorization`
-     * headers automatically, which is the whole reason cookies need SameSite.
+     * Two ways for a non-browser client to authenticate, and exactly one place that
+     * decides what it may then do — see `requireMcpPermission` below.
      */
-    plugins: [bearer()],
+    plugins: [
+      /**
+       * `Authorization: Bearer <session token>` as an alternative to the cookie.
+       *
+       * The simple path, and the one that keeps `curl` and CI usable: an MCP client
+       * is not a browser, it has no cookie jar, and its config file holds headers.
+       * The token is a real session, so it carries a real user, role, expiry and
+       * revocation — signing out cuts the client off, which a static token in an env
+       * var could never do.
+       *
+       * The plugin HMAC-verifies the token against `secret` before it becomes a
+       * session, so an arbitrary bearer string is rejected rather than trusted. It
+       * does not widen CSRF exposure: browsers do not attach `Authorization` headers
+       * automatically, which is the whole reason cookies need SameSite.
+       *
+       * Its weakness, and why the OIDC flow below exists: the credential *is* the
+       * user's session, so it cannot be scoped to one client or revoked without
+       * ending every other session too.
+       */
+      bearer(),
+
+      /**
+       * OAuth 2.1 / OIDC authorization server, for MCP clients.
+       *
+       * Hatko is its own provider rather than delegating to a hosted IdP, and that is
+       * a constraint rather than a preference: the brief requires the system to run on
+       * a fresh machine from the README, and an external identity provider would make
+       * a network account a prerequisite for `npm install`.
+       *
+       * What this buys over the bearer path: an MCP client discovers the endpoints,
+       * registers itself, and runs authorization-code + PKCE to get its own scoped,
+       * revocable token — instead of being handed a copy of the user's session. The
+       * bearer path stays for curl and CI. Both resolve to a role check through
+       * `requireMcpPermission`, so there is still exactly one authorization decision.
+       */
+      mcp({
+        /**
+         * Where the authorize endpoint sends a caller who is not signed in. The web
+         * app owns sign-in, so this is a path on WEB_URL, not on this API.
+         *
+         * Written twice — here and in `oidcConfig` — because the plugin's type
+         * requires it in both, while its runtime applies this one *after* spreading
+         * `oidcConfig` and so always wins. One constant feeds both rather than two
+         * literals that could disagree about which sign-in page exists.
+         */
+        loginPage: MCP_LOGIN_PAGE,
+
+        /**
+         * The thing being protected. Defaults to this API's origin, which would be
+         * wrong: clients must learn that the audience is the MCP endpoint, which is a
+         * different process on a different port.
+         */
+        resource: config.mcpUrl,
+
+        oidcConfig: {
+          loginPage: MCP_LOGIN_PAGE,
+
+          /**
+           * MCP clients are not pre-registered — the spec has them register
+           * themselves on first connection (RFC 7591). Without this, connecting a new
+           * client would require an administrator to mint credentials by hand, which
+           * is exactly the friction the MCP auth flow exists to remove.
+           *
+           * Registration only creates a client record. It grants nothing: no token
+           * exists until a signed-in human approves the client on the consent screen,
+           * and no query runs until that token also passes the role check.
+           */
+          allowDynamicClientRegistration: true,
+
+          /**
+           * Consent is rendered by the web app so it looks like the product and obeys
+           * the design tokens. The alternative the library offers, `getConsentHTML`,
+           * would mean an unstyled HTML string living in the API — a user-facing page
+           * that matches nothing else the user has seen, at the exact moment we are
+           * asking them to trust it.
+           */
+          consentPage: `${config.webUrl}/oauth/consent`,
+
+          // Token lifetimes are left at the plugin's defaults — one hour for an access
+          // token, seven days for a refresh token — which are the values this system
+          // would have chosen anyway. Restating them here would read as a tightening
+          // that had not happened.
+        },
+      }),
+    ],
   });
 }
 
@@ -183,10 +257,86 @@ export async function requirePermission(
   const user = await getSessionUser(headers);
   if (!user) throw new AuthorizationError(401, 'Sign in to continue.');
 
+  return authorize(user, permission);
+}
+
+/**
+ * The role check itself, once an identity is established.
+ *
+ * Split out so the OAuth path below cannot accidentally implement a second, kinder
+ * version of it. Whichever credential a caller presents, the question "may this role
+ * do this" is answered here and only here.
+ */
+function authorize(user: SessionUser, permission: Permission): SessionUser {
   if (!can(user.role, permission)) {
     throw new AuthorizationError(403, 'Your account does not have access to this.');
   }
   return user;
 }
+
+/**
+ * Load a user by id, for credentials that identify a user without carrying a session.
+ *
+ * Read straight from the `user` table because that is where Better Auth keeps it and
+ * this project has no ORM; the row goes through the same `toSessionUser` narrowing as
+ * a session user, so an unrecognised role fails closed to `user` in both paths rather
+ * than only one.
+ */
+function getUserById(id: string): SessionUser | null {
+  const row = getDb()
+    .prepare('SELECT "id", "email", "name", "role", "createdAt" FROM "user" WHERE "id" = ?')
+    .get(id) as RawUser | undefined;
+
+  return row ? toSessionUser(row) : null;
+}
+
+/**
+ * Require `permission` from an MCP caller, accepting either supported credential.
+ *
+ * Two credentials, one decision. An OAuth access token issued through the OIDC flow
+ * identifies a user but carries no session, so the user is loaded and graded here; a
+ * Better Auth session token presented as a bearer resolves through the ordinary
+ * `requirePermission`. Both end at `authorize`, which is the point — the alternative
+ * is two role checks that drift, and the one that drifts is always the one nobody
+ * looks at.
+ *
+ * OAuth is tried first because it is the specific case: an OAuth token is not a valid
+ * session token, so `getSession` would reject it and the error would name the wrong
+ * problem. Nothing here reads a role, a user id or a scope from the request body —
+ * only an opaque credential that must match a stored row.
+ */
+export async function requireMcpPermission(
+  headers: Headers,
+  permission: Permission,
+): Promise<SessionUser> {
+  const token = await getAuth().api.getMcpSession({ headers });
+
+  if (token?.userId) {
+    const user = getUserById(token.userId);
+    // A token whose user has since been deleted. The cascade in migration 007 should
+    // have removed the token with them, so this is the belt to that braces — and it
+    // fails closed rather than trusting the token's own claim about who it is.
+    if (!user) throw new AuthorizationError(401, 'This authorization is no longer valid.');
+    return authorize(user, permission);
+  }
+
+  return requirePermission(headers, permission);
+}
+
+/**
+ * The two OAuth discovery documents, as plain fetch handlers.
+ *
+ * Exported from here rather than letting the API import `better-auth/plugins/mcp`
+ * directly, because the API workspace does not depend on Better Auth and should not
+ * start: every other auth concern reaches it through this module, and a route file
+ * importing the auth library would be the first crack in that. `better-auth` is a
+ * dependency of `@hatko/core` alone, and importing it from a workspace that does not
+ * declare it would work only by hoisting.
+ */
+export const oauthProtectedResourceMetadata = (request: Request): Promise<Response> =>
+  oAuthProtectedResourceMetadata(getAuth())(request);
+
+export const oauthAuthorizationServerMetadata = (request: Request): Promise<Response> =>
+  oAuthDiscoveryMetadata(getAuth())(request);
 
 export type { Permission, Role, SessionUser };

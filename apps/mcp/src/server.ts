@@ -18,7 +18,8 @@ const chunks = (getDb().prepare('SELECT count(*) n FROM chunks').get() as { n: n
 const server = serve({ fetch: createApp().fetch, port: config.mcpPort }, (info) => {
   console.log(`Hatko MCP on http://localhost:${info.port}/mcp`);
   console.log(`  corpus     ${Number(chunks)} passages indexed`);
-  console.log(`  auth       Authorization: Bearer <session token> — see README`);
+  console.log(`  auth       OAuth 2.1 / OIDC, or Authorization: Bearer <session token>`);
+  console.log(`  clients    point them at this URL; see docs/mcp.md`);
   if (Number(chunks) === 0) {
     console.log('\n  The index is empty. Run `npm run ingest` before connecting a client.');
   }

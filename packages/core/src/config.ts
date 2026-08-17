@@ -46,6 +46,12 @@ const envSchema = z.object({
   API_URL: z.string().default('http://localhost:4000'),
   WEB_URL: z.string().default('http://localhost:3000'),
   MCP_PORT: z.coerce.number().int().positive().default(4100),
+  /**
+   * Public URL of the MCP endpoint. Advertised to clients as the OAuth `resource`
+   * they are getting a token for, so it must be the address they actually dial —
+   * behind a reverse proxy that is the public origin, not `localhost:MCP_PORT`.
+   */
+  MCP_URL: z.string().default('http://localhost:4100/mcp'),
 
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
@@ -78,6 +84,7 @@ export const config = {
   apiUrl: env.API_URL,
   webUrl: env.WEB_URL,
   mcpPort: env.MCP_PORT,
+  mcpUrl: env.MCP_URL,
 
   nodeEnv: env.NODE_ENV,
   isProduction: env.NODE_ENV === 'production',

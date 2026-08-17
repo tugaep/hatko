@@ -471,3 +471,113 @@ test('a response cannot carry a field the contract does not declare', async () =
     'the paged shape is exactly what `paginated(documentSchema)` declares',
   );
 });
+
+// --- OAuth / OIDC for MCP clients -------------------------------------------
+
+/**
+ * The consent screen is the control that makes open dynamic client registration
+ * safe, and it fails silently: the mcp plugin's authorize endpoint only asks when
+ * the caller sends `prompt=consent`, so deleting the rewrite in app.ts would leave
+ * every flow working while quietly issuing codes to anyone who asks. These prove it
+ * still asks, and that discovery still tells a client where to go.
+ */
+
+/** Register a client the way an MCP client does — unauthenticated, RFC 7591. */
+async function registerClient(name: string, redirect: string): Promise<string> {
+  const response = await call('/api/auth/mcp/register', {
+    method: 'POST',
+    body: {
+      client_name: name,
+      redirect_uris: [redirect],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    },
+  });
+  assert.equal(response.status, 201, 'dynamic client registration failed');
+  const body = (await response.json()) as { client_id?: string };
+  assert.ok(body.client_id, 'no client_id issued');
+  return body.client_id;
+}
+
+function authorizeUrl(clientId: string, redirect: string): string {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirect,
+    response_type: 'code',
+    scope: 'openid profile email offline_access',
+    state: 'test-state',
+    // Deliberately no `prompt`: that is the case the rewrite exists to cover.
+    code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+    code_challenge_method: 'S256',
+  });
+  return `/api/auth/mcp/authorize?${params.toString()}`;
+}
+
+test('authorization always reaches the consent screen, even unprompted', async () => {
+  const redirect = 'http://localhost:9999/callback';
+  const clientId = await registerClient('Test Client', redirect);
+
+  const response = await call(authorizeUrl(clientId, redirect), { cookie: userCookie });
+  assert.equal(response.status, 302);
+
+  const location = response.headers.get('location') ?? '';
+  assert.match(location, /\/oauth\/consent\?/, 'authorization skipped the consent screen');
+  assert.match(location, /consent_code=/, 'no consent code was issued to the page');
+
+  // The failure this guards against is a code delivered straight to the client.
+  assert.doesNotMatch(location, /[?&]code=/, 'an authorization code was issued without consent');
+});
+
+test('an unauthenticated authorization goes to sign-in, not to the client', async () => {
+  const redirect = 'http://localhost:9999/callback';
+  const clientId = await registerClient('Anonymous Client', redirect);
+
+  const response = await call(authorizeUrl(clientId, redirect));
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get('location') ?? '', /\/sign-in/);
+});
+
+test('discovery names the MCP endpoint as the resource and this API as the issuer', async () => {
+  // A client follows these documents without being told where to look, so the values
+  // in them are the contract. `resource` defaulting to the API's own origin — which is
+  // what happens without the explicit setting — would point clients at the wrong
+  // audience entirely.
+  const resource = await call('/.well-known/oauth-protected-resource');
+  assert.equal(resource.status, 200);
+  const resourceBody = (await resource.json()) as {
+    resource: string;
+    authorization_servers: string[];
+  };
+  assert.equal(resourceBody.resource, config.mcpUrl);
+  assert.deepEqual(resourceBody.authorization_servers, [config.apiUrl]);
+
+  const server = await call('/.well-known/oauth-authorization-server');
+  assert.equal(server.status, 200);
+  const serverBody = (await server.json()) as {
+    issuer: string;
+    code_challenge_methods_supported: string[];
+    registration_endpoint: string;
+  };
+  assert.equal(serverBody.issuer, config.apiUrl);
+  // PKCE is not optional for a public client, which every MCP client is.
+  assert.deepEqual(serverBody.code_challenge_methods_supported, ['S256']);
+  assert.match(serverBody.registration_endpoint, /\/register$/);
+});
+
+test('the consent screen can identify the client asking, and only for a signed-in user', async () => {
+  const redirect = 'http://localhost:9999/callback';
+  const clientId = await registerClient('Nameable Client', redirect);
+
+  const anonymous = await call(`/api/oauth/client/${clientId}`);
+  assert.equal(anonymous.status, 401, 'client details were readable without a session');
+
+  const found = await call(`/api/oauth/client/${clientId}`, { cookie: userCookie });
+  assert.equal(found.status, 200);
+  const client = (await found.json()) as { name: string; redirectUris: string[] };
+  assert.equal(client.name, 'Nameable Client');
+  assert.deepEqual(client.redirectUris, [redirect]);
+
+  const missing = await call('/api/oauth/client/never-registered', { cookie: userCookie });
+  assert.equal(missing.status, 404);
+});

@@ -5,8 +5,14 @@ be called by an external MCP client.
 
 - **Endpoint:** `http://localhost:4100/mcp`
 - **Transport:** Streamable HTTP
-- **Auth:** `Authorization: Bearer <session token>`
+- **Auth:** OAuth 2.1 / OIDC (discovery + dynamic registration + PKCE), or a bearer session token
 - **Tool:** `search_corpus`
+
+Two ways in. **OIDC** is the one an MCP client uses on its own: it discovers the
+endpoints, registers itself, sends you to a consent screen, and gets its own scoped,
+revocable token. **A bearer session token** is the one for `curl`, scripts and CI,
+where a browser redirect makes no sense. Both land on the same server-side role check,
+so there is one authorization decision rather than two.
 
 ---
 
@@ -29,7 +35,8 @@ npm run start:mcp
 ```
 Hatko MCP on http://localhost:4100/mcp
   corpus     142 passages indexed
-  auth       Authorization: Bearer <session token> — see README
+  auth       OAuth 2.1 / OIDC, or Authorization: Bearer <session token>
+  clients    point them at this URL; see docs/mcp.md
 ```
 
 The API must also be running (`npm run start:api`) if you want to mint a token, since
@@ -37,7 +44,45 @@ sign-in lives there.
 
 ---
 
-## 2. Get a token
+## 2. Connect over OIDC (the normal path)
+
+Nothing to configure and no token to paste. Point the client at the endpoint and it
+does the rest:
+
+```bash
+claude mcp add --transport http hatko http://localhost:4100/mcp
+```
+
+What happens, and why each step is there:
+
+1. The client calls `/mcp` with no credential and gets **401** with
+   `WWW-Authenticate: Bearer realm="hatko", resource_metadata="…"`. That header is the
+   bootstrap — without it the client has nowhere to look.
+2. It fetches `/.well-known/oauth-protected-resource`, learning that the resource is
+   `MCP_URL` and the authorization server is the API, then
+   `/.well-known/oauth-authorization-server` for the endpoints.
+3. It **registers itself** (RFC 7591). No administrator mints credentials. Registration
+   grants nothing on its own — it only creates a client record.
+4. It opens the authorize URL in your browser. Not signed in, and you get the Hatko
+   sign-in page first.
+5. **You approve it** on a consent screen naming the application and the host the
+   authorization code will be sent to. Denying is a real answer and is reported back to
+   the client.
+6. The client exchanges the code for a token using PKCE, and calls the tool.
+
+Access tokens last an hour and refresh tokens seven days. Both are opaque and stored
+server-side, so revoking one is deleting a row rather than waiting for a JWT to expire.
+Deleting a user deletes their tokens with them, which the schema enforces with a cascade.
+
+**The consent screen is not optional.** Dynamic registration is open, as the flow
+requires, so anybody can register a client — which means the only thing standing
+between a crafted link and a signed-in user handing over a corpus-reading token is
+being asked first. `prompt=consent` is forced server-side for every authorization,
+including ones that do not request it, so a client cannot skip the question.
+
+---
+
+## 3. Get a bearer token instead (curl, scripts, CI)
 
 The bearer token is a Better Auth session token — the same session the web app uses.
 Sign in and read it off the `set-auth-token` response header:
@@ -56,9 +101,16 @@ set-auth-token: esW5tuRwVTzdffkZ2oItSJxTwEoCTgT6.uZRlsXc7lrheUYt70rvvZobX89cdWgI
 Either demo account works — `search:run` is held by both roles. Tokens expire after
 seven days, and signing out revokes one immediately.
 
+Note that this is the user's own session in a header. It cannot be scoped to one client
+and cannot be revoked without ending every other session too, which is exactly why the
+OIDC path above exists and is the better choice for a real client.
+
 ---
 
-## 3. Connect a client
+## 4. Pin a bearer token into a client
+
+Only needed if you are deliberately using the bearer path — the OIDC flow needs none of
+this.
 
 ### Claude Code
 
@@ -95,7 +147,7 @@ curl -s -X POST http://localhost:4100/mcp \
 
 ---
 
-## 4. The tool
+## 5. The tool
 
 ### `search_corpus`
 
@@ -143,7 +195,7 @@ report the system being honest as the system being broken.
 
 ---
 
-## 5. Why it is built this way
+## 6. Why it is built this way
 
 **Streamable HTTP, not stdio.** stdio would have been less code, but a stdio server
 is spawned by the client as a local subprocess, and a subprocess cannot be
@@ -151,19 +203,32 @@ authenticated — whoever can run it already has the machine. The brief requires
 to be gated by role, so the tool needs a caller identity, and an identity needs
 somewhere to travel. Over HTTP it travels in the `Authorization` header.
 
-**Bearer tokens are real sessions, not a shared secret.** A static token in an env
-var would have been simpler, but it carries no user, so MCP traffic would be
-unattributable and the role check would have nothing to check. Because the token is a
-Better Auth session, the MCP server calls the same `requirePermission(headers,
-'search:run')` the HTTP API's middleware calls, against the same sessions, with the
-same roles, expiry and revocation. Signing out cuts off the MCP client too. The
-bearer plugin HMAC-verifies the token before it becomes a session, so an arbitrary
-string is rejected rather than trusted.
+**Hatko is its own OIDC provider.** Not an external identity provider, because the
+brief requires the system to run on a fresh machine from the README and a hosted IdP
+would make a network account a prerequisite for `npm install`. Better Auth's `mcp` and
+`oidcProvider` plugins supply the endpoints; this repository supplies the schema
+(migration 007), the consent screen, and the policy that consent is mandatory.
 
-**No OIDC.** That is the stated bonus and it is deliberately not built. An OIDC
-provider is a substantial subsystem, and the honest trade was to spend the time making
-one authorization path correct across three surfaces rather than building a second,
-weaker one.
+**Two credentials, one authorization decision.** An OAuth access token identifies a
+user but carries no session; a bearer session token carries one. Both resolve through
+`requireMcpPermission`, which loads the user, then hands off to the same `authorize`
+the HTTP API uses with the same `search:run` permission. The alternative — a role check
+per credential — is two checks that drift, and the one that drifts is the one nobody
+looks at.
+
+**Consent is forced, not requested.** The mcp plugin asks for consent only when the
+client sends `prompt=consent`, which measured out as: register a client, send a
+signed-in user one link, receive a token for the whole corpus, with nobody asked
+anything. PKCE and `state` do not cover this — they protect the client from
+interception, not the user from authorizing a stranger. The API rewrites the query on
+every authorization so the question cannot be skipped, and it rewrites rather than
+advertising a different endpoint because the consent-free endpoint stays mounted and a
+crafted link would simply use it.
+
+**Bearer tokens remain, and their weakness is stated.** A session token in a header is
+what makes `curl` and CI usable. But the credential _is_ the user's session, so it
+cannot be scoped to one client and cannot be revoked without ending every other
+session. That is the reason OIDC is the documented default rather than an alternative.
 
 **One tool, not two.** The HTTP API also exposes `/answer`, which wraps retrieval in
 an LLM that writes prose and cites it. An MCP client _is_ an LLM, and it holds the
@@ -184,7 +249,7 @@ whole system rather than only the browser.
 
 ---
 
-## 6. Limits
+## 7. Limits
 
 Where this stops scaling, in the order it would actually bite:
 
@@ -215,16 +280,18 @@ metric rather than a search.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
-| Symptom                        | Cause                                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `401` / `Sign in to continue.` | Missing, malformed, expired or revoked token. Mint a new one (step 2). JSON-RPC code `-32002`.      |
-| `403 Invalid Host header`      | The DNS-rebinding guard. Reach the server as `localhost` or `127.0.0.1`.                            |
-| `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                  |
-| `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                             |
-| Every query abstains           | The index is empty. Run `npm run ingest`.                                                           |
-| `OPENAI_API_KEY is not set`    | Queries are embedded and reranked at call time. Set the key in `.env`, or from the admin dashboard. |
+| Symptom                        | Cause                                                                                                                                  |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `401` / `Sign in to continue.` | Missing, malformed, expired or revoked credential — an access token over an hour old, or a signed-out session. JSON-RPC code `-32002`. |
+| Consent says "not recognised"  | The `client_id` is unregistered or disabled, so there is nothing to approve. Reconnect the client.                                     |
+| Client keeps re-authorizing    | `MCP_URL` is not the address the client dials, so the token's audience does not match.                                                 |
+| `403 Invalid Host header`      | The DNS-rebinding guard. Reach the server as `localhost` or `127.0.0.1`.                                                               |
+| `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                                                     |
+| `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                                                                |
+| Every query abstains           | The index is empty. Run `npm run ingest`.                                                                                              |
+| `OPENAI_API_KEY is not set`    | Queries are embedded and reranked at call time. Set the key in `.env`, or from the admin dashboard.                                    |
 
 The server rejects a request with **no** `Host` header at all. Real HTTP/1.1 clients
 always send one; this only comes up when synthesising requests in-process.

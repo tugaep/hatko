@@ -1554,3 +1554,116 @@ unbounded rerank spend, which is true of the HTTP API's `/answer` too and is wor
 fixing before either faces untrusted clients.
 
 Typecheck clean, 171 tests passing.
+
+## Steps 7b and 7c: finishing two half-built bonuses (17–18 Aug 2026)
+
+The operator moved four items from this project's "do not build" list into scope after
+the step 7 review. Two of them were bonuses that were already half-built, and those
+came first: an incomplete thing sitting in the repository costs more to leave than a
+missing thing nobody has started.
+
+The AI usage log entry for 7b is late — it should have been in the same commit as the
+work, which is this project's own rule. Recording that rather than backdating it.
+
+### 7b — the ingestion trigger
+
+The diff engine already detected new, changed and removed documents and skipped
+untouched ones by content hash. Only the trigger was missing, so this is `fs.watch`
+plus coalescing: stdlib, no dependency, and deliberately not a poller.
+
+**Where AI was wrong: it wanted to label watcher runs `cli`.** The `trigger` column
+already had three legal values and 'watch' was not one of them, so the path of least
+resistance was to reuse `cli` and move on. That column exists to answer "why did the
+index change", which is the observability requirement — reusing `cli` would have made
+the dashboard lie. The honest fix cost a table rebuild, because SQLite cannot alter a
+CHECK constraint. Safe here specifically because nothing references `ingestion_runs`,
+and verified by reading the surviving row back with its `duration_ms` intact rather than
+by trusting the migration to have worked.
+
+Writing that migration also turned up `startup`, declared in the trigger enum in step 1
+and never produced by anything. It has a real producer now — the watcher's initial
+catch-up pass, which is a genuinely different event from a file changing.
+
+**The scheduling moved into its own module because it is where the silent failures
+are.** Two of them: coalescing breaking costs an embedding pass per filesystem event
+and nobody notices except the bill, and dropping a change that arrives mid-run leaves
+the index stale while every run still reports success. Five tests cover both.
+
+Verified against a scratch corpus by reading the run table, not the log: add recorded
+`indexed=1 skipped=1`, modify recorded `updated=1`, delete recorded `deleted=1`, a
+`.txt` recorded nothing, and a five-write burst plus a modify produced one run rather
+than six. Restarting on an unchanged corpus skipped everything, which is what makes the
+catch-up pass cheap rather than a full re-embed on every boot.
+
+### 7c — OIDC on the MCP server
+
+Better Auth's `mcp` and `oidcProvider` plugins supply the endpoints. This repository
+supplies migration 007, the consent screen, and one policy decision that turned out to
+matter more than all the wiring.
+
+**The finding that mattered: consent was not happening.** The flow worked on the first
+try — register, authorize, token, call the tool — and the authorize step went straight
+to the client with a code. Reading the plugin rather than the happy path explained it:
+
+```js
+requireConsent: query.prompt === 'consent',
+```
+
+The mcp plugin asks for consent only if the client requests it. Combined with dynamic
+client registration, which the MCP spec requires to be open, that is a live hole rather
+than a theoretical one: anyone can register a client, and one crafted link sent to a
+signed-in user silently issues a token good for reading the entire corpus. PKCE and
+`state` do not help — they protect the client from token interception, not the user from
+authorizing a stranger.
+
+I had already written comments claiming a human approves each client. That claim was
+false when I wrote it. The choice was to delete the claim or make it true, and given
+security is a graded axis, making it true was the only defensible option.
+
+The fix rewrites the query to force `prompt=consent` on every authorization, using the
+same before-the-mount route pattern this repo already uses to close public sign-up. The
+alternative I considered first — advertising a different `authorization_endpoint` in the
+discovery document — would only have redirected well-behaved clients while the
+consent-free endpoint stayed mounted and reachable by exactly the crafted link it was
+meant to stop. A control that only the honest obey is not a control.
+
+**Second finding: the consent screen was decoration.** The first version rendered
+`Application: UTsqeiLUXqVTEpyXCdLCuqGjmyucMhRj`, because the authorize redirect carries
+only `client_id`. A consent screen that cannot say which application is asking teaches
+people to approve things they cannot identify, which is worse than no screen at all —
+it manufactures the reflex. Added a session-gated lookup so the page shows the client's
+name and, more usefully, the host the authorization code will be delivered to: a name
+can claim to be any familiar tool, the redirect host is where the code actually goes. An
+unidentifiable client now gets no Approve button.
+
+**Where AI was wrong on smaller things.** It set `accessTokenExpiresIn` and
+`refreshTokenExpiresIn` to 3600 and 604800 with a comment calling them "deliberately
+short" — those are the library's own defaults, so the comment claimed a tightening that
+had not happened. Removed, and the defaults noted as adequate. It also reached for
+`better-auth/plugins/mcp`, which is not an exported subpath (only `/mcp/client` is), and
+imported the auth library directly into the API workspace, which does not depend on it —
+that only resolves by hoisting, so the two discovery handlers are re-exported from
+`@hatko/core` instead.
+
+**One test failed and was right to.** I wrote "an orphan access token is refused with
+401" and got `FOREIGN KEY constraint failed` — the schema makes an orphan token
+impossible to create, which is a stronger guarantee than the one I was asserting. The
+test now asserts that. The null-user branch in `requireMcpPermission` stays, because
+`getUserById` returns a nullable and something has to handle it; it fails closed and
+should never be reached.
+
+**Two measurement corrections.** A `fetch`-based flow script got 403
+`MISSING_OR_NULL_ORIGIN` on sign-in, which looked like the bearer path had regressed;
+curl returns 200, so the documented flow was fine and the script was sending
+browser-like headers without an `Origin`. And a `pkill -f`/`ps | grep -c` pair reported
+no servers running while curl was demonstrably being answered by a stale process holding
+the port — that stale process was running pre-fix code, which is why a logging change
+appeared not to work. `lsof -ti :4100` is the check that actually answers it.
+
+Verified end to end against the running pair: discovery chain, open registration, deny
+answered with `error=access_denied`, approve returning a code with `state` intact, PKCE
+exchange, a wrong verifier rejected with "code verification failed", the OAuth token
+searching the corpus, a bogus token refused, and the bearer path still working. The
+Approve button was clicked in a real browser and landed on the callback with the code.
+
+Typecheck clean, 184 tests passing, format clean.
