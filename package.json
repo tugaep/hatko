@@ -12,8 +12,8 @@
     "apps/*"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "node --test \"packages/**/*.test.ts\" \"apps/api/src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace @sorrel/web",
+    "test": "node --test \"packages/**/*.test.ts\" \"apps/api/src/**/*.test.ts\" \"apps/web/lib/**/*.test.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:migrate": "npm run migrate --workspace @sorrel/core",
@@ -24,7 +24,10 @@
     "seed": "npm run seed --workspace @sorrel/core",
     "setup": "npm run db:migrate && npm run seed && npm run ingest",
     "dev:api": "npm run dev --workspace @sorrel/api",
-    "start:api": "npm run start --workspace @sorrel/api"
+    "start:api": "npm run start --workspace @sorrel/api",
+    "dev:web": "npm run dev --workspace @sorrel/web",
+    "build:web": "npm run build --workspace @sorrel/web",
+    "start:web": "npm run start --workspace @sorrel/web"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

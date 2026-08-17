@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
+import type { SecretSource, SecretStatus } from '@sorrel/shared';
 import { config, requireAppSecret } from './config.ts';
 import { getDb, type Db } from './db/client.ts';
 
@@ -23,16 +24,6 @@ export const SETTING_KEYS = {
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 
 /**
- * Where a resolved secret came from, so the UI can say which one is live.
- *
- * `unreadable` means a value is stored that will not decrypt, which in practice
- * means BETTER_AUTH_SECRET changed after it was saved. It is a distinct state from
- * `unset` because the remedy is different — re-enter the key, or restore the old
- * secret — and distinct from `database` because nothing usable is configured.
- */
-export type SecretSource = 'database' | 'environment' | 'unset' | 'unreadable';
-
-/**
  * Raised when the system is missing or cannot read a credential it needs.
  *
  * A type rather than a message the API pattern-matches. `errors.ts` classified
@@ -49,15 +40,12 @@ export class ConfigurationError extends Error {
   }
 }
 
-export interface SecretStatus {
-  /** Whether a *usable* secret is available. False when one is stored but unreadable. */
-  configured: boolean;
-  source: SecretSource;
-  /** Last four characters, e.g. `…a91f`. Never the key itself. */
-  hint: string | null;
-  updatedAt: string | null;
-  updatedBy: string | null;
-}
+/**
+ * The status shape and the source enum live in @sorrel/shared, because the admin
+ * settings panel renders exactly what this module produces. Re-exported so callers of
+ * core do not need to know which package the contract is declared in.
+ */
+export type { SecretSource, SecretStatus };
 
 // --- encryption -------------------------------------------------------------
 

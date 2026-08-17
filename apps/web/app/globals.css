@@ -1,0 +1,294 @@
+@import 'tailwindcss';
+
+/*
+ * Tokens. Two layers, on purpose:
+ *
+ *   @theme        the raw scale. Defines the semantic layer below and fills
+ *                 illustrations. Components never reference it.
+ *   :root         the semantic layer. This is what components consume.
+ *
+ * Ratios in the comments are computed WCAG 2.1 relative luminance, from docs/design.md §1.
+ * Light theme only — this build ships one surface, so a dark token set with no
+ * switch to reach it would be dead weight.
+ */
+
+@theme {
+  --color-green-50: #eef4f0;
+  --color-green-100: #d9e7df;
+  --color-green-200: #b4cfc0;
+  --color-green-300: #87b29c;
+  --color-green-400: #5a9077;
+  --color-green-500: #3a7059;
+  --color-green-600: #2a5a46;
+  --color-green-700: #1f4536;
+  --color-green-800: #173428;
+  --color-green-900: #11261d;
+  --color-green-950: #0a1712;
+
+  --color-ochre-200: #f2dfb8;
+  --color-ochre-400: #e0a952;
+  --color-ochre-500: #c8892c;
+  --color-ochre-600: #a66e1f;
+
+  --color-clay-200: #f0d3c9;
+  --color-clay-400: #de8465;
+  --color-clay-500: #b4482f;
+  --color-clay-600: #93361f;
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* Three radii, and that is the whole set. Containers stay square. */
+  --radius-sm: 3px;
+
+  --ease-brand: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Type scale — size, leading, tracking and weight travel together so a heading
+     cannot be half-applied. */
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 1.05;
+  --text-display-lg--letter-spacing: -0.03em;
+  --text-display-lg--font-weight: 500;
+
+  --text-display: 38px;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.025em;
+  --text-display--font-weight: 500;
+
+  --text-h1: 30px;
+  --text-h1--line-height: 1.15;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h1--font-weight: 500;
+
+  --text-h2: 24px;
+  --text-h2--line-height: 1.25;
+  --text-h2--letter-spacing: -0.015em;
+  --text-h2--font-weight: 500;
+
+  --text-h3: 20px;
+  --text-h3--line-height: 1.3;
+  --text-h3--letter-spacing: -0.01em;
+  --text-h3--font-weight: 600;
+
+  --text-h4: 16px;
+  --text-h4--line-height: 1.4;
+  --text-h4--letter-spacing: -0.005em;
+  --text-h4--font-weight: 600;
+
+  --text-body: 16px;
+  --text-body--line-height: 1.6;
+
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.55;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.01em;
+
+  --text-eyebrow: 12px;
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.08em;
+  --text-eyebrow--font-weight: 600;
+
+  --text-mono: 13px;
+  --text-mono--line-height: 1.5;
+  --text-mono--letter-spacing: 0.02em;
+
+  --text-mono-label: 11px;
+  --text-mono-label--line-height: 1.4;
+  --text-mono-label--letter-spacing: 0.06em;
+  --text-mono-label--font-weight: 500;
+}
+
+:root {
+  --bg: #f7f4ec;
+  --bg-raised: #fffdf7;
+  --bg-sunken: #eeeae0;
+  --bg-inverse: #11261d;
+
+  --text: #0a1712; /* 16.70:1 on bg */
+  --text-muted: #6b6455; /*  5.34:1 on bg */
+  --text-inverse: #f7f4ec;
+
+  --rule: #e2dcce; /* decorative dividers only */
+  --rule-strong: #cfc7b4;
+  --border-interactive: #8a8674; /*  3.33:1 on bg — clears the 3:1 UI threshold */
+
+  --brand: #173428; /* 12.26:1 with paper text */
+  --brand-hover: #1f4536;
+  --brand-active: #0a1712;
+  --brand-subtle: #d9e7df;
+
+  --focus: #2a5a46; /*  7.21:1 on bg */
+
+  --attention: #c8892c; /* fill only, never text on paper */
+  --attention-subtle: #f2dfb8;
+  --attention-text: #a66e1f; /* icons and 18px+ only */
+
+  --danger: #93361f;
+  --danger-subtle: #f0d3c9;
+  --danger-text: #b4482f; /*  4.89:1 on bg */
+
+  --info: #3a525a;
+  --highlight: #f2dfb8;
+
+  /* The system's only shadow. L3 overlays may use it; nothing else may. */
+  --shadow-overlay: 0 8px 24px -8px rgb(10 23 18 / 0.18);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-sunken: var(--bg-sunken);
+  --color-bg-inverse: var(--bg-inverse);
+
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-border-interactive: var(--border-interactive);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
+  --color-brand-subtle: var(--brand-subtle);
+
+  --color-focus: var(--focus);
+
+  --color-attention: var(--attention);
+  --color-attention-subtle: var(--attention-subtle);
+  --color-attention-text: var(--attention-text);
+
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+
+  --color-info: var(--info);
+  --color-highlight: var(--highlight);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.55;
+    /* Softens Inter's single-storey shapes and opens the terminals. */
+    font-feature-settings:
+      'cv05' 1,
+      'cv11' 1,
+      'ss03' 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* One focus rule, globally, no exceptions. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background: var(--highlight);
+    color: var(--text);
+  }
+
+  mark {
+    background: var(--highlight);
+    color: var(--text);
+  }
+
+  /* Fraunces earns its wonk at display size and looks noisy below 30px. */
+  .font-display {
+    font-variation-settings:
+      'SOFT' 0,
+      'WONK' 0;
+  }
+
+  .text-display-lg,
+  .text-display,
+  .text-h1 {
+    font-variation-settings:
+      'SOFT' 0,
+      'WONK' 1;
+  }
+}
+
+/* Tabular figures are opt-in. Prose should not be tabular. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Content arriving after a fetch — answers, source cards, table rows. Opacity and
+ * transform only, so it composites on the GPU and cannot reflow the page mid-animation.
+ * Not an entrance animation on page load: it runs when data lands.
+ */
+@utility rise {
+  animation: rise 240ms var(--ease-brand) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@utility fade {
+  animation: fade 180ms var(--ease-brand) both;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/*
+ * A 44px hit area on a coarse pointer without changing how the element draws. Inline
+ * padding would push the fill outside the line box; an overlay does not, so a citation
+ * chip stays a chip on desktop and becomes thumb-sized on a phone.
+ */
+@utility hit-touch {
+  position: relative;
+
+  @media (pointer: coarse) {
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -14px -6px;
+    }
+  }
+}
+
+/* Loading skeletons: geometry of the real content, breathing rather than spinning. */
+@utility skeleton {
+  background: var(--bg-sunken);
+  animation: skeleton 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

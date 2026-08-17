@@ -30,6 +30,8 @@ TECHNICAL-REQUIREMENTS.md
 bonus.md
 documentation.md
 
-# claude-mem writes context files into any directory it touches. The provided
-# dataset must stay exactly as supplied, and anything here gets ingested.
-sample_dataset/**/CLAUDE.md
+# Tooling (claude-mem, `next dev`) writes a CLAUDE.md into every directory it touches.
+# The root file is the working agreement and is tracked; the generated ones are noise,
+# and inside sample_dataset they would also be ingested as corpus documents.
+CLAUDE.md
+!/CLAUDE.md

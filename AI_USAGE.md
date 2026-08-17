@@ -1001,3 +1001,93 @@ typecheck reports one error — `sign-in/page.tsx` imports a `sign-in-form.tsx` 
 has not been written yet — which is unfinished work rather than damage. Worth
 saying plainly because the root `tsconfig.json` excludes `apps/web`, so
 `npm run typecheck` at the repository root would never have told anyone.
+
+---
+
+## Step 6: the web UI (17 Aug 2026)
+
+Next.js 16 App Router, Tailwind v4 CSS-first, three surfaces — sign-in, chat, admin
+dashboard. Product name changed to **Hatko**; palette, type scale and every token kept
+exactly as `docs/design.md` specifies. Light theme only, so the `.dark` block in the
+design doc is deliberately not implemented: a token set with no switch to reach it is
+dead weight, and shipping it half-wired would be worse than not shipping it.
+
+AI wrote effectively all of the markup and the Tailwind. What I did by hand was the
+judgement about what the design system actually meant in each case, and the corrections
+below.
+
+### Where it was wrong
+
+**The mark was a striped pill, not a leaf.** `brand.md` specifies the sorrel leaf as
+three solid shapes and a centre vein. The first attempt left 1-unit gaps between the
+blades and the vein on a 24 grid — at the 20px the header renders it, that is 0.8px of
+negative space, so the three shapes fused and the mark read as an oval with a dark band
+through it. Caught by injecting the header's own SVG into the page at 160px and looking
+at it, not by reading the paths. Fixed by widening the gaps to 1.5 units, narrowing the
+blades so the silhouette is a shield rather than a circle, and tapering both blades to a
+shared apex.
+
+**The empty-state fern was a Christmas tree.** A vertical stem with symmetric side
+leaflets is a conifer, whatever shape the leaflets are — and alternating two greens
+across them made it worse by adding tinsel. Two attempts at a better frond failed the
+same way. Replaced with a fiddlehead: an Archimedean spiral generated in code so the
+curvature is uniform, which is unmistakable at 96px and happens to say "not yet
+unfurled", which is exactly what the state is.
+
+**Search-term highlighting was confetti.** The first version marked every query word
+over two characters, so asking "which languages must every playable ship with" painted
+`with`, `every`, `must` and `the` across every passage — burying the two words that
+actually matched. Caught by looking at a real result on a tablet viewport. Fixed with a
+stopword list, and while writing the test for it I found the opposite failure: querying
+`languages` left the passage's `Language` unmarked, which reads as a bug. Terms now also
+match across that one inflection, longest-alternative-first so `languages` is not split
+into a marked `language` plus a stray `s`.
+
+**The double ellipsis.** The API's key hint arrives already elided as `…a91f`; the panel
+prefixed another one and rendered `….…iSAA`. Visible in the first dashboard screenshot.
+
+**A React key collision in the answer skeleton.** Keyed on the Tailwind width class, and
+two of the five lines are `w-full`. Found in the browser console, not by review — it is
+exactly the class of mistake that never shows up in a screenshot.
+
+**A duplicate element id waiting to happen.** Source cards were keyed `source-${chunkId}`,
+so asking two questions that retrieve the same passage would give two cards the same id
+and send both citations to whichever rendered first. Caught while writing the click
+handler, before it could be observed. Ids are now namespaced by turn.
+
+### Judgement calls, stated because they are deviations
+
+**The score meter shows the rerank grade, not the fused score.** `design.md` says the
+source card carries "retrieval score as a flat meter". Drawn literally that would be the
+RRF score, which is rank-derived — the top result scores the same constant whether it
+answers the question or is the least bad of 142 — so a bar of it would imply a
+confidence it cannot carry. The meter shows the reranker's absolute 0–1 relevance, which
+is what a meter means and what abstention is decided from; the vector, BM25 and fused
+numbers sit beneath it as text.
+
+**Dashboard filters are inline, not in a left rail.** `design.md` §9 asks for a left
+rail on desktop. Two controls do not earn a rail.
+
+**No streaming.** Listed as out of scope in `CLAUDE.md` §3 and still out. The answer
+arrives whole, from one `/api/answer` call that returns the answer, the citations and the
+passages together — which also means the sources on screen are provably the ones the
+answer was generated from rather than a second retrieval that might differ.
+
+### One shared type moved
+
+`SecretStatus` was an interface in `packages/core/src/settings.ts` and the dashboard
+needed to parse it. Rather than write a second definition in the web app, the schema now
+lives in `packages/shared/src/settings.ts` and core re-exports the inferred type — so
+the shape the API produces and the shape the browser parses are one declaration. The
+admin route's local `apiKeyBodySchema` was the same duplication in the other direction
+and is now the shared `setApiKeyRequestSchema`.
+
+### Verified, not assumed
+
+`npm run typecheck` and `npm test` clean (152 tests, six of them new, covering the
+highlighter's escaping and reassembly — the one piece of logic here that can silently
+drop document text). `next build` clean. Sign-in, a cited answer, an abstention, the
+document table, the ingestion trigger and the provider-key panel all exercised in a real
+browser at 375, 768 and 1280. Role gating checked by signing in as the seeded regular
+user: no dashboard link, and `/dashboard` redirects to `/chat` server-side while the API
+independently returns 403.

@@ -240,7 +240,7 @@ Each step ends somewhere demonstrable.
 | 3   | Hybrid retrieval + rerank + eval script              | **done** — recall@1 100%, MRR 1.000 |
 | 4   | RAG answers, citations, abstain path                 | **done**                            |
 | 5   | Better Auth, roles, server-side gating               | **done**                            |
-| 6   | Chat page, then dashboard                            |                                     |
+| 6   | Chat page, then dashboard                            | **done** — Next 16, light theme only |
 | 7   | MCP server                                           |                                     |
 | 8   | README, AI usage log, history cleanup                |                                     |
 

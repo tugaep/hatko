@@ -16,6 +16,7 @@ import {
   documentSchema,
   listDocumentsQuerySchema,
   paginated,
+  setApiKeyRequestSchema,
   triggerIngestionRequestSchema,
 } from '@sorrel/shared';
 import { z } from 'zod';
@@ -92,13 +93,6 @@ adminRoutes.get('/stats', requires('dashboard:view'), (c) => c.json(getDashboard
 
 // --- provider API key -------------------------------------------------------
 
-const apiKeyBodySchema = z.object({
-  // Length only. Validating the format against a vendor prefix would break the
-  // moment the vendor changes it, and the real test is whether the provider
-  // accepts it.
-  apiKey: z.string().trim().min(20).max(400),
-});
-
 /**
  * Status only — the key itself is never returned.
  *
@@ -111,7 +105,7 @@ adminRoutes.get('/settings/api-key', requires('documents:manage'), (c) =>
 );
 
 adminRoutes.put('/settings/api-key', requires('documents:manage'), async (c) => {
-  const body = apiKeyBodySchema.parse(await jsonBody(c));
+  const body = setApiKeyRequestSchema.parse(await jsonBody(c));
   const db = getDb();
 
   setSecret(db, SETTING_KEYS.openaiApiKey, body.apiKey, c.get('user').id);
