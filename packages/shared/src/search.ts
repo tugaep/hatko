@@ -65,10 +65,28 @@ export const answerRequestSchema = z.object({
 });
 export type AnswerRequest = z.infer<typeof answerRequestSchema>;
 
+/**
+ * A superseded document among the passages behind an answer.
+ *
+ * Derived from ingest-time metadata rather than from the answer text. Asking the
+ * model to volunteer "v2 is deprecated" proved unreliable — it kept answering the
+ * question correctly from the current document while silently omitting that the
+ * old one is retired — and the deprecation is a fact the system already knows for
+ * certain, so it does not need to be inferred from prose.
+ */
+export const deprecationNoticeSchema = z.object({
+  documentTitle: z.string(),
+  sourcePath: z.string(),
+  supersededBy: z.string().nullable(),
+});
+export type DeprecationNotice = z.infer<typeof deprecationNoticeSchema>;
+
 export const answerResponseSchema = z.object({
   query: z.string(),
   /** Empty string when `abstained` is true. */
   answer: z.string(),
+  /** Superseded documents among the sources. Rendered as a banner beside the answer. */
+  deprecationNotices: z.array(deprecationNoticeSchema),
   /**
    * True when the corpus does not support an answer. This is a correct outcome,
    * not an error: the response is still 200 and `sources` still carries the

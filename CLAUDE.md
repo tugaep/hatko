@@ -219,9 +219,10 @@ These are the failure modes that have already happened or nearly happened here.
    commit explains why not.
 6. **Commit per coherent step**, with a message saying _why_, not _what_. The diff
    already says what. Commit history is a graded axis.
-7. **Record AI usage as you go** in `AI_USAGE.md` — especially where it was wrong
-   and how that was caught. Reconstructing it at the end produces a worthless
-   document, and this is 1/5 of the grade.
+7. **Record AI usage as you go** in [AI_USAGE.md](AI_USAGE.md) — especially where
+   it was wrong and how that was caught. Reconstructing it at the end produces a
+   worthless document, and this is 1/5 of the grade. Append to it in the same
+   commit as the work it describes.
 8. **Errors get handled at the boundary they occur.** Actionable message, correct
    status, no leaking internals to the client. Config errors say how to fix them.
 9. **Never commit secrets.** `.env` is ignored; `.env.example` carries the shape.
@@ -237,7 +238,7 @@ Each step ends somewhere demonstrable.
 | 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9`                |
 | 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**                            |
 | 3   | Hybrid retrieval + rerank + eval script              | **done** — recall@1 100%, MRR 1.000 |
-| 4   | RAG answers, citations, abstain path                 |                                     |
+| 4   | RAG answers, citations, abstain path                 | **done**                            |
 | 5   | Better Auth, roles, server-side gating               |                                     |
 | 6   | Chat page, then dashboard                            |                                     |
 | 7   | MCP server                                           |                                     |

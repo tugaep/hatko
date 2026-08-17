@@ -21,3 +21,9 @@ export {
   type RerankOptions,
 } from './retrieval/rerank.ts';
 export { EVAL_QUESTIONS, ANSWERABLE, UNANSWERABLE, type EvalQuestion } from './eval/questions.ts';
+export {
+  answerQuestion,
+  validateCitations,
+  ABSTAIN_MESSAGE,
+  type AnswerOptions,
+} from './answer/generate.ts';
