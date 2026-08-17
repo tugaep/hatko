@@ -296,7 +296,9 @@ test('a streamed answer that cites nothing still abstains', async () => {
   const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
     arm: 'keyword',
     grader: allRelevant,
-    generator: streaming('Sound assets are built separately because the encoder is single-threaded.'),
+    generator: streaming(
+      'Sound assets are built separately because the encoder is single-threaded.',
+    ),
     onDelta: (text) => deltas.push(text),
   });
 

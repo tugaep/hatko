@@ -97,7 +97,10 @@ export function Chat({ denied }: { denied?: Permission }) {
           update((turn) => ({ draft: { sources: event.sources, text: turn.draft?.text ?? '' } }));
         } else if (event.type === 'delta') {
           update((turn) => ({
-            draft: { sources: turn.draft?.sources ?? [], text: (turn.draft?.text ?? '') + event.text },
+            draft: {
+              sources: turn.draft?.sources ?? [],
+              text: (turn.draft?.text ?? '') + event.text,
+            },
           }));
         } else if (event.type === 'answer') {
           update(() => ({ response: event.response, draft: null }));

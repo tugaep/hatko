@@ -301,17 +301,17 @@ metric rather than a search.
 
 ## 8. Troubleshooting
 
-| Symptom                        | Cause                                                                                                                                  |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `401` / `Sign in to continue.` | Missing, malformed, expired or revoked credential — an access token over an hour old, or a signed-out session. JSON-RPC code `-32002`. |
-| Consent says "not recognised"  | The `client_id` is unregistered or disabled, so there is nothing to approve. Reconnect the client.                                     |
-| Client keeps re-authorizing    | `MCP_URL` is not the address the client dials, so the token's audience does not match.                                                 |
+| Symptom                        | Cause                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `401` / `Sign in to continue.` | Missing, malformed, expired or revoked credential — an access token over an hour old, or a signed-out session. JSON-RPC code `-32002`.            |
+| Consent says "not recognised"  | The `client_id` is unregistered or disabled, so there is nothing to approve. Reconnect the client.                                                |
+| Client keeps re-authorizing    | `MCP_URL` is not the address the client dials, so the token's audience does not match.                                                            |
 | `403 Invalid Host header`      | The DNS-rebinding guard. Locally, reach the server as `localhost` or `127.0.0.1`; behind a proxy, add the public hostname to `MCP_ALLOWED_HOSTS`. |
-| `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                                                     |
-| `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                                                                |
-| Every query abstains           | The index is empty. Run `npm run ingest`.                                                                                              |
-| `Too many requests…`           | The per-account allowance is spent. Wait the stated seconds, or raise `RATE_LIMIT_MAX`. Arrives as a tool error, not a 429 — see §7.    |
-| `OPENAI_API_KEY is not set`    | Queries are embedded and reranked at call time. Set the key in `.env`, or from the admin dashboard.                                    |
+| `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                                                                |
+| `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                                                                           |
+| Every query abstains           | The index is empty. Run `npm run ingest`.                                                                                                         |
+| `Too many requests…`           | The per-account allowance is spent. Wait the stated seconds, or raise `RATE_LIMIT_MAX`. Arrives as a tool error, not a 429 — see §7.              |
+| `OPENAI_API_KEY is not set`    | Queries are embedded and reranked at call time. Set the key in `.env`, or from the admin dashboard.                                               |
 
 The server rejects a request with **no** `Host` header at all. Real HTTP/1.1 clients
 always send one; this only comes up when synthesising requests in-process.
