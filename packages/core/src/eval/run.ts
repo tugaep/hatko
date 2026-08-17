@@ -3,6 +3,7 @@ import { closeDb, getDb } from '../db/client.ts';
 import { resolveApiKey } from '../settings.ts';
 import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
 import { rerank } from '../retrieval/rerank.ts';
+import { answerQuestion } from '../answer/generate.ts';
 import { ANSWERABLE, EVAL_QUESTIONS, UNANSWERABLE, type EvalQuestion } from './questions.ts';
 
 /**
@@ -22,6 +23,7 @@ const { values } = parseArgs({
     arm: { type: 'string', default: 'all' },
     k: { type: 'string', default: '5' },
     rerank: { type: 'boolean', default: false },
+    answers: { type: 'boolean', default: false },
     detail: { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
   },
@@ -33,6 +35,7 @@ if (values.help) {
   --arm=<hybrid|vector|keyword|all>  Which retrieval arms to measure (default: all)
   --k=<n>                            Cut-off for recall@k (default: 5)
   --rerank                           Apply the LLM rerank pass (needs an API key)
+  --answers                          Also generate answers and check their content
   --detail                           Print per-question detail
 
 The keyword arm needs no API key. The vector and hybrid arms embed the query and
@@ -232,6 +235,94 @@ if (!values.rerank) {
     '\nThe fused score is rank-derived, so it cannot separate the two sets by construction.\n' +
       'Re-run with --rerank to measure the graded relevance signal that abstention uses.',
   );
+}
+
+// --- answer checks ----------------------------------------------------------
+
+/**
+ * Retrieval rank is not the whole requirement.
+ *
+ * Sample question 2 retrieved perfectly — the current SDK document at rank 1 —
+ * while the answer omitted that the previous version is deprecated, which
+ * sample_questions.md names as part of a good answer. The eval reported success
+ * and the requirement failed. These checks close that gap by asserting on the
+ * answer itself: required content for answerable questions, and for unanswerable
+ * ones that the system abstains and invents no citation.
+ */
+if (values.answers) {
+  console.log('\n\nAnswer checks');
+  console.log('─────────────');
+
+  let failures = 0;
+
+  for (const question of EVAL_QUESTIONS) {
+    const response = await answerQuestion(db, question.question, { limit: 6 });
+    const problems: string[] = [];
+    /** Phrases the prose omitted but the structured notice supplied. */
+    const viaNotice: string[] = [];
+
+    if (question.expected.length === 0) {
+      // The corpus cannot answer these. Abstaining is the correct behaviour, and
+      // a citation attached to an abstention would be invented by definition.
+      if (!response.abstained) problems.push('should have abstained');
+      if (response.citations.length > 0) {
+        problems.push(`invented ${response.citations.length} citation(s) while abstaining`);
+      }
+    } else {
+      if (response.abstained) problems.push('abstained on an answerable question');
+      if (!response.abstained && response.citations.length === 0) {
+        problems.push('answered with no citation');
+      }
+      // Checked against everything the user is shown, not the prose alone. The
+      // deprecation notice is a structured field precisely because the model
+      // would not reliably put it in the sentence, and the chat page renders it
+      // beside the answer — so prose-only would test a surface that is not the
+      // one the reader sees. Where a phrase is satisfied only by the notice, the
+      // report says so, so this cannot quietly paper over a regression in the
+      // answer text.
+      const noticeText = response.deprecationNotices
+        .map(
+          (n) =>
+            `${n.documentTitle} is deprecated and no longer current` +
+            (n.supersededBy ? `, superseded by ${n.supersededBy}` : ''),
+        )
+        .join('\n');
+
+      for (const phrase of question.mustMention ?? []) {
+        const needle = phrase.toLowerCase();
+        const inProse = response.answer.toLowerCase().includes(needle);
+        const inNotice = noticeText.toLowerCase().includes(needle);
+
+        if (!inProse && !inNotice) {
+          problems.push(`response never mentions "${phrase}"`);
+        } else if (!inProse) {
+          viaNotice.push(phrase);
+        }
+      }
+      // Every citation must resolve to a document that was actually retrieved.
+      const retrieved = new Set(response.sources.map((s) => s.sourcePath));
+      for (const citation of response.citations) {
+        if (!retrieved.has(citation.sourcePath)) {
+          problems.push(`cites ${citation.sourcePath}, which was never retrieved`);
+        }
+      }
+    }
+
+    if (problems.length === 0) {
+      const note =
+        viaNotice.length > 0 ? `  (via deprecation notice: ${viaNotice.join(', ')})` : '';
+      console.log(`  ok    ${question.id}${note}`);
+    } else {
+      failures++;
+      console.log(`  FAIL  ${question.id}`);
+      for (const problem of problems) console.log(`          ${problem}`);
+    }
+  }
+
+  console.log(
+    `\n${EVAL_QUESTIONS.length - failures}/${EVAL_QUESTIONS.length} answer checks passed`,
+  );
+  if (failures > 0) process.exitCode = 1;
 }
 
 closeDb();

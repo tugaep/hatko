@@ -20,6 +20,16 @@ export interface EvalQuestion {
   /** Source paths, any of which counts as a correct retrieval. Empty = unanswerable. */
   expected: string[];
   alsoRelevant?: string[];
+  /**
+   * Substrings the generated answer must contain, matched case-insensitively.
+   *
+   * Retrieval rank is not the whole requirement. Sample question 2 was retrieved
+   * perfectly — the current SDK document at rank 1 — while the answer omitted
+   * that the previous version is deprecated, which sample_questions.md names as
+   * part of a good answer. The eval reported success and the requirement failed,
+   * so answer content is now asserted too.
+   */
+  mustMention?: string[];
   /** Why this question is in the set — what it is meant to catch. */
   probes: string;
 }
@@ -30,6 +40,7 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
     id: 'sample-1',
     question: 'What is the maximum file size for an AppLovin playable, and how does it ship?',
     expected: ['network-specs-applovin.md'],
+    mustMention: ['5 MB'],
     probes: 'A specific numeric fact stated in exactly one document.',
   },
   {
@@ -37,6 +48,7 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
     question: 'How do I initialize the current Lumen SDK, and what happened to lumen.track?',
     expected: ['sdk-notes-v3.md'],
     alsoRelevant: ['sdk-notes-v2.md'],
+    mustMention: ['deprecat'],
     probes:
       'The deprecation trap. v2 is semantically near-identical to v3 and mentions lumen.track ' +
       'more prominently, so it can out-rank the current document. Retrieving v3 first is the ' +
@@ -63,6 +75,7 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
     id: 'sample-5',
     question: 'Which languages must every playable ship with, and what is the fallback?',
     expected: ['localization-guide.md'],
+    mustMention: ['English'],
     probes: 'A list plus a rule, both in one document.',
   },
 
