@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { config } from '../config.ts';
 import { closeDb, getDb } from '../db/client.ts';
-import { providerConfigured } from '../settings.ts';
+import { activeModels, providerConfigured } from '../settings.ts';
 import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
 import { rerank } from '../retrieval/rerank.ts';
 import { answerQuestion, DEFAULT_ANSWER_PASSAGES } from '../answer/generate.ts';
@@ -132,6 +132,11 @@ if (indexed.n === 0) {
   process.exit(1);
 }
 
+// Read from settings, not from config: an admin can switch provider from the dashboard,
+// and every call below then goes to the stored one. Naming the environment's models
+// beside numbers produced by different ones is the exact false claim this banner exists
+// to prevent. The embedding model stays on config — it is env-only by design.
+const models = activeModels(db);
 const hasProvider = providerConfigured(db);
 const requested: RetrievalArm[] =
   values.arm === 'all' ? ['keyword', 'vector', 'hybrid'] : [values.arm as RetrievalArm];
@@ -156,8 +161,8 @@ console.log(
     `${UNANSWERABLE.length} unanswerable\n` +
     // Named, because these numbers are the evidence for choosing a provider and a
     // recall figure with no model beside it cannot be compared to another one.
-    `Provider ${config.providerLabel} — embed ${config.embeddingModel} ` +
-    `(${config.embeddingDimensions}d), rerank ${config.rerankModel}, answer ${config.answerModel}.\n` +
+    `Provider ${models.providerLabel} — embed ${config.embeddingModel} ` +
+    `(${config.embeddingDimensions}d), rerank ${models.rerankModel}, answer ${models.answerModel}.\n` +
     // Stated, because recall@k means nothing without the size of the pool it was
     // measured over, and a reader comparing these figures to the product needs to
     // know they describe the same depth it reranks.

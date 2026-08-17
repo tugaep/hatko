@@ -2181,3 +2181,33 @@ red, put the fixes back. A test written after a fix that has never seen the bug 
 that proves nothing.
 
 Typecheck clean, 238 tests passing, format:check clean.
+
+### Step 11 review: the eval script named the wrong models (18 Aug 2026)
+
+A deep review of step 11 before starting step 12. The feature holds up — the provider is a
+base URL and not an abstraction, the panel probes before it promises, the vector width is
+enforced at open time, and the two rejected models are recorded rather than quietly
+omitted. One defect survived it.
+
+**The eval banner reported the environment's provider while calling the database's.**
+`packages/core/src/eval/run.ts` printed `config.providerLabel`, `config.rerankModel` and
+`config.answerModel` — the values `.env` supplies. Every call underneath it resolves
+through `activeModels(db)`, which the same step had just made overridable from the
+dashboard. So an admin who switched to Ollama on the settings page and then ran
+`npm run eval` got qwen's numbers under a heading saying `gpt-4o-mini`. That is the one
+output in this repository whose entire job is to attach a measurement to the configuration
+that produced it, and the `measured` strings in `MODEL_PRESETS` and the table in
+`docs/self-hosted.md` are both quoted from it.
+
+Found by reading, not by a test: every consumer of the model settings was listed with one
+grep, and this was the only one still reading `config`. Verified by copying the indexed
+database, writing the three override rows into `settings` by hand, and running the eval
+against the copy — the banner now reads `Provider localhost:11434 — … rerank qwen2.5:7b,
+answer qwen2.5:7b` where it previously read OpenAI. The embedding model deliberately stays
+on `config`, because it is env-only by design and cannot be overridden.
+
+No test added: the divergence it would assert is already pinned by "a stored model choice
+overrides the environment" in `settings.test.ts`, and a test that a console banner
+interpolates the variable next to it would be asserting the line it duplicates.
+
+Typecheck clean, 238 tests passing, format:check clean.
