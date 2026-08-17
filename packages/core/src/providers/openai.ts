@@ -159,3 +159,60 @@ export async function embedOne(text: string, signal?: AbortSignal): Promise<numb
   if (!vector) throw new ProviderError('Embedding request returned no vector.');
   return vector;
 }
+
+// --- chat -------------------------------------------------------------------
+
+const chatResponseSchema = z.object({
+  choices: z.array(z.object({ message: z.object({ content: z.string().nullable() }) })).min(1),
+});
+
+export interface ChatOptions {
+  model: string;
+  system: string;
+  user: string;
+  /** Zero by default: reranking and grounded answering should be reproducible. */
+  temperature?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * A chat completion constrained to return JSON.
+ *
+ * `response_format: json_object` makes the provider guarantee syntactically valid
+ * JSON, which removes a whole class of parse failure. It guarantees nothing about
+ * the *shape*, so every caller still validates with a schema — a reranker that
+ * silently returned the wrong field names would degrade retrieval invisibly.
+ */
+export async function chatJson(options: ChatOptions): Promise<unknown> {
+  const raw = await postJson(
+    '/chat/completions',
+    {
+      model: options.model,
+      temperature: options.temperature ?? 0,
+      max_tokens: options.maxTokens ?? 2000,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: options.system },
+        { role: 'user', content: options.user },
+      ],
+    },
+    options.signal,
+  );
+
+  const parsed = chatResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ProviderError(`Unexpected chat response shape: ${parsed.error.message}`);
+  }
+
+  const content = parsed.data.choices[0]?.message.content;
+  if (!content) throw new ProviderError('Chat completion returned no content.');
+
+  try {
+    return JSON.parse(content);
+  } catch (cause) {
+    throw new ProviderError(`Chat completion returned unparseable JSON: ${content.slice(0, 200)}`, {
+      cause,
+    });
+  }
+}

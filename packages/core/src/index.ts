@@ -10,4 +10,14 @@ export {
   type IngestProgress,
   type Embedder,
 } from './ingest/pipeline.ts';
-export { embed, embedOne, ProviderError } from './providers/openai.ts';
+export { embed, embedOne, chatJson, ProviderError } from './providers/openai.ts';
+export { hybridSearch, type HybridOptions, type RetrievalArm } from './retrieval/search.ts';
+export { extractTerms, toFtsQuery } from './retrieval/query.ts';
+export {
+  rerank,
+  hasGroundedSupport,
+  RELEVANCE,
+  MIN_USEFUL_GRADE,
+  type RerankOptions,
+} from './retrieval/rerank.ts';
+export { EVAL_QUESTIONS, ANSWERABLE, UNANSWERABLE, type EvalQuestion } from './eval/questions.ts';

@@ -214,16 +214,16 @@ These are the failure modes that have already happened or nearly happened here.
 
 Each step ends somewhere demonstrable.
 
-| #   | Step                                                 | Status               |
-| --- | ---------------------------------------------------- | -------------------- |
-| 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9` |
-| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**             |
-| 3   | Hybrid retrieval + rerank + eval script              |                      |
-| 4   | RAG answers, citations, abstain path                 |                      |
-| 5   | Better Auth, roles, server-side gating               |                      |
-| 6   | Chat page, then dashboard                            |                      |
-| 7   | MCP server                                           |                      |
-| 8   | README, AI usage log, history cleanup                |                      |
+| #   | Step                                                 | Status                           |
+| --- | ---------------------------------------------------- | -------------------------------- |
+| 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9`             |
+| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**                         |
+| 3   | Hybrid retrieval + rerank + eval script              | **done** (vector arm unmeasured) |
+| 4   | RAG answers, citations, abstain path                 |                                  |
+| 5   | Better Auth, roles, server-side gating               |                                  |
+| 6   | Chat page, then dashboard                            |                                  |
+| 7   | MCP server                                           |                                  |
+| 8   | README, AI usage log, history cleanup                |                                  |
 
 Step 3 lands **before** step 4 on purpose: retrieval is the top-graded axis, and
 tuning should be driven by measured recall@k, not by impressions from a chat box.
