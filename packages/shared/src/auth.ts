@@ -50,6 +50,71 @@ export const oauthClientSchema = z.object({
 });
 export type OauthClient = z.infer<typeof oauthClientSchema>;
 
+/**
+ * An account as the admin user list shows it.
+ *
+ * `disabled` is here and deliberately not on `sessionUserSchema`: a disabled account
+ * has no session to describe, because the session lookup refuses it. This shape
+ * describes accounts to an administrator, which is a different question.
+ *
+ * No password field exists anywhere in this contract, hashed or otherwise. There is
+ * nothing for one to leak into.
+ */
+export const adminUserSchema = z.object({
+  id: z.string(),
+  email: z.email(),
+  name: z.string(),
+  role: roleSchema,
+  disabled: z.boolean(),
+  createdAt: timestampSchema,
+  /** True for the account making the request, which the UI must not offer to break. */
+  isSelf: z.boolean(),
+});
+export type AdminUser = z.infer<typeof adminUserSchema>;
+
+export const listUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  /** Substring match against name and email. */
+  q: z.string().trim().max(200).optional(),
+});
+export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
+
+/**
+ * Creating an account.
+ *
+ * Called "add", not "invite", because there is no mail service in this system — the
+ * administrator sets an initial password and passes it on out of band. Naming it
+ * "invite" would imply an email that never arrives.
+ *
+ * The password minimum matches Better Auth's configured `minPasswordLength`. Stated
+ * here so the form can refuse a short one before a round trip, while the server still
+ * enforces it independently.
+ */
+export const createUserRequestSchema = z.object({
+  email: z.email(),
+  name: z.string().trim().min(1).max(120),
+  password: z.string().min(8).max(200),
+  role: roleSchema,
+});
+export type CreateUserRequest = z.infer<typeof createUserRequestSchema>;
+
+/**
+ * Changing an account. Both fields optional, at least one required.
+ *
+ * Split from creation because they are different authorities: creating an account
+ * needs a password, and changing a role must never touch one.
+ */
+export const updateUserRequestSchema = z
+  .object({
+    role: roleSchema.optional(),
+    disabled: z.boolean().optional(),
+  })
+  .refine((body) => body.role !== undefined || body.disabled !== undefined, {
+    message: 'Provide role, disabled, or both.',
+  });
+export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
+
 /** Permissions are derived from the role in one place so the API and the UI cannot disagree. */
 export const PERMISSIONS = {
   'search:run': ['user', 'admin'],
@@ -57,6 +122,7 @@ export const PERMISSIONS = {
   'dashboard:view': ['admin'],
   'documents:manage': ['admin'],
   'ingestion:trigger': ['admin'],
+  'users:manage': ['admin'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

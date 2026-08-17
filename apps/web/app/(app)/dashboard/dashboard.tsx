@@ -15,6 +15,7 @@ import {
 import { ApiKeyPanel } from './api-key-panel.tsx';
 import { DocumentsPanel } from './documents-panel.tsx';
 import { IngestionPanel } from './ingestion-panel.tsx';
+import { UsersPanel } from './users-panel.tsx';
 
 /**
  * The admin surface: what is indexed, whether the last ingest was clean, and what people
@@ -72,6 +73,8 @@ export function Dashboard() {
           >
             <SearchStatsPanel search={stats.data?.search ?? null} />
           </Group>
+
+          <UsersPanel />
         </>
       )}
     </div>

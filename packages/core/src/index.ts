@@ -44,3 +44,12 @@ export {
   type SessionUser,
 } from './auth/index.ts';
 export { upsertAccount, demoAccounts, type DemoAccount } from './auth/accounts.ts';
+export {
+  listUsers,
+  getUser,
+  updateUser,
+  UserManagementError,
+  type ListUsersOptions,
+  type ListUsersResult,
+  type UpdateUserChanges,
+} from './auth/users.ts';

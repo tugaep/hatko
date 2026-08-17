@@ -4,6 +4,7 @@ import {
   ConfigurationError,
   IngestionInProgressError,
   ProviderError,
+  UserManagementError,
 } from '@hatko/core';
 import type { ApiError } from '@hatko/shared';
 import type { Context } from 'hono';
@@ -113,6 +114,17 @@ export function toErrorResponse(error: unknown, c: Context): Response {
   }
 
   if (error instanceof IngestionInProgressError) {
+    return c.json(envelope('conflict', error.message), 409);
+  }
+
+  /**
+   * A refused account change: editing your own role, or removing the last
+   * administrator. The message is written for the administrator reading it and names
+   * what to do instead, so it is forwarded. 409 rather than 400 because the request was
+   * well formed — it conflicts with the state of the system, which is a different thing
+   * and a different fix.
+   */
+  if (error instanceof UserManagementError) {
     return c.json(envelope('conflict', error.message), 409);
   }
 

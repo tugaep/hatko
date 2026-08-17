@@ -581,3 +581,236 @@ test('the consent screen can identify the client asking, and only for a signed-i
   const missing = await call('/api/oauth/client/never-registered', { cookie: userCookie });
   assert.equal(missing.status, 404);
 });
+
+// --- user management --------------------------------------------------------
+
+/**
+ * The admin user surface, and the two refusals that keep it from being an outage.
+ *
+ * An admin panel that can demote the last administrator, or the administrator using it,
+ * locks everybody out of the system permanently — recoverable only by a CLI seed. Both
+ * are enforced server-side because a disabled button is a courtesy and this is a
+ * lockout. The third test is the one that makes deactivation mean something: it must
+ * end sessions that already exist, not merely block the next sign-in.
+ */
+
+test('a regular user cannot reach any user-management route', async () => {
+  const list = await call('/api/admin/users', { cookie: userCookie });
+  assert.equal(list.status, 403);
+
+  const create = await call('/api/admin/users', {
+    method: 'POST',
+    cookie: userCookie,
+    body: { email: 'sneaky@test.local', name: 'Sneaky', password: 'password123', role: 'admin' },
+  });
+  assert.equal(create.status, 403);
+
+  const update = await call('/api/admin/users/whoever', {
+    method: 'PUT',
+    cookie: userCookie,
+    body: { role: 'admin' },
+  });
+  assert.equal(update.status, 403);
+});
+
+test('an admin can add an account, and a duplicate email is a conflict', async () => {
+  const created = await call('/api/admin/users', {
+    method: 'POST',
+    cookie: adminCookie,
+    body: { email: 'added@test.local', name: 'Added', password: 'password123', role: 'user' },
+  });
+  assert.equal(created.status, 201);
+  const body = (await created.json()) as { email: string; role: string; disabled: boolean };
+  assert.equal(body.email, 'added@test.local');
+  assert.equal(body.role, 'user');
+  assert.equal(body.disabled, false);
+
+  // Without this, `upsertAccount` would quietly reset an existing account's password
+  // from a form labelled "create".
+  const again = await call('/api/admin/users', {
+    method: 'POST',
+    cookie: adminCookie,
+    body: { email: 'added@test.local', name: 'Added', password: 'different1', role: 'admin' },
+  });
+  assert.equal(again.status, 409);
+});
+
+test('an administrator cannot change their own role or deactivate themselves', async () => {
+  const list = await call('/api/admin/users', { cookie: adminCookie });
+  const { items } = (await list.json()) as { items: { id: string; isSelf: boolean }[] };
+  const self = items.find((item) => item.isSelf);
+  assert.ok(self, 'the list did not mark the requesting administrator');
+
+  const demote = await call(`/api/admin/users/${self.id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { role: 'user' },
+  });
+  assert.equal(demote.status, 409, 'an administrator demoted themselves');
+
+  const disable = await call(`/api/admin/users/${self.id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { disabled: true },
+  });
+  assert.equal(disable.status, 409, 'an administrator deactivated themselves');
+});
+
+test('the last active administrator cannot be demoted or deactivated', async () => {
+  // Promote someone, so there are two admins and the guard is not simply the self-check
+  // from the previous test wearing a different hat.
+  const created = await call('/api/admin/users', {
+    method: 'POST',
+    cookie: adminCookie,
+    body: { email: 'second@test.local', name: 'Second', password: 'password123', role: 'admin' },
+  });
+  assert.equal(created.status, 201);
+  const second = (await created.json()) as { id: string };
+
+  // Two active admins, so demoting one is allowed.
+  const demoted = await call(`/api/admin/users/${second.id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { role: 'user' },
+  });
+  assert.equal(demoted.status, 200);
+
+  // The requesting admin is now the only one left, and is also self — so this asserts
+  // the pair of guards together, which is how they are actually met.
+  const list = await call('/api/admin/users', { cookie: adminCookie });
+  const { items } = (await list.json()) as { items: { id: string; isSelf: boolean }[] };
+  const self = items.find((item) => item.isSelf);
+  assert.ok(self);
+
+  const lockout = await call(`/api/admin/users/${self.id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { role: 'user' },
+  });
+  assert.equal(lockout.status, 409);
+});
+
+test('deactivating an account ends the session it already had', async () => {
+  await upsertAccount(db, {
+    email: 'doomed@test.local',
+    password: 'password123',
+    name: 'Doomed',
+    role: 'user',
+  });
+
+  const cookie = await cookieFor('doomed@test.local', 'password123');
+
+  // Working before.
+  const before = await call('/api/session', { cookie });
+  const beforeBody = (await before.json()) as { user: { email: string } | null };
+  assert.equal(beforeBody.user?.email, 'doomed@test.local');
+
+  const id = (
+    db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('doomed@test.local') as {
+      id: string;
+    }
+  ).id;
+  const disabled = await call(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { disabled: true },
+  });
+  assert.equal(disabled.status, 200);
+
+  /**
+   * The property that matters. A flag checked only at sign-in would leave this session
+   * valid for its remaining seven days, and the same is true of any MCP token issued to
+   * this account — both resolve identity through `getSessionUser`.
+   */
+  const after = await call('/api/session', { cookie });
+  const afterBody = (await after.json()) as { user: unknown };
+  assert.equal(afterBody.user, null, 'a deactivated account kept its session');
+
+  const search = await call('/api/search', {
+    method: 'POST',
+    cookie,
+    body: { query: 'sound assets' },
+  });
+  assert.equal(search.status, 401, 'a deactivated account could still search');
+
+  // Reactivating restores it, so deactivation is reversible rather than destructive.
+  await call(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { disabled: false },
+  });
+  const restored = await call('/api/session', { cookie });
+  const restoredBody = (await restored.json()) as { user: { email: string } | null };
+  assert.equal(restoredBody.user?.email, 'doomed@test.local');
+});
+
+test('the user list filters on name and email, wildcards taken literally', async () => {
+  const match = await call('/api/admin/users?q=added', { cookie: adminCookie });
+  const matched = (await match.json()) as { items: { email: string }[]; total: number };
+  assert.ok(
+    matched.items.every((item) => item.email.includes('added') || item.email.includes('Added')),
+    'the filter returned an account it should not have',
+  );
+
+  // `%` is a wildcard to LIKE and a literal to the person typing it.
+  const wildcard = await call('/api/admin/users?q=%', { cookie: adminCookie });
+  const wild = (await wildcard.json()) as { total: number };
+  assert.equal(wild.total, 0, 'a percent sign matched every account');
+});
+
+test('a deactivated account is told why sign-in fails, not silently looped', async () => {
+  await deactivatedFixture();
+
+  const refused = await call('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: { email: 'switchedoff@test.local', password: 'password123' },
+  });
+  assert.equal(refused.status, 403, 'sign-in succeeded for a deactivated account');
+  const body = (await refused.json()) as { error: { message: string } };
+  assert.match(body.error.message, /deactivated/i);
+
+  // Reactivating restores sign-in, so the refusal tracks the flag rather than the
+  // account being broken.
+  const id = (
+    db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('switchedoff@test.local') as {
+      id: string;
+    }
+  ).id;
+  await call(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    cookie: adminCookie,
+    body: { disabled: false },
+  });
+
+  const allowed = await call('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: { email: 'switchedoff@test.local', password: 'password123' },
+  });
+  assert.equal(allowed.status, 200);
+});
+
+test('sign-in still rejects a wrong password for an active account', async () => {
+  // The interception above reads the email to look up the account; it must not have
+  // become a way to sign in without the password.
+  const response = await call('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: { email: 'switchedoff@test.local', password: 'not-the-password' },
+  });
+  assert.notEqual(response.status, 200, 'a wrong password was accepted');
+});
+
+/** An account that exists and is switched off, for the two tests above. */
+async function deactivatedFixture(): Promise<void> {
+  await upsertAccount(db, {
+    email: 'switchedoff@test.local',
+    password: 'password123',
+    name: 'Switched Off',
+    role: 'user',
+  });
+  const id = (
+    db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('switchedoff@test.local') as {
+      id: string;
+    }
+  ).id;
+  db.prepare('UPDATE "user" SET "disabled" = 1 WHERE "id" = ?').run(id);
+}

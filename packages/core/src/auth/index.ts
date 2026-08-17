@@ -56,6 +56,18 @@ function buildAuth() {
            */
           input: false,
         },
+
+        /**
+         * Deactivation, declared so Better Auth selects it with the session user —
+         * otherwise `getSessionUser` could not see it and the check there would read
+         * `undefined` for every account. `input: false` for the same reason as `role`:
+         * nothing a client sends may change it.
+         */
+        disabled: {
+          type: 'boolean',
+          defaultValue: false,
+          input: false,
+        },
       },
     },
 
@@ -192,7 +204,21 @@ interface RawUser {
   email: string;
   name: string;
   role?: unknown;
+  disabled?: unknown;
   createdAt: Date | string;
+}
+
+/**
+ * Whether an account has been deactivated by an administrator.
+ *
+ * Loose about the representation on purpose: this value arrives as an integer from raw
+ * SQL, as a boolean through Better Auth's field mapping, and as `undefined` from any
+ * row read before migration 008. Every one of those must resolve, and the only unsafe
+ * mistake would be reading a disabled account as active — so anything that is not
+ * recognisably falsy counts as disabled.
+ */
+function isDisabled(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== false && value !== 0;
 }
 
 /**
@@ -223,7 +249,24 @@ function toSessionUser(raw: RawUser): SessionUser {
 export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
   const session = await getAuth().api.getSession({ headers });
   if (!session?.user) return null;
-  return toSessionUser(session.user as RawUser);
+
+  const raw = session.user as RawUser;
+
+  /**
+   * A deactivated account has no identity, even holding a valid session.
+   *
+   * This is the line that makes deactivation a revocation rather than a note. Checking
+   * only at sign-in would leave every session and OAuth token issued beforehand
+   * working — for up to seven days — which is not what an administrator pressing
+   * "Disable" is asking for. Because both the web app and the MCP server resolve
+   * identity through here, one check covers both surfaces.
+   *
+   * Returning null rather than throwing keeps it indistinguishable from being signed
+   * out, which is also the honest description: there is no session to speak of.
+   */
+  if (isDisabled(raw.disabled)) return null;
+
+  return toSessionUser(raw);
 }
 
 /** Thrown when a request lacks a session, or has one without the required role. */
@@ -284,10 +327,18 @@ function authorize(user: SessionUser, permission: Permission): SessionUser {
  */
 function getUserById(id: string): SessionUser | null {
   const row = getDb()
-    .prepare('SELECT "id", "email", "name", "role", "createdAt" FROM "user" WHERE "id" = ?')
+    .prepare(
+      'SELECT "id", "email", "name", "role", "disabled", "createdAt" FROM "user" WHERE "id" = ?',
+    )
     .get(id) as RawUser | undefined;
 
-  return row ? toSessionUser(row) : null;
+  if (!row) return null;
+  // The OAuth path does not go through `getSessionUser`, so the deactivation check has
+  // to be repeated here or an MCP client would keep working after its owner was
+  // disabled — the exact gap this column exists to close.
+  if (isDisabled(row.disabled)) return null;
+
+  return toSessionUser(row);
 }
 
 /**

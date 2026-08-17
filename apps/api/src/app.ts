@@ -69,6 +69,55 @@ export function createApp() {
   });
 
   /**
+   * Refuse sign-in for a deactivated account, and say why.
+   *
+   * Not a security control — `getSessionUser` already refuses a disabled account, so a
+   * session issued here would be inert. It is an error-handling one. Without it,
+   * sign-in answered 200, set a cookie, and then every request behaved as signed out:
+   * a loop with no explanation anywhere in it, which reads as a broken application
+   * rather than a closed account.
+   *
+   * The email is read only to look up the account. It is not trusted for anything else,
+   * and the password is never inspected here — Better Auth still performs the actual
+   * authentication on the forwarded request, so this cannot become a way to probe
+   * credentials. It does confirm that an address belongs to a deactivated account,
+   * which is a deliberate trade: the alternative is the silent loop above, and someone
+   * who was told their account is deactivated can act on that.
+   */
+  app.post('/api/auth/sign-in/email', async (c) => {
+    const body = await c.req.raw.clone().text();
+
+    const email = ((): string | null => {
+      try {
+        const parsed: unknown = JSON.parse(body);
+        const value = (parsed as { email?: unknown } | null)?.email;
+        return typeof value === 'string' ? value : null;
+      } catch {
+        // Malformed JSON is Better Auth's to reject, with its own message.
+        return null;
+      }
+    })();
+
+    if (email) {
+      const row = getDb().prepare('SELECT "disabled" FROM "user" WHERE "email" = ?').get(email) as
+        { disabled: number } | undefined;
+
+      if (row && row.disabled !== 0) {
+        throw new HttpError(
+          'forbidden',
+          'This account has been deactivated. Ask an administrator to restore it.',
+        );
+      }
+    }
+
+    // Forwarded with the body already read, since a Request body can only be consumed
+    // once and Better Auth needs it intact.
+    return getAuth().handler(
+      new Request(c.req.url, { method: 'POST', headers: c.req.raw.headers, body }),
+    );
+  });
+
+  /**
    * Force a consent screen on every OAuth authorization, and register this before the
    * Better Auth mount below so it runs first.
    *

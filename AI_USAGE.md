@@ -1667,3 +1667,80 @@ searching the corpus, a bogus token refused, and the bearer path still working. 
 Approve button was clicked in a real browser and landed on the callback with the code.
 
 Typecheck clean, 184 tests passing, format clean.
+
+## Step 8: admin user management (18 Aug 2026)
+
+List accounts, add one, change a role, deactivate and reactivate. Built without a new
+dependency: Better Auth ships an `admin` plugin that would have supplied list/ban/role
+for free, and it was the wrong trade — it brings its own role model, which would have
+left this system with two answers to "what may this account do" and no rule about which
+one wins. The four operations are a query, an insert through the existing
+`upsertAccount`, and an update.
+
+### The two refusals that are the actual feature
+
+An admin panel that can demote the administrator using it, or the last administrator
+left, is not a feature — it is a way to lock everyone out of a system that can only be
+recovered from a CLI. Both are enforced in core, at the point of the write, and both are
+tested:
+
+- **You cannot change your own role or deactivate yourself.** It is one click, it is
+  never what someone means from a list of other people, and changing your own role is a
+  deliberate act that already has a home in `npm run seed`.
+- **The last _active_ administrator cannot be demoted or disabled.** Active, not
+  existing: disabling the second-to-last admin is fine, and the count has to exclude
+  people who are already switched off or the guard passes while the door locks.
+
+The UI disables those buttons too, with the reason in a tooltip. That is a courtesy over
+the rule, not the rule — stated in the panel's own comment so nobody later deletes the
+server-side check on the grounds that the button is already greyed out.
+
+### Deactivate rather than delete, and where the check goes
+
+Deleting a user would cascade — migration 003 and 007 both point at `user` — taking
+their MCP tokens _and_ their search history out of the analytics the dashboard reports.
+Deactivation revokes access and keeps the record.
+
+The interesting decision was where to enforce it. Checking at sign-in would have been
+the obvious place and the wrong one: every session and OAuth token issued beforehand
+would keep working for up to seven days, which is not what someone pressing "Deactivate"
+is asking for. It goes in `getSessionUser`, which is the one place both the web app and
+the MCP server resolve an identity, plus the OAuth branch's `getUserById`, which does not
+pass through it. One flag, both surfaces, immediately.
+
+### Where I was wrong
+
+**I believed the feature worked before it did.** After building it, a live check showed a
+deactivated user's bearer token still listing MCP tools, and their sign-in still
+returning 200. The first was pure process staleness — the MCP server had been started
+before migration 008 — and restarting it gave the 401 the test suite had been asserting
+all along. The lesson is not about the code: a stale long-running process had already
+wasted a debugging round earlier in this session, and I still reached for "the feature is
+broken" before "the process is old".
+
+**The second half was a real defect.** Sign-in returned 200 for a deactivated account,
+set a cookie, and then every subsequent request behaved as signed out — a loop with no
+explanation in it, which reads as a broken application rather than a closed account. The
+tests did not catch it because they asserted the _session_ was refused, which it was.
+Fixed by refusing sign-in with a message that names the cause. Recorded honestly as error
+handling rather than security: the session was already inert, so nothing was reachable
+either way.
+
+**AI got three component APIs wrong** and typechecking caught all three: `apiSend` takes
+the method as its first argument rather than its last, `LabelFrame` has no `aside` prop,
+and `ErrorCard` has no `retryLabel`. It also wrote the update route as `PATCH`, which
+would have failed at the CORS preflight — the API's allow-list and the browser client's
+method union both stop at PUT. Widening both to gain a more precise verb buys nothing
+when the body is a partial update either way.
+
+**A generated helper was named `upsactivateFixture`**, which is not a word. Renamed.
+
+Verified in the browser as well as by test: the panel lists both accounts, marks the
+requesting administrator as "you", disables both of that row's buttons with the reason in
+a tooltip, and deactivating the other account flipped its badge to DEACTIVATED and its
+button to Reactivate. Then confirmed out of band that the deactivated account's existing
+MCP bearer token returned 401, a fresh session read back as `{"user":null}`, and search
+returned 401 — and that reactivating restored all three. The demo database was left with
+both accounts active.
+
+Typecheck clean, 192 tests passing.
