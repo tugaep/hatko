@@ -234,9 +234,9 @@ Stated plainly rather than left to be discovered.
 - **The vector arm's contribution is unproven on unseen queries.** It ties
   keyword-only on this eval set, where questions share vocabulary with their
   answers. Its value is a hypothesis about the private set.
-- **Authorization is enforced but not yet reachable over HTTP.** The permission
-  checks, roles and session handling are in place and tested; the API routes that
-  call them are the next commit. Until then nothing is actually exposed.
+- **No rate limiting on the paid endpoints.** Search and answer both call the
+  model provider, and an authenticated user can call them as fast as they like.
+  Not required by the brief, and not built.
 - **The rerank grade threshold is calibrated on 12 questions.** Separation is
   clean today (answerable 1.00, unanswerable ≤0.33, threshold 0.67) but that is a
   small sample.

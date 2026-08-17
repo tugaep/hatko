@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"packages/**/*.test.ts\"",
+    "test": "node --test \"packages/**/*.test.ts\" \"apps/api/src/**/*.test.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:migrate": "npm run migrate --workspace @sorrel/core",
@@ -22,7 +22,9 @@
     "eval": "npm run eval --workspace @sorrel/core",
     "ask": "npm run ask --workspace @sorrel/core --",
     "seed": "npm run seed --workspace @sorrel/core",
-    "setup": "npm run db:migrate && npm run seed && npm run ingest"
+    "setup": "npm run db:migrate && npm run seed && npm run ingest",
+    "dev:api": "npm run dev --workspace @sorrel/api",
+    "start:api": "npm run start --workspace @sorrel/api"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -1,9 +1,13 @@
 import {
+  chunkSchema,
   documentSchema,
   ingestionRunSchema,
+  type Chunk,
   type Document,
+  type DocumentStatus,
   type IngestionRun,
   type IngestionTrigger,
+  type SearchSource,
 } from '@sorrel/shared';
 import { toVectorBlob, type Db } from './client.ts';
 
@@ -246,4 +250,120 @@ export function listIngestionRuns(db: Db, limit = 20): IngestionRun[] {
   return (
     db.prepare('SELECT * FROM ingestion_runs ORDER BY id DESC LIMIT ?').all(limit) as Row[]
   ).map(toIngestionRun);
+}
+
+// --- search analytics -------------------------------------------------------
+
+export interface SearchQueryRecord {
+  userId: string | null;
+  source: SearchSource;
+  query: string;
+  resultCount: number;
+  topScore: number | null;
+  abstained: boolean;
+  latencyMs: number;
+}
+
+/**
+ * Record a query for the dashboard.
+ *
+ * Never throws. Analytics are a reporting concern, and a failure to write one row
+ * must not turn a successful search into an error for the user — losing a metric
+ * is strictly better than losing the answer.
+ */
+export function recordSearchQuery(db: Db, record: SearchQueryRecord): void {
+  try {
+    db.prepare(
+      `INSERT INTO search_queries
+         (user_id, source, query, result_count, top_score, abstained, latency_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      record.userId,
+      record.source,
+      record.query.slice(0, 500),
+      record.resultCount,
+      record.topScore,
+      record.abstained ? 1 : 0,
+      record.latencyMs,
+    );
+  } catch {
+    // Deliberately swallowed. See above.
+  }
+}
+
+// --- document listing -------------------------------------------------------
+
+export interface DocumentFilter {
+  status?: DocumentStatus;
+  category?: string;
+  /** Substring match against title and source path. */
+  q?: string;
+  limit: number;
+  offset: number;
+}
+
+export function listDocumentsFiltered(
+  db: Db,
+  filter: DocumentFilter,
+): { items: Document[]; total: number } {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filter.status) {
+    where.push('status = ?');
+    params.push(filter.status);
+  }
+  if (filter.category) {
+    where.push('category = ?');
+    params.push(filter.category);
+  }
+  if (filter.q) {
+    // Parameterised LIKE. The wildcards are ours; the user's text is bound, so it
+    // cannot alter the statement.
+    where.push('(lower(title) LIKE ? OR lower(source_path) LIKE ?)');
+    const needle = `%${filter.q.toLowerCase()}%`;
+    params.push(needle, needle);
+  }
+
+  const clause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const total = Number(
+    (
+      db.prepare(`SELECT count(*) n FROM documents ${clause}`).get(...(params as never[])) as {
+        n: number;
+      }
+    ).n,
+  );
+
+  const rows = db
+    .prepare(`SELECT * FROM documents ${clause} ORDER BY source_path LIMIT ? OFFSET ?`)
+    .all(...(params as never[]), filter.limit, filter.offset) as Row[];
+
+  return { items: rows.map(toDocument), total };
+}
+
+export function getDocumentById(db: Db, id: number): Document | null {
+  const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as Row | undefined;
+  return row ? toDocument(row) : null;
+}
+
+/** A document's passages, in order. Used by the dashboard's document detail view. */
+export function getChunksForDocument(db: Db, documentId: number): Chunk[] {
+  return (
+    db
+      .prepare(
+        `SELECT id, document_id, ordinal, heading, content, token_count
+           FROM chunks WHERE document_id = ? ORDER BY ordinal`,
+      )
+      .all(documentId) as Row[]
+  ).map((row) =>
+    chunkSchema.parse({
+      id: Number(row.id),
+      documentId: Number(row.document_id),
+      ordinal: Number(row.ordinal),
+      heading: row.heading ?? null,
+      content: row.content,
+      tokenCount: Number(row.token_count),
+    }),
+  );
 }

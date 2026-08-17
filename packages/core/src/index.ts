@@ -2,6 +2,7 @@ export { config, REPO_ROOT, type Config } from './config.ts';
 export * from './settings.ts';
 export * from './db/index.ts';
 export * from './db/repository.ts';
+export * from './db/stats.ts';
 export * from './ingest/corpus.ts';
 export * from './ingest/chunk.ts';
 export {
@@ -33,6 +34,9 @@ export {
   requirePermission,
   requireUser,
   AuthorizationError,
+  type Permission,
+  type Role,
+  type SessionUser,
 } from './auth/index.ts';
 export { upsertAccount, demoAccounts, type DemoAccount } from './auth/accounts.ts';
 export { nodeSqliteDialect } from './db/kysely-dialect.ts';

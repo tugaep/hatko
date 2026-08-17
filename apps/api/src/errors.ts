@@ -1,0 +1,100 @@
+import { z } from 'zod';
+import { AuthorizationError, ProviderError } from '@sorrel/core';
+import type { ApiError } from '@sorrel/shared';
+import type { Context } from 'hono';
+
+/**
+ * One error shape for the whole API.
+ *
+ * Every non-2xx response uses the `apiErrorSchema` envelope, so the client has a
+ * single shape to handle rather than guessing per endpoint. Two rules matter here:
+ * the message must be useful to whoever reads it, and it must never leak
+ * internals — a stack trace or a SQL fragment in a response body is an
+ * information disclosure, not a debugging aid.
+ */
+
+type ErrorCode = ApiError['error']['code'];
+
+const STATUS_BY_CODE: Record<ErrorCode, number> = {
+  bad_request: 400,
+  unauthorized: 401,
+  forbidden: 403,
+  not_found: 404,
+  rate_limited: 429,
+  upstream_failed: 502,
+  internal: 500,
+};
+
+export class HttpError extends Error {
+  readonly code: ErrorCode;
+  readonly details: Record<string, string> | undefined;
+
+  constructor(code: ErrorCode, message: string, details?: Record<string, string>) {
+    super(message);
+    this.name = 'HttpError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export const notFound = (message = 'Not found.') => new HttpError('not_found', message);
+
+function envelope(code: ErrorCode, message: string, details?: Record<string, string>): ApiError {
+  return { error: { code, message, ...(details ? { details } : {}) } };
+}
+
+/**
+ * Translate a thrown value into a response.
+ *
+ * Ordered from most specific to least. The final branch is the one that matters
+ * for security: anything unrecognised becomes a generic 500 with the detail logged
+ * server-side and withheld from the client, because an unexpected error is exactly
+ * the case where the message is most likely to contain a file path, a query, or a
+ * credential.
+ */
+export function toErrorResponse(error: unknown, c: Context): Response {
+  if (error instanceof HttpError) {
+    return c.json(
+      envelope(error.code, error.message, error.details),
+      STATUS_BY_CODE[error.code] as 400,
+    );
+  }
+
+  if (error instanceof AuthorizationError) {
+    return c.json(envelope(error.code, error.message), error.status);
+  }
+
+  if (error instanceof z.ZodError) {
+    // Field-level detail is safe and useful: it describes the request the client
+    // just sent, not the server's internals.
+    const details: Record<string, string> = {};
+    for (const issue of error.issues) {
+      details[issue.path.join('.') || '_'] = issue.message;
+    }
+    return c.json(envelope('bad_request', 'The request could not be validated.', details), 400);
+  }
+
+  if (error instanceof ProviderError) {
+    // The model provider failed. Distinct from an internal fault, because the fix
+    // is different: wait and retry, or check the API key.
+    return c.json(
+      envelope(
+        'upstream_failed',
+        'The model provider could not be reached. Try again in a moment.',
+      ),
+      502,
+    );
+  }
+
+  // A missing or undecryptable API key surfaces as a plain Error from core, and
+  // its message is written to be actionable, so it is passed through.
+  if (error instanceof Error && /API key/i.test(error.message)) {
+    return c.json(envelope('bad_request', error.message), 400);
+  }
+
+  console.error('[api] unhandled error:', error);
+  return c.json(
+    envelope('internal', 'Something went wrong on our side. The error has been logged.'),
+    500,
+  );
+}
