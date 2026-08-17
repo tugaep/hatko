@@ -159,3 +159,15 @@ export function hasModel(available: readonly string[], wanted: string): boolean 
   const target = wanted.includes(':') ? wanted : `${wanted}:latest`;
   return available.some((id) => id === wanted || id === target);
 }
+
+/**
+ * Every distinct model a preset needs the server to have.
+ *
+ * Exported rather than assembled in the panel, because assembling it there is how the
+ * embedding model got left out: the panel cannot *set* that model, and "cannot set it"
+ * quietly became "need not check it" — so an operator missing `nomic-embed-text` saw no
+ * install prompt and met the failure at `npm run ingest`. One list, one place, one test.
+ */
+export function presetModels(preset: ModelPreset): string[] {
+  return [...new Set([preset.answerModel, preset.rerankModel, preset.embeddingModel])];
+}

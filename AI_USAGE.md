@@ -2148,3 +2148,36 @@ a literal, vectors from two models are not comparable, and a form field that qui
 search is worse than no field. It prints the `.env` lines and the rebuild command instead.
 The migration refuses to open a database whose stored width disagrees with the configured
 one, which is the check that turns a silent retrieval failure into a startup error.
+
+### Step 11 follow-up: two bugs the tests did not catch (18 Aug 2026)
+
+Asked to fix the bugs found during step 11, re-reading the new code turned up two more.
+Both had passing tests around them, and both were the same class of mistake: a check
+asking a _nearby_ question rather than the actual one.
+
+**The API-key panel called a working installation broken.** `getApiKeyStatus` decided
+whether a key was needed from `config.isOpenAI` — the provider named in the environment.
+But an admin can now switch to a local server _from the dashboard_, which is stored in the
+database and leaves that flag true. So an operator running entirely on Ollama with no
+`OPENAI_API_KEY` saw "not configured — embedding and answer generation will fail" beside a
+system answering questions perfectly well. This is exactly the false alarm the
+`self-hosted` state had been added to prevent, reintroduced one function away from itself.
+Fixed by resolving through `activeModels`, which is the only thing that knows which
+provider is in force. `getApiKeyStatus` also gained the `envFallback` parameter that
+`resolveApiKey` already had, for the reason that file already documents: otherwise the
+test asserts something about the developer's machine.
+
+**The install prompt ignored the embedding model.** The panel checked whether the selected
+preset's answer and rerank models were installed, and not its embedding model — because
+the panel cannot _set_ the embedding model, and "cannot set it" quietly became "need not
+check it". An operator with `qwen2.5:7b` pulled and `nomic-embed-text` missing therefore
+got a clean panel, followed the `.env` instructions, and met the failure at
+`npm run ingest`. The list is now `presetModels` in `@hatko/shared`, where it can be
+tested; assembling it inline in the component is what let the omission through.
+
+Both fixes carry a regression test, and both tests were **verified to fail against the
+old logic** before being kept — restored the two broken lines, watched the two tests go
+red, put the fixes back. A test written after a fix that has never seen the bug is a test
+that proves nothing.
+
+Typecheck clean, 238 tests passing, format:check clean.

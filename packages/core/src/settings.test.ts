@@ -259,3 +259,30 @@ test('the plaintext reader refuses to return an encrypted secret', () => {
   // would look like a rendering glitch rather than a leak.
   assert.equal(getSetting(ctx.db, SETTING_KEYS.openaiApiKey), null);
 });
+
+test('a provider chosen from the dashboard is reported as self-hosted, not as a missing key', () => {
+  using ctx = tempDb();
+
+  // The situation an operator running entirely locally is in: no OPENAI_API_KEY anywhere.
+  assert.equal(getApiKeyStatus(ctx.db, null).source, 'unset');
+
+  setSetting(ctx.db, SETTING_KEYS.modelBaseUrl, 'http://localhost:11434/v1', 'user-1');
+
+  // This read `config.isOpenAI` — the *environment's* provider — so switching to a local
+  // server from the dashboard left it true, and a working keyless installation reported
+  // "not configured", warning that every answer would fail while it answered fine.
+  const status = getApiKeyStatus(ctx.db, null);
+  assert.equal(status.source, 'self-hosted');
+  assert.equal(status.configured, true, 'a keyless local install is not a broken one');
+  assert.equal(status.hint, 'localhost:11434', 'and it names which server is in use');
+});
+
+test('a real key still wins over the self-hosted state, because it is still being sent', () => {
+  using ctx = tempDb();
+  setSetting(ctx.db, SETTING_KEYS.modelBaseUrl, 'http://localhost:11434/v1');
+  setSecret(ctx.db, SETTING_KEYS.openaiApiKey, REAL_KEY, 'user-1');
+
+  // vLLM and friends can be started with --api-key, so a stored key against a local
+  // server is a real configuration and the panel must name it rather than the address.
+  assert.equal(getApiKeyStatus(ctx.db, null).source, 'database');
+});

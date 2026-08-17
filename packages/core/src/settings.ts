@@ -181,7 +181,10 @@ export function getSetting(db: Db, key: SettingKey): string | null {
  * reason for a browser to receive it, and an endpoint that returns it is one
  * XSS or one over-broad role check away from leaking a live credential.
  */
-export function getApiKeyStatus(db: Db = getDb()): SecretStatus {
+export function getApiKeyStatus(
+  db: Db = getDb(),
+  envFallback: string | null = config.openaiApiKey ?? null,
+): SecretStatus {
   const row = readRow(db, SETTING_KEYS.openaiApiKey);
   if (row) {
     // Decrypting here answers the question actually being asked — is a usable key
@@ -212,11 +215,11 @@ export function getApiKeyStatus(db: Db = getDb()): SecretStatus {
       updatedBy: row.updated_by,
     };
   }
-  if (config.openaiApiKey) {
+  if (envFallback) {
     return {
       configured: true,
       source: 'environment',
-      hint: hintOf(config.openaiApiKey),
+      hint: hintOf(envFallback),
       updatedAt: null,
       updatedBy: null,
     };
@@ -227,11 +230,19 @@ export function getApiKeyStatus(db: Db = getDb()): SecretStatus {
   // installation must not be reported as broken — pointed at a local server with no
   // key, the panel used to show "not configured, embedding and answer generation will
   // fail" beside a system answering questions perfectly well.
-  if (!config.isOpenAI) {
+  //
+  // Resolved from `activeModels`, not from `config`. Reading the environment's provider
+  // here reintroduced exactly the false alarm this branch exists to prevent: an admin
+  // who switched to a local server *from the dashboard* left `config.isOpenAI` true, so
+  // a working keyless installation reported "not configured" and warned that every
+  // answer would fail. The question is which provider is in force, and only one function
+  // knows that.
+  const provider = activeModels(db);
+  if (!provider.isOpenAI) {
     return {
       configured: true,
       source: 'self-hosted',
-      hint: config.providerLabel,
+      hint: provider.providerLabel,
       updatedAt: null,
       updatedBy: null,
     };

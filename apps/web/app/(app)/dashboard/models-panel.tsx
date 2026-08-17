@@ -5,6 +5,7 @@ import {
   MODEL_PRESETS,
   hasModel,
   modelSettingsSchema,
+  presetModels,
   type ModelPreset,
   type ModelSettings,
 } from '@hatko/shared';
@@ -130,14 +131,19 @@ export function ModelsPanel() {
    */
   const probeMatches = selected && availability.probedBaseUrl === selected.baseUrl;
 
-  // Only meaningful for a local provider: a hosted one installs nothing, and its model
-  // list is long and beside the point.
+  /**
+   * Only meaningful for a local provider: a hosted one installs nothing, and its model
+   * list is long and beside the point.
+   *
+   * `presetModels` includes the embedding model even though this panel cannot set it.
+   * That list was assembled here at first and left it out — "cannot set it" quietly
+   * became "need not check it" — so an operator missing `nomic-embed-text` saw a clean
+   * panel, followed the `.env` instructions below, and met the failure at
+   * `npm run ingest` instead.
+   */
   const missing =
     selected?.install && probeMatches && availability.reachable
-      ? [selected.answerModel, selected.rerankModel].filter(
-          (model, index, all) =>
-            all.indexOf(model) === index && !hasModel(availability.models, model),
-        )
+      ? presetModels(selected).filter((model) => !hasModel(availability.models, model))
       : [];
 
   /**
