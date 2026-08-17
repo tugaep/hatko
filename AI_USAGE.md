@@ -1263,28 +1263,71 @@ only one with no next action, while the dashboard already kept the corpus-gap li
 the loop. It now says the question was recorded. Stated rather than linked, because a regular
 user cannot open that page.
 
-### Not done, and why
+### Not done at first, then done
 
-**Sorting the documents table.** Raised as a power-user red flag. `listDocumentsFiltered` has
-no ordering parameter, so this is an API and query change rather than a frontend one, and it
-was outside what these two reviews were asked to fix.
+The first pass through these reviews left three things open. All three are now closed, and
+the reasons the deferrals were wrong are more interesting than the fixes.
 
-**The document list renders twice** — 25 cards (`md:hidden`) plus 25 table rows — at every
-width. One markup tree correct at both sizes needs a media-query hook and a hydration
-boundary; 25 `display: none` label frames cost nothing measurable at this corpus size, and
-`display: none` content is absent from the accessibility tree, so a screen reader sees one
-list. Left as is, deliberately, and stated here rather than left to be discovered.
+**Sorting the documents table.** Deferred because it needed an API ordering parameter
+rather than a frontend change, which was true and not a good enough reason. Doing it
+surfaced the part that made it worth a test file of its own: `ORDER BY` cannot be
+parameterised in SQL, so the column has to be interpolated into the statement text. That
+makes the boundary between "key the client sent" and "column the query names" the only
+thing between a dropdown and arbitrary SQL. The design is that the client never names a
+column at all — it sends a key from a closed enum in @hatko/shared, and the repository owns
+a `Record<DocumentSort, string>` that translates it. The `Record` type is the enforcement:
+adding a key to the enum without adding a column fails the type check, so the two cannot
+drift into a gap where an unmapped key falls through.
 
-**Ten eyebrow labels remain on the dashboard**, above the taste rule's mechanical ceiling.
-Every survivor names its own data — six panel headings and four stat-tile labels. The rule
-exists to catch decorative kickers, and the decorative ones (the invented catalog numbers,
-the mono strip across the foot of the sign-in panel) are the ones that went.
+Writing the tests found two ordering bugs that would both have failed silently:
 
-**Fraunces stays.** It is one of two display serifs the anti-slop rules ban by name, and the
-only thing defending it is that `brand.md` names it. Worth knowing that the most recognisable
-AI type tell in the project sits in the wordmark, defensible in one sentence and only one. It
-is now confined to display sizes in writing, since a display serif doing a label's job is the
-specific way this system would look cheap.
+- **Paging dropped and duplicated rows across ties.** 78 delivery reports all have
+  `chunk_count = 1`. Sorting by passage count with no tiebreaker lets SQLite return them in
+  a different order for page 1 and page 2, so rows vanish and others appear twice. Ties now
+  break on `source_path`. The test pages through in two halves and asserts the union is the
+  whole corpus with nothing repeated.
+- **Failed documents sorted to the top.** `indexed_at` is null for a document that failed,
+  and SQLite sorts nulls first ascending — so "never indexed" was being treated as "indexed
+  at the beginning of time" and put above everything the reader asked to see. Nulls now sort
+  last in both directions.
+
+**The document list rendered twice at every width.** Deferred on the grounds that 25
+`display: none` label frames cost nothing measurable and are absent from the accessibility
+tree. Both claims were true; the argument was still wrong, because the real cost was never
+performance — it was that every row's content existed in two places and had to be edited in
+two. There is now one markup tree. A `table-cards` utility turns each `<tr>` into a bordered
+card below `md`, and each `<td>` grows its own label from `data-label` — the same text the
+`<th>` carries at wider widths. The header row is visually hidden rather than
+`display: none`, so the table stays a table to a screen reader at every width. Verified: one
+`<table>`, zero duplicate lists, 25 rows where there were 50, `display: block` rows with
+their own borders at 375, and no horizontal overflow.
+
+Two things fell out of the rewrite. A failed document's error message was only ever rendered
+on the mobile card, so the desktop view of a broken corpus looked healthy; it is now in the
+row. And the table had been sorted by path since day one while every header reported
+`aria-sort="none"` — the Document column now sorts by path, so the UI states its own
+ordering instead of leaving it implicit.
+
+**Ten eyebrow labels on the dashboard.** Deferred as a false positive, since every one named
+its own data. Half true. Six panel headings genuinely need the treatment; the four stat-tile
+labels were the reflex, and having them in the identical 12px uppercase tracked style
+flattened a real distinction — a panel heading names a section, a tile label names a number.
+The tile labels are now sentence-case captions. Four fewer, and the hierarchy reads.
+
+### Not done, and stated rather than buried
+
+**Fraunces stays, and this one is not a deferral.** It is one of two display serifs the
+anti-slop rules ban by name, and the only thing defending it is that `brand.md` names it —
+plus a standing instruction to keep the fonts unchanged. Worth knowing that the most
+recognisable AI type tell in the project sits in the wordmark, defensible in one sentence
+and only one. It is confined to display sizes in writing, since a display serif doing a
+label's job is the specific way this system would look cheap.
+
+**The Impeccable skill is still at 3.9.1, not 4.1.1.** `npx impeccable update` cannot do it:
+the skill is installed as a Claude Code _plugin_ from the `pbakaus/impeccable` marketplace,
+and the npm CLI reports "no impeccable skill folders found" and then offers to install an
+older 3.6.0 as a package. Plugin updates go through the interactive plugin panel, which a
+non-interactive session cannot open. Recorded so nobody assumes it was tried and worked.
 
 ### Verified after the fixes
 

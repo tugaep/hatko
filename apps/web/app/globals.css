@@ -317,6 +317,73 @@
 }
 
 /*
+ * A data table that becomes a card list below `md`, from one markup tree.
+ *
+ * design.md §11 bans horizontally scrolling tables on mobile, and §9 asks for "one label
+ * frame per document". The first implementation obeyed both by rendering the rows twice —
+ * 25 cards behind `md:hidden` plus 25 table rows behind `hidden md:block` — so every row's
+ * content existed in two places and had to be edited in two places.
+ *
+ * This is the same information in one tree. Below `md` each row becomes a bordered block
+ * and each cell grows its own label from `data-label`, which is the text the `<th>` carries
+ * at wider widths. The header row is hidden from sight but stays in the accessibility tree,
+ * so the table remains a table to a screen reader at every width.
+ */
+@utility table-cards {
+  width: 100%;
+  border-collapse: collapse;
+
+  @media (width < 48rem) {
+    & thead {
+      /* Visually hidden, not `display: none`: the column names still label the cells. */
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    & tr {
+      display: block;
+      border: 1px solid var(--rule);
+      background: var(--bg-raised);
+      padding: 12px;
+    }
+
+    & tr + tr {
+      margin-top: 12px;
+    }
+
+    & td {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      border: 0;
+      padding: 2px 0;
+    }
+
+    & td::before {
+      content: attr(data-label);
+      color: var(--text-muted);
+      font-size: 12px;
+      letter-spacing: 0.01em;
+      flex-shrink: 0;
+    }
+
+    /* The title cell is the card's heading, so it carries no label and spans the width. */
+    & td[data-label='Document'] {
+      display: block;
+      padding-bottom: 8px;
+    }
+
+    & td[data-label='Document']::before {
+      content: none;
+    }
+  }
+}
+
+/*
  * The corner notch — brand motif 2, a tear-open cut on one card per view.
  *
  * `clip-path` alone cuts the card's 1px border along the diagonal, leaving the notch

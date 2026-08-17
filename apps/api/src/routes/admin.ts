@@ -47,6 +47,9 @@ adminRoutes.get('/documents', requires('documents:manage'), (c) => {
   const { items, total } = listDocumentsFiltered(getDb(), {
     limit: query.limit,
     offset: query.offset,
+    // Both have schema defaults, so they are always present rather than conditional.
+    sort: query.sort,
+    direction: query.direction,
     ...(query.status ? { status: query.status } : {}),
     ...(query.category ? { category: query.category } : {}),
     ...(query.q ? { q: query.q } : {}),

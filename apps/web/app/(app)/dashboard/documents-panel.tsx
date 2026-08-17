@@ -6,28 +6,26 @@ import {
   documentSchema,
   documentStatusSchema,
   paginated,
-  type Document,
+  type DocumentSort,
   type DocumentStatus,
+  type SortDirection,
 } from '@hatko/shared';
 import { catalogNumber, formatBytes, formatDateTime } from '../../../lib/format.ts';
 import { useApi } from '../../../lib/use-api.ts';
 import { SeedSpecimen } from '../../../components/marks.tsx';
-import {
-  Badge,
-  Button,
-  ErrorCard,
-  Input,
-  LabelFrame,
-  SkeletonLine,
-  cx,
-} from '../../../components/ui.tsx';
+import { Badge, Button, ErrorCard, Input, SkeletonLine, cx } from '../../../components/ui.tsx';
 
 /**
  * The corpus, as rows.
  *
- * Filtering and paging happen on the server — `listDocumentsFiltered` already does both,
- * and fetching 142 rows to filter four of them in the browser is the kind of shortcut
+ * Filtering, sorting and paging all happen on the server — `listDocumentsFiltered` does
+ * all three, and fetching 142 rows to sort them in the browser is the kind of shortcut
  * that stops working at the first real corpus.
+ *
+ * One markup tree serves both layouts. The `table-cards` utility turns each row into a
+ * bordered card below `md`, where a horizontally scrolling table would be a failure state.
+ * Rendering the rows twice and hiding one set was the first approach, and it meant every
+ * row's content existed in two places.
  */
 
 const documentPageSchema = paginated(documentSchema);
@@ -43,10 +41,37 @@ const STATUS_TONE: Record<DocumentStatus, 'brand' | 'attention' | 'danger'> = {
   failed: 'danger',
 };
 
+/**
+ * The columns, and which of them sort.
+ *
+ * `sort` is a key from the shared `documentSortSchema`, never a column name — the
+ * repository owns that translation, because `ORDER BY` cannot be parameterised. A column
+ * with no `sort` key renders as a plain header and cannot be clicked.
+ */
+const COLUMNS: {
+  label: string;
+  sort?: DocumentSort;
+  align?: 'right';
+  hideBelow?: 'lg';
+}[] = [
+  // Sorts by path, not title, so the header reflects the default ordering rather than
+  // leaving every column marked `aria-sort="none"` on a table that is in fact sorted. Path
+  // also groups the corpus by directory, and for this corpus the two orderings barely
+  // differ: `Build Pipeline` lives at `build-pipeline.md`.
+  { label: 'Document', sort: 'sourcePath' },
+  { label: 'Category', sort: 'category', hideBelow: 'lg' },
+  { label: 'Status', sort: 'status' },
+  { label: 'Passages', sort: 'chunkCount', align: 'right' },
+  { label: 'Size', sort: 'byteSize', align: 'right', hideBelow: 'lg' },
+  { label: 'Indexed', sort: 'indexedAt', align: 'right' },
+];
+
 export function DocumentsPanel() {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [status, setStatus] = useState<DocumentStatus | ''>('');
+  const [sort, setSort] = useState<DocumentSort>('sourcePath');
+  const [direction, setDirection] = useState<SortDirection>('asc');
   const [offset, setOffset] = useState(0);
 
   // Typing should not fire a request per character.
@@ -55,15 +80,35 @@ export function DocumentsPanel() {
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  // Any filter change invalidates the current page number.
-  useEffect(() => setOffset(0), [debounced, status]);
+  // Any change to what is being selected invalidates the current page number.
+  useEffect(() => setOffset(0), [debounced, status, sort, direction]);
 
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+  const params = new URLSearchParams({
+    limit: String(PAGE_SIZE),
+    offset: String(offset),
+    sort,
+    direction,
+  });
   if (debounced) params.set('q', debounced);
   if (status) params.set('status', status);
 
   const page = useApi(`/api/admin/documents?${params.toString()}`, documentPageSchema);
   const total = page.data?.total ?? 0;
+
+  /**
+   * Clicking a header sorts by it ascending; clicking the active one reverses it.
+   *
+   * Descending-first would be right for a magnitude column and wrong for a name, and the
+   * table has both, so it does the predictable thing rather than the clever thing.
+   */
+  function toggleSort(next: DocumentSort) {
+    if (next === sort) {
+      setDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSort(next);
+    setDirection('asc');
+  }
 
   return (
     <section aria-labelledby="documents-heading" className="grid gap-4">
@@ -111,6 +156,35 @@ export function DocumentsPanel() {
         </div>
       </div>
 
+      {/*
+       * Below `md` the sort control cannot be a column header, because there are no visible
+       * headers. A select is the same operation in the shape that fits.
+       */}
+      <div className="flex items-center gap-2 md:hidden">
+        <label htmlFor="doc-sort" className="text-caption text-text-muted">
+          Sort by
+        </label>
+        <select
+          id="doc-sort"
+          value={`${sort}:${direction}`}
+          onChange={(event) => {
+            const [nextSort, nextDirection] = event.target.value.split(':');
+            setSort(nextSort as DocumentSort);
+            setDirection(nextDirection as SortDirection);
+          }}
+          className="h-10 flex-1 rounded-sm border border-border-interactive bg-bg-raised px-2 text-body-sm text-text"
+        >
+          {COLUMNS.filter((column) => column.sort).flatMap((column) =>
+            (['asc', 'desc'] as const).map((option) => (
+              <option key={`${column.sort}:${option}`} value={`${column.sort}:${option}`}>
+                {column.label}
+                {option === 'asc' ? ' ↑' : ' ↓'}
+              </option>
+            )),
+          )}
+        </select>
+      </div>
+
       {page.error ? (
         <ErrorCard title="Could not load documents." detail={page.error} onRetry={page.reload} />
       ) : page.data === null ? (
@@ -119,54 +193,67 @@ export function DocumentsPanel() {
         <EmptyCorpus filtered={debounced !== '' || status !== ''} />
       ) : (
         <>
-          {/* A data table below `md` is a failure state, so the same rows render as cards. */}
-          <ul className="grid gap-3 md:hidden">
-            {page.data.items.map((doc) => (
-              <li key={doc.id}>
-                <DocumentCard doc={doc} />
-              </li>
-            ))}
-          </ul>
-
-          <div className="hidden border border-rule bg-bg-raised md:block">
-            <table className="w-full border-collapse text-body-sm">
+          {/* The border belongs to the table container at `md`+, and to each card below it. */}
+          <div className="md:border md:border-rule md:bg-bg-raised">
+            <table className="table-cards text-body-sm">
               <caption className="sr-only">
-                Indexed documents with status, category and passage count
+                Indexed documents with status, category, passage count and index date. Sortable by
+                every column except the document itself.
               </caption>
               <thead>
                 <tr className="border-b border-rule-strong text-left">
-                  <Th>Document</Th>
-                  <Th className="hidden lg:table-cell">Category</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Passages</Th>
-                  <Th className="hidden text-right lg:table-cell">Size</Th>
-                  <Th className="text-right">Indexed</Th>
+                  {COLUMNS.map((column) => (
+                    <SortableTh
+                      key={column.label}
+                      column={column}
+                      active={column.sort === sort}
+                      direction={direction}
+                      onSort={toggleSort}
+                    />
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {page.data.items.map((doc) => (
                   <tr key={doc.id} className="border-b border-rule last:border-0">
-                    <Td>
+                    <Td label="Document">
                       <span className="block font-medium text-text">{doc.title}</span>
                       <span className="text-mono path block font-mono text-text-muted">
                         {doc.sourcePath}
                       </span>
+                      <span className="text-mono-label mt-0.5 block font-mono uppercase text-text-muted">
+                        {catalogNumber('DOC', doc.id)}
+                      </span>
+                      {/*
+                       * A failed document's reason, in the row it belongs to and in the widest
+                       * column. The table used to omit it entirely and show it only on the
+                       * mobile card, so the desktop view of a broken corpus looked healthy.
+                       */}
+                      {doc.error && (
+                        <span className="mt-2 block border border-danger bg-danger-subtle p-2 text-caption text-text">
+                          {doc.error}
+                        </span>
+                      )}
                     </Td>
-                    <Td className="hidden lg:table-cell">
+                    <Td label="Category" hideBelow="lg">
                       <span className="text-caption text-text-muted">{doc.category}</span>
                     </Td>
-                    <Td>
-                      <div className="flex flex-wrap gap-1">
+                    <Td label="Status">
+                      <span className="flex flex-wrap justify-end gap-1 md:justify-start">
                         <Badge tone={STATUS_TONE[doc.status]}>{doc.status}</Badge>
                         {doc.isDeprecated && <Badge tone="danger">deprecated</Badge>}
-                      </div>
+                      </span>
                     </Td>
-                    <Td className="tabular text-right font-mono">{doc.chunkCount}</Td>
-                    <Td className="tabular hidden text-right font-mono lg:table-cell">
-                      {formatBytes(doc.byteSize)}
+                    <Td label="Passages" align="right">
+                      <span className="tabular font-mono">{doc.chunkCount}</span>
                     </Td>
-                    <Td className="tabular text-right font-mono text-text-muted">
-                      {doc.indexedAt ? formatDateTime(doc.indexedAt) : 'never'}
+                    <Td label="Size" align="right" hideBelow="lg">
+                      <span className="tabular font-mono">{formatBytes(doc.byteSize)}</span>
+                    </Td>
+                    <Td label="Indexed" align="right">
+                      <span className="tabular font-mono text-text-muted">
+                        {doc.indexedAt ? formatDateTime(doc.indexedAt) : 'never'}
+                      </span>
                     </Td>
                   </tr>
                 ))}
@@ -186,60 +273,93 @@ export function DocumentsPanel() {
   );
 }
 
-function Th({ children, className }: { children: React.ReactNode; className?: string }) {
+/**
+ * A column header that sorts, or a plain one that does not.
+ *
+ * `aria-sort` on the header is what tells a screen reader the table is ordered and by
+ * which column; the arrow alone says it only to people who can see it.
+ */
+function SortableTh({
+  column,
+  active,
+  direction,
+  onSort,
+}: {
+  column: (typeof COLUMNS)[number];
+  active: boolean;
+  direction: SortDirection;
+  onSort: (sort: DocumentSort) => void;
+}) {
+  const classes = cx(
+    'text-eyebrow px-4 py-2.5 uppercase text-text-muted',
+    column.align === 'right' && 'text-right',
+    column.hideBelow === 'lg' && 'hidden lg:table-cell',
+  );
+
+  if (!column.sort) {
+    return (
+      <th scope="col" className={classes}>
+        {column.label}
+      </th>
+    );
+  }
+
+  const sortKey = column.sort;
   return (
-    <th scope="col" className={cx('text-eyebrow px-4 py-2.5 uppercase text-text-muted', className)}>
-      {children}
+    <th
+      scope="col"
+      aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={cx(classes, 'p-0')}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cx(
+          'text-eyebrow flex w-full items-center gap-1.5 px-4 py-2.5 uppercase',
+          'transition-colors duration-120 ease-brand hover:bg-bg-sunken hover:text-text',
+          active ? 'text-text' : 'text-text-muted',
+          column.align === 'right' && 'justify-end',
+        )}
+      >
+        {column.label}
+        {/*
+         * The arrow occupies its slot whether or not this column is active, so the header
+         * row does not reflow by a few pixels every time the sort moves.
+         */}
+        <span aria-hidden="true" className={cx('w-2', !active && 'opacity-0')}>
+          {direction === 'asc' ? '↑' : '↓'}
+        </span>
+      </button>
     </th>
   );
 }
 
-function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cx('max-w-xs px-4 py-3 align-top text-text', className)}>{children}</td>;
-}
-
-function DocumentCard({ doc }: { doc: Document }) {
+function Td({
+  label,
+  children,
+  align,
+  hideBelow,
+}: {
+  /** Doubles as the cell's own label below `md`, via `data-label`. */
+  label: string;
+  children: React.ReactNode;
+  align?: 'right';
+  hideBelow?: 'lg';
+}) {
   return (
-    <LabelFrame
-      catalog={catalogNumber('DOC', doc.id)}
-      interactive
-      title={
-        <>
-          <h3 className="text-h4 text-text">{doc.title}</h3>
-          <p className="text-mono path mt-0.5 font-mono text-text-muted">{doc.sourcePath}</p>
-        </>
-      }
-    >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge tone={STATUS_TONE[doc.status]}>{doc.status}</Badge>
-        {/* `uncategorised` is the ingest fallback for a file at the corpus root. A badge
-            whose value is "no value" is noise, and 60 documents carry it. */}
-        {doc.category !== CATEGORY_UNCATEGORISED && <Badge>{doc.category}</Badge>}
-        {doc.isDeprecated && <Badge tone="danger">deprecated</Badge>}
-      </div>
-      {/* Labelled pairs, not a dot-delimited run — and `passage` pluralised, since every
-          document in the sample corpus produces exactly one and `1 passages` shipped 142
-          times. */}
-      <dl className="text-mono-label tabular mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-text-muted">
-        <div className="flex gap-1.5">
-          <dt>{doc.chunkCount === 1 ? 'passage' : 'passages'}</dt>
-          <dd className="text-text">{doc.chunkCount}</dd>
-        </div>
-        <div className="flex gap-1.5">
-          <dt>size</dt>
-          <dd className="text-text">{formatBytes(doc.byteSize)}</dd>
-        </div>
-        <div className="flex gap-1.5">
-          <dt>indexed</dt>
-          <dd className="text-text">{doc.indexedAt ? formatDateTime(doc.indexedAt) : 'never'}</dd>
-        </div>
-      </dl>
-      {doc.error && (
-        <p className="mt-2 border border-danger bg-danger-subtle p-2 text-caption text-text">
-          {doc.error}
-        </p>
+    <td
+      data-label={label}
+      className={cx(
+        'max-w-xs px-4 py-3 align-top text-text',
+        // Alignment applies from `md` up only: below that the cell is a flex row whose
+        // label and value are pushed apart, and a `text-right` would fight it.
+        align === 'right' && 'md:text-right',
+        // Card row below `md`, dropped in the narrow table, back at `lg`.
+        hideBelow === 'lg' && 'max-lg:md:hidden',
       )}
-    </LabelFrame>
+    >
+      {children}
+    </td>
   );
 }
 

@@ -73,11 +73,42 @@ export const ingestionRunSchema = z.object({
 });
 export type IngestionRun = z.infer<typeof ingestionRunSchema>;
 
+/**
+ * Sortable columns, as an enum rather than a free string.
+ *
+ * This is the security-relevant line in this file. `ORDER BY` cannot be parameterised in
+ * SQL — the column has to be interpolated into the statement — so the only safe design is
+ * one where the client never supplies a column name at all. It supplies a key from this
+ * closed set, and the repository maps the key to a column through a lookup it owns. An
+ * unrecognised key fails validation at the boundary and never reaches the query.
+ *
+ * `sourcePath` is the default because it is a document's stable identity across
+ * re-ingests, and sorting by it groups the corpus by directory, which is how someone
+ * looking at 142 files expects to find one.
+ */
+export const documentSortSchema = z.enum([
+  'sourcePath',
+  'title',
+  'category',
+  'status',
+  'chunkCount',
+  'byteSize',
+  'indexedAt',
+]);
+export type DocumentSort = z.infer<typeof documentSortSchema>;
+
+export const sortDirectionSchema = z.enum(['asc', 'desc']);
+export type SortDirection = z.infer<typeof sortDirectionSchema>;
+
 export const listDocumentsQuerySchema = paginationSchema.extend({
   status: documentStatusSchema.optional(),
   category: documentCategorySchema.optional(),
   /** Substring match against title and source path. */
   q: z.string().trim().max(200).optional(),
+  // The defaults live here rather than on the enums, so `documentSortSchema.options` stays
+  // enumerable — the UI builds its sortable columns from it, and a test walks every key.
+  sort: documentSortSchema.default('sourcePath'),
+  direction: sortDirectionSchema.default('asc'),
 });
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 

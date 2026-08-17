@@ -138,7 +138,13 @@ function StatTiles({ stats }: { stats: DashboardStats | null }) {
               key={tile.label}
               // The notch is the tear-open-packet motif; at most one element per view gets it.
               notch={i === 0}
-              title={<Eyebrow>{tile.label}</Eyebrow>}
+              /*
+               * Sentence case, not the uppercase tracked eyebrow the panels use. Six panel
+               * headings and four tile labels in one identical 12px uppercase treatment is
+               * the reflex that makes a page look templated, and it also flattened a real
+               * distinction: a panel heading names a section, a tile label names a number.
+               */
+              title={<p className="text-caption font-medium text-text-muted">{tile.label}</p>}
             >
               <p className="font-display text-h1 tabular text-text">{tile.value}</p>
               <p className="mt-1 text-caption text-text-muted">{tile.note}</p>

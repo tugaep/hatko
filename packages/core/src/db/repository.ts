@@ -4,10 +4,12 @@ import {
   ingestionRunSchema,
   type Chunk,
   type Document,
+  type DocumentSort,
   type DocumentStatus,
   type IngestionRun,
   type IngestionTrigger,
   type SearchSource,
+  type SortDirection,
 } from '@hatko/shared';
 import { toVectorBlob, type Db } from './client.ts';
 
@@ -309,8 +311,50 @@ export interface DocumentFilter {
   category?: string;
   /** Substring match against title and source path. */
   q?: string;
+  sort?: DocumentSort;
+  direction?: SortDirection;
   limit: number;
   offset: number;
+}
+
+/**
+ * The only place a sort key becomes a column name.
+ *
+ * `ORDER BY ?` is not a thing in SQL: the column must be part of the statement text. So
+ * the client is never allowed to name a column — it names a key from
+ * `documentSortSchema`, and this map owns the translation. The type annotation is what
+ * enforces it: adding a key to the shared enum without adding it here fails the type
+ * check, so the two cannot drift into a gap where an unmapped key falls through to
+ * something interpolated.
+ */
+const SORT_COLUMNS: Record<DocumentSort, string> = {
+  sourcePath: 'source_path',
+  title: 'title',
+  category: 'category',
+  status: 'status',
+  chunkCount: 'chunk_count',
+  byteSize: 'byte_size',
+  indexedAt: 'indexed_at',
+};
+
+/**
+ * `ORDER BY` for a sorted listing, with two properties worth stating.
+ *
+ * Ties break on `source_path`, so paging is stable: 78 delivery reports all have
+ * `chunk_count = 1`, and without a tiebreaker SQLite may return them in a different order
+ * for page 1 and page 2, which silently drops and duplicates rows across a page boundary.
+ *
+ * Nulls sort last in both directions. `indexed_at` is null for a document that failed to
+ * index, and "never indexed" is not "indexed at the beginning of time" — SQLite would sort
+ * nulls first ascending, putting the failures above everything the reader asked to see.
+ */
+function orderBy(sort: DocumentSort, direction: SortDirection): string {
+  const column = SORT_COLUMNS[sort];
+  const dir = direction === 'desc' ? 'DESC' : 'ASC';
+  const nullsLast = `${column} IS NULL`;
+  return column === 'source_path'
+    ? `ORDER BY source_path ${dir}`
+    : `ORDER BY ${nullsLast}, ${column} ${dir}, source_path ASC`;
 }
 
 export function listDocumentsFiltered(
@@ -348,8 +392,10 @@ export function listDocumentsFiltered(
     ).n,
   );
 
+  const order = orderBy(filter.sort ?? 'sourcePath', filter.direction ?? 'asc');
+
   const rows = db
-    .prepare(`SELECT * FROM documents ${clause} ORDER BY source_path LIMIT ? OFFSET ?`)
+    .prepare(`SELECT * FROM documents ${clause} ${order} LIMIT ? OFFSET ?`)
     .all(...(params as never[]), filter.limit, filter.offset) as Row[];
 
   return { items: rows.map(toDocument), total };
