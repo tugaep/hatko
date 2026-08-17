@@ -289,26 +289,26 @@ These are the failure modes that have already happened or nearly happened here.
 
 Each step ends somewhere demonstrable.
 
-| #   | Step                                                 | Status                                            |
-| --- | ---------------------------------------------------- | ------------------------------------------------- |
-| 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9`                              |
-| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**                                          |
-| 3   | Hybrid retrieval + rerank + eval script              | **done** — recall@1 100%, MRR 1.000               |
-| 4   | RAG answers, citations, abstain path                 | **done**                                          |
-| 5   | Better Auth, roles, server-side gating               | **done**                                          |
-| 6   | Chat page, then dashboard                            | **done** — Next 16, light theme only, reviewed    |
-| 7   | MCP server                                           | **done** — HTTP + bearer, verified live           |
-| 7b  | Autonomous ingestion trigger — completes a bonus     | **done** — fs.watch, verified on a scratch corpus |
-| 7c  | OIDC on the MCP server — completes a bonus           | **done** — consent forced, full flow verified     |
-| 8   | Admin user management: list, add, role, deactivate   | **done** — lockout guards, revocation verified    |
-| 8b  | Production config + deploy guide, hatko.tugrap.dev   | **done** — guide written; deploy is step 13       |
-| 8c  | Audit of the four bonus features                     | **done** — `7350417`, 3 false claims corrected    |
-| 9   | Rate limiting on search, answer and the MCP tool     | **done** — one allowance, 429 verified live       |
-| 10  | Streaming answers — completes a bonus                | **done** — SSE, verified live end to end          |
-| 11  | Self-hosted models, OpenAI path stays default        | **done** — qwen2.5:7b 12/12, admin-selectable     |     |
-| 12  | 3D embedding view on the dashboard                   |                                                   |
-| 13  | Run the deploy against hatko.tugrap.dev              |                                                   |
-| 14  | README, AI usage log, history cleanup                |                                                   |
+| #   | Step                                                 | Status                                              |
+| --- | ---------------------------------------------------- | --------------------------------------------------- |
+| 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9`                                |
+| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**                                            |
+| 3   | Hybrid retrieval + rerank + eval script              | **done** — recall@1 100%, MRR 1.000                 |
+| 4   | RAG answers, citations, abstain path                 | **done**                                            |
+| 5   | Better Auth, roles, server-side gating               | **done**                                            |
+| 6   | Chat page, then dashboard                            | **done** — Next 16, light theme only, reviewed      |
+| 7   | MCP server                                           | **done** — HTTP + bearer, verified live             |
+| 7b  | Autonomous ingestion trigger — completes a bonus     | **done** — fs.watch, verified on a scratch corpus   |
+| 7c  | OIDC on the MCP server — completes a bonus           | **done** — consent forced, full flow verified       |
+| 8   | Admin user management: list, add, role, deactivate   | **done** — lockout guards, revocation verified      |
+| 8b  | Production config + deploy guide, hatko.tugrap.dev   | **done** — guide written; deploy is step 13         |
+| 8c  | Audit of the four bonus features                     | **done** — `7350417`, 3 false claims corrected      |
+| 9   | Rate limiting on search, answer and the MCP tool     | **done** — one allowance, 429 verified live         |
+| 10  | Streaming answers — completes a bonus                | **done** — SSE, verified live end to end            |
+| 11  | Self-hosted models, OpenAI path stays default        | **done** — qwen2.5:7b 12/12, admin-selectable       |     |
+| 12  | 3D embedding view on the dashboard                   | **done** — PCA, canvas, verified against the corpus |
+| 13  | Run the deploy against hatko.tugrap.dev              |                                                     |
+| 14  | README, AI usage log, history cleanup                |                                                     |
 
 Step 3 lands **before** step 4 on purpose: retrieval is the top-graded axis, and
 tuning should be driven by measured recall@k, not by impressions from a chat box.

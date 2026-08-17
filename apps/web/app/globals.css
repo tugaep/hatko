@@ -133,6 +133,29 @@
   --info: #3a525a;
   --highlight: #f2dfb8;
 
+  /*
+   * Categorical series, for the embedding view's scatter — the one place in the product
+   * that needs several colours to mean "different", not "worse" or "urgent".
+   *
+   * Declared here rather than picked in the component, because the alternative is raw
+   * scale values in JSX, which section 11 rejects. They are drawn on a canvas and so are
+   * read back with getComputedStyle; that only works because they are custom properties
+   * on the root and not Tailwind utilities.
+   *
+   * Ordered by prominence and assigned to categories largest-first, so the 78 delivery
+   * reports get the darkest ink. Colour is never the only carrier: the legend states the
+   * count and hovering a point names the document. Categories beyond the seventh cycle,
+   * which is a real limit on a corpus organised differently — the legend still separates
+   * them by label.
+   */
+  --series-1: #173428; /* green 800  */
+  --series-2: #c8892c; /* ochre 500  */
+  --series-3: #b4482f; /* clay 500   */
+  --series-4: #3a525a; /* slate 600  */
+  --series-5: #5a9077; /* green 400  */
+  --series-6: #de8465; /* clay 400   */
+  --series-7: #6b6455; /* stone      */
+
   /* The system's only shadow. L3 overlays may use it; nothing else may. */
   --shadow-overlay: 0 8px 24px -8px rgb(10 23 18 / 0.18);
 

@@ -110,6 +110,24 @@ Ink      #EDE8DC (dark-mode text)   #8A9A8F (dark-mode muted)
 
 Note the brand inversion in dark mode: the primary button becomes a **pale green fill with dark ink**, not a dark green fill. A dark-green button on a dark-green ground has nowhere to go.
 
+### 1.3a Categorical series
+
+One place in the product needs several colours that mean _different_ rather than _better_ or _worse_: the dashboard's embedding view, which plots every indexed passage coloured by category. Categories are an open string, so the palette cycles.
+
+```css
+--series-1: #173428; /* green 800 */
+--series-2: #c8892c; /* ochre 500 */
+--series-3: #b4482f; /* clay 500  */
+--series-4: #3a525a; /* slate 600 */
+--series-5: #5a9077; /* green 400 */
+--series-6: #de8465; /* clay 400  */
+--series-7: #6b6455; /* stone     */
+```
+
+Assigned largest category first, so the biggest group gets the darkest ink. These are tokens rather than raw scale values in the component for the reason section 11 gives — and because a canvas reads them back with `getComputedStyle`, which only works on custom properties.
+
+**Colour is never the only carrier.** The legend states each category's name and count beside its swatch, and hovering a point names the document. A reader who cannot separate ochre from clay loses nothing that is not also written down.
+
 ### 1.4 Verified contrast
 
 | Pair                                             | Ratio | Grade   |

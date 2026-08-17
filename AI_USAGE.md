@@ -2211,3 +2211,62 @@ overrides the environment" in `settings.test.ts`, and a test that a console bann
 interpolates the variable next to it would be asserting the line it duplicates.
 
 Typecheck clean, 238 tests passing, format:check clean.
+
+## Step 12: the 3D embedding view (18 Aug 2026)
+
+AI wrote the PCA implementation, the projection endpoint, the canvas panel and the tests;
+the shape of the step — Gram matrix, power iteration, canvas, no dependency — was fixed in
+`CLAUDE.md` before any of it was written, so the model was implementing a decision rather
+than making one.
+
+**What this panel is for.** Three documents in this repository assert that 78 of the 142
+files are near-identical delivery reports and that the vector arm therefore cannot tell
+them apart. Until now that was a sentence. The measurement the panel now shows: the
+delivery reports occupy an RMS radius of **0.08** where the whole corpus occupies **0.68** —
+one eighth of the spread for 55% of the documents. Verified before the UI was written, by
+running `getEmbeddingMap` against the indexed database and printing the per-category radii.
+
+**Three things the model got right without prompting**, all of them the kind of detail that
+would have been invisible if wrong:
+
+- **Centring before the Gram matrix.** Skip it and the first component is the corpus mean,
+  which for unit-length embeddings dominates everything and collapses the plot to a dot.
+- **One scale factor across all three axes.** Normalising each axis to its own range would
+  stretch a third component carrying 8.6% of the variance to the same visual width as the
+  first, turning a flat corpus into a convincing cloud that is not there.
+- **A deterministic starting vector** (`sin(i)`, not `Math.random()`), so the same corpus
+  produces the same picture on every load. A random start mirrors and rotates the plot
+  between page loads, which would make two screenshots of an unchanged corpus disagree.
+
+**Where review changed the output.** Three corrections, all made by reading rather than by
+a failing test:
+
+1. **Rayleigh quotient removed.** The first draft computed the eigenvalue estimate with a
+   nested `reduce` inside the iteration loop — a second O(n²) pass for a number the
+   normalisation already had. A Gram matrix is positive semi-definite, so `‖Av‖` for a unit
+   `v` _is_ the eigenvalue estimate.
+2. **The plot was drawn full-bleed.** At 1196px wide with a projection scaled by the shorter
+   side, the corpus rendered as a speck in the middle of a sheet of paper. Capped and
+   centred.
+3. **Series colours became tokens.** The palette was going to be hex values in the
+   component, which `docs/design.md` §11 rejects by name. They are now `--series-1..7` in
+   `globals.css` and documented in §1.3a — and the canvas has to read them with
+   `getComputedStyle`, which only works because they are custom properties.
+
+**The tests were verified to fail against broken logic**, not written after the fact and
+assumed to work. Deflation disabled: the variance-ordering test goes red. Centring removed:
+that test and the degenerate-input test both go red. The failure mode being defended
+against is the one that matters here — every one of these mistakes still draws a plausible
+picture, and an operator would read a wrong conclusion off it with nothing to say anything
+was amiss.
+
+**What was verified live and what was not.** The endpoint was exercised end to end: 200 with
+142 points for the demo admin, 403 for the demo user, 30 KB of payload, 23 ms to compute.
+The panel was rendered in a browser against the real corpus and captured — the delivery
+reports appear as a dense knot, meeting notes as a second cluster, the rest scattered,
+matching the numbers above. One presentational change landed **after** that capture (the
+width cap in fix 2), and the browser pane became unavailable before it could be
+re-photographed, so that specific change is verified by typecheck and by reading, not by a
+second screenshot.
+
+Typecheck clean, 242 tests passing, format:check clean.

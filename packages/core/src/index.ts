@@ -10,6 +10,7 @@ export {
 export * from './db/index.ts';
 export * from './db/repository.ts';
 export * from './db/stats.ts';
+export { getEmbeddingMap, pca3 } from './db/embedding-map.ts';
 export * from './ingest/corpus.ts';
 export * from './ingest/chunk.ts';
 export {

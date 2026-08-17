@@ -7,6 +7,7 @@ import {
   getApiKeyStatus,
   getChunksForDocument,
   getDashboardStats,
+  getEmbeddingMap,
   getDb,
   getDocumentById,
   ingest,
@@ -136,6 +137,21 @@ adminRoutes.delete('/settings/api-key', requires('documents:manage'), (c) => {
   clearSecret(db, SETTING_KEYS.openaiApiKey);
   return c.json(getApiKeyStatus(db));
 });
+
+/**
+ * The corpus projected to three dimensions, for the dashboard's embedding view.
+ *
+ * Admin-only like every other route in this file, and for a reason beyond consistency:
+ * the response carries every document's title and category, which is a listing of the
+ * corpus. That is the same thing `/documents` returns and is gated the same way.
+ *
+ * Computed per request rather than cached. It is one exhaustive pass over 142 vectors,
+ * and a cache would need invalidating on every ingest — see the note in embedding-map.ts
+ * for where that stops being true.
+ */
+adminRoutes.get('/embedding-map', requires('documents:manage'), (c) =>
+  c.json(getEmbeddingMap(getDb())),
+);
 
 // --- model selection --------------------------------------------------------
 

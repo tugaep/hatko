@@ -15,6 +15,7 @@ import {
 import { ApiKeyPanel } from './api-key-panel.tsx';
 import { ModelsPanel } from './models-panel.tsx';
 import { DocumentsPanel } from './documents-panel.tsx';
+import { EmbeddingPanel } from './embedding-panel.tsx';
 import { IngestionPanel } from './ingestion-panel.tsx';
 import { UsersPanel } from './users-panel.tsx';
 
@@ -65,6 +66,9 @@ export function Dashboard() {
             {/* Beside the key, because the provider and the credential are one decision. */}
             <ModelsPanel />
             <CategoryPanel byCategory={stats.data?.byCategory ?? null} />
+            {/* Last in the section, because it is the only panel that explains *why* the
+                retriever is built the way it is rather than reporting its state. */}
+            <EmbeddingPanel />
           </Group>
 
           <IngestionPanel onIngested={stats.reload} />
