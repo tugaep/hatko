@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
+import { config } from '../config.ts';
 import { closeDb, getDb } from '../db/client.ts';
-import { resolveApiKey } from '../settings.ts';
+import { providerConfigured } from '../settings.ts';
 import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
 import { rerank } from '../retrieval/rerank.ts';
 import { answerQuestion, DEFAULT_ANSWER_PASSAGES } from '../answer/generate.ts';
@@ -131,19 +132,20 @@ if (indexed.n === 0) {
   process.exit(1);
 }
 
-const hasKey = resolveApiKey(db) !== null;
+const hasProvider = providerConfigured(db);
 const requested: RetrievalArm[] =
   values.arm === 'all' ? ['keyword', 'vector', 'hybrid'] : [values.arm as RetrievalArm];
 
 const arms = requested.filter((arm) => {
-  if (arm !== 'keyword' && !hasKey) return false;
+  if (arm !== 'keyword' && !hasProvider) return false;
   return true;
 });
 
 if (arms.length === 0) {
   console.error(
-    'No OpenAI API key is configured, so only the keyword arm can run.\n' +
-      'Set it in the admin settings page or as OPENAI_API_KEY in .env, or use --arm=keyword.',
+    'No model provider is configured, so only the keyword arm can run.\n' +
+      'Set an API key in the admin settings page or as OPENAI_API_KEY in .env, point\n' +
+      'OPENAI_BASE_URL at a local model server, or use --arm=keyword.',
   );
   closeDb();
   process.exit(1);
@@ -152,14 +154,18 @@ if (arms.length === 0) {
 console.log(
   `Retrieval eval — ${indexed.n} chunks, ${ANSWERABLE.length} answerable questions, ` +
     `${UNANSWERABLE.length} unanswerable\n` +
+    // Named, because these numbers are the evidence for choosing a provider and a
+    // recall figure with no model beside it cannot be compared to another one.
+    `Provider ${config.providerLabel} — embed ${config.embeddingModel} ` +
+    `(${config.embeddingDimensions}d), rerank ${config.rerankModel}, answer ${config.answerModel}.\n` +
     // Stated, because recall@k means nothing without the size of the pool it was
     // measured over, and a reader comparing these figures to the product needs to
     // know they describe the same depth it reranks.
     `Retrieving ${RETRIEVE_DEPTH} passages per question, the depth the answer path uses.\n`,
 );
 
-if (!hasKey && values.arm === 'all') {
-  console.log('No API key configured: vector and hybrid arms skipped, keyword arm only.\n');
+if (!hasProvider && values.arm === 'all') {
+  console.log('No model provider configured: vector and hybrid arms skipped, keyword arm only.\n');
 }
 
 const byArm = new Map<RetrievalArm, ReturnType<typeof summarise>>();

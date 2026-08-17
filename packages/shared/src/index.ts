@@ -5,3 +5,4 @@ export * from './auth.ts';
 export * from './stats.ts';
 export * from './settings.ts';
 export * from './sse.ts';
+export * from './models.ts';

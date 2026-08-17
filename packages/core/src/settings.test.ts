@@ -27,9 +27,14 @@ const {
   encryptSecret,
   getApiKeyStatus,
   getSecret,
+  activeModels,
+  clearModelSettings,
+  getSetting,
+  providerConfigured,
   requireApiKey,
   resolveApiKey,
   setSecret,
+  setSetting,
 } = await import('./settings.ts');
 
 const REAL_KEY = 'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789a91f';
@@ -198,4 +203,59 @@ test('the secret shipped in .env.example is refused', () => {
 
   const real = 'x'.repeat(32);
   assert.equal(requireAppSecret(real), real);
+});
+
+// --- model selection --------------------------------------------------------
+
+/**
+ * The provider is now a setting rather than a constant, which introduces two ways to be
+ * quietly wrong: a stored choice that never takes effect, and a stored *secret* leaking
+ * out through the plaintext reader that model settings use.
+ */
+
+test('a stored model choice overrides the environment, and clearing it restores it', () => {
+  using ctx = tempDb();
+
+  const fromEnv = activeModels(ctx.db);
+  assert.equal(fromEnv.source, 'environment');
+
+  setSetting(ctx.db, SETTING_KEYS.modelBaseUrl, 'http://localhost:11434/v1', 'user-1');
+  setSetting(ctx.db, SETTING_KEYS.answerModel, 'qwen2.5:7b', 'user-1');
+  setSetting(ctx.db, SETTING_KEYS.rerankModel, 'qwen2.5:7b', 'user-1');
+
+  const stored = activeModels(ctx.db);
+  assert.equal(stored.source, 'database');
+  assert.equal(stored.answerModel, 'qwen2.5:7b');
+  assert.equal(stored.isOpenAI, false, 'a local address is not OpenAI');
+  assert.equal(stored.providerLabel, 'localhost:11434', 'errors name the local server, not OpenAI');
+
+  clearModelSettings(ctx.db);
+  assert.deepEqual(activeModels(ctx.db), fromEnv, 'reset returns exactly to the environment');
+});
+
+test('a trailing slash on the base URL does not create a second distinct provider', () => {
+  using ctx = tempDb();
+  setSetting(ctx.db, SETTING_KEYS.modelBaseUrl, 'https://api.openai.com/v1/', 'user-1');
+
+  // Without normalisation this reads as a self-hosted provider, and the API key stops
+  // being required — turning a stray keystroke into unauthenticated requests to OpenAI.
+  assert.equal(activeModels(ctx.db).isOpenAI, true);
+});
+
+test('a self-hosted provider needs no API key, while OpenAI still does', () => {
+  using ctx = tempDb();
+  assert.equal(providerConfigured(ctx.db), Boolean(resolveApiKey(ctx.db)));
+
+  setSetting(ctx.db, SETTING_KEYS.modelBaseUrl, 'http://localhost:11434/v1');
+  assert.equal(providerConfigured(ctx.db), true, 'a local server is usable with no key at all');
+});
+
+test('the plaintext reader refuses to return an encrypted secret', () => {
+  using ctx = tempDb();
+  setSecret(ctx.db, SETTING_KEYS.openaiApiKey, REAL_KEY, 'user-1');
+
+  // getSetting feeds the admin settings endpoint, which is read back into a browser.
+  // If it ever answered for a secret row it would publish ciphertext — and the bug
+  // would look like a rendering glitch rather than a leak.
+  assert.equal(getSetting(ctx.db, SETTING_KEYS.openaiApiKey), null);
 });

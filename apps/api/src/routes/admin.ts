@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import {
   SETTING_KEYS,
+  activeModels,
+  clearModelSettings,
   clearSecret,
   getApiKeyStatus,
   getChunksForDocument,
@@ -12,7 +14,10 @@ import {
   listDocumentsFiltered,
   listIngestionRuns,
   listUsers,
+  listModels,
+  resolveApiKey,
   setSecret,
+  setSetting,
   updateUser,
   upsertAccount,
 } from '@hatko/core';
@@ -23,7 +28,9 @@ import {
   listDocumentsQuerySchema,
   listUsersQuerySchema,
   paginated,
+  MODEL_PRESETS,
   setApiKeyRequestSchema,
+  setModelsRequestSchema,
   triggerIngestionRequestSchema,
   updateUserRequestSchema,
 } from '@hatko/shared';
@@ -128,6 +135,76 @@ adminRoutes.delete('/settings/api-key', requires('documents:manage'), (c) => {
   const db = getDb();
   clearSecret(db, SETTING_KEYS.openaiApiKey);
   return c.json(getApiKeyStatus(db));
+});
+
+// --- model selection --------------------------------------------------------
+
+/**
+ * The active models, plus what the configured server says it can actually serve.
+ *
+ * The probe is the point. Choosing a local preset in the dashboard installs nothing, so
+ * without asking the server what it has, an admin selecting `qwen2.5:7b` on a machine
+ * with no Ollama would see a saved, healthy-looking setting and discover the truth as a
+ * 404 on somebody's first question. `listModels` never throws — an unreachable provider
+ * is a state to report here, not a failed request.
+ */
+const modelSettings = async (probePresetId?: string) => {
+  const db = getDb();
+  const active = activeModels(db);
+
+  /**
+   * The probe follows the selection, not the saved configuration.
+   *
+   * Asking about the active provider and answering about the selected one is the bug
+   * this parameter exists to prevent: the panel checked OpenAI's model list for
+   * `qwen2.5:7b`, found it absent, and told an operator with Ollama correctly installed
+   * to go and install it.
+   *
+   * A preset id rather than a URL, deliberately. The server fetches whatever address
+   * this resolves to, and accepting an arbitrary one from the query string would make
+   * a GET into a request forgery primitive. Saving a configuration can still point the
+   * system anywhere — that is the feature — but it takes a deliberate PUT.
+   */
+  const preset = MODEL_PRESETS.find((candidate) => candidate.id === probePresetId);
+  const baseUrl = preset?.baseUrl ?? active.baseUrl;
+
+  return {
+    active,
+    availability: {
+      probedBaseUrl: baseUrl,
+      ...(await listModels(baseUrl, resolveApiKey(db))),
+    },
+  };
+};
+
+adminRoutes.get('/settings/models', requires('documents:manage'), async (c) =>
+  c.json(await modelSettings(c.req.query('probe'))),
+);
+
+/**
+ * Change the provider address and the two chat models.
+ *
+ * The embedding model is deliberately not settable here. It is pinned to the width of
+ * the vector column, so changing it means rebuilding the index — an operation that
+ * destroys and reindexes the corpus, which is a CLI action with a confirmation, not a
+ * side effect of saving a form. The panel shows the current value and the commands.
+ */
+adminRoutes.put('/settings/models', requires('documents:manage'), async (c) => {
+  const body = setModelsRequestSchema.parse(await jsonBody(c));
+  const db = getDb();
+  const userId = c.get('user').id;
+
+  setSetting(db, SETTING_KEYS.modelBaseUrl, body.baseUrl, userId);
+  setSetting(db, SETTING_KEYS.answerModel, body.answerModel, userId);
+  setSetting(db, SETTING_KEYS.rerankModel, body.rerankModel, userId);
+
+  return c.json(await modelSettings());
+});
+
+/** Drop the stored selection and go back to whatever `.env` specifies. */
+adminRoutes.delete('/settings/models', requires('documents:manage'), async (c) => {
+  clearModelSettings(getDb());
+  return c.json(await modelSettings());
 });
 
 // --- user management --------------------------------------------------------

@@ -1953,8 +1953,8 @@ Typecheck clean, 208 tests passing.
 The last search-experience item on `bonus.md`, and the one where the risk is not that it
 breaks but that it quietly weakens the guarantee the whole system rests on.
 
-**The invariant, stated before any code was written.** Streaming changes *when* an answer
-arrives, never *what* it is allowed to claim. Citation validation and the abstain decision
+**The invariant, stated before any code was written.** Streaming changes _when_ an answer
+arrives, never _what_ it is allowed to claim. Citation validation and the abstain decision
 run against the complete text, exactly as before — so a stream can deliver forty words of
 confident prose and still terminate in `abstained: true`, because none of it cited a
 passage. That is not an edge case to tolerate; it is the correct behaviour, and it is the
@@ -2042,7 +2042,7 @@ Against the running API, with a real key, printing each event and its timing:
   shown.
 - Provider unreachable: `200`, then a single `error` event with `upstream_failed` and no
   internals in the message.
-- Provider dying *after* four deltas: the deltas arrive, then the `error` event, in that
+- Provider dying _after_ four deltas: the deltas arrive, then the `error` event, in that
   order — the chained writes hold, and a truncated answer cannot masquerade as a complete
   one. Both failures were forced by temporarily pointing `API_BASE` at a dead path and by
   throwing mid-stream; the file was restored and the diff checked before committing.
@@ -2052,3 +2052,99 @@ validates against the shared schema, and it runs with or without a provider key 
 one it exercises the failure branch, which is the branch worth having on a fresh clone.
 
 Typecheck clean, 226 tests passing.
+
+---
+
+## Step 11: self-hosted models (18 Aug 2026)
+
+### What AI did
+
+Wrote the whole step: the `OPENAI_BASE_URL` indirection, the migration templating, the
+admin model panel and its probe endpoint, `docs/self-hosted.md`, and the tests.
+
+### What the human decided
+
+Three corrections to scope, all of which changed the result:
+
+1. **Add selectable models to the settings UI**, not just environment variables. The step
+   as written in CLAUDE.md was env-only; a dropdown beside the API key is what an operator
+   actually reaches for.
+2. **Direct users who lack the models to install them.** This produced the probe endpoint.
+   Without it the panel would have accepted a local selection on a machine with no Ollama
+   and let the mistake surface as a 404 on somebody's first question.
+3. **Drop `llama3.2:3b` and `qwen2.5:3b` from the offered presets.** Both had been measured
+   and both were weak. The instruction was that a bad option should not be offered at all —
+   a dropdown entry is an endorsement.
+
+### The design, and what it is not
+
+Ollama, llama.cpp, LM Studio and vLLM all serve `/embeddings` and `/chat/completions` in
+OpenAI's own shape. So "self-hosted models" is **a base URL**, not a provider interface with
+two implementations. The first instinct was a `Provider` abstraction with an OpenAI class and
+an Ollama class; it would have been two classes wrapping one identical `fetch`. What
+genuinely differs is two lines: OpenAI requires an API key, and its `dimensions` parameter is
+a Matryoshka feature no local model can honour.
+
+### Where AI was wrong, and how it was caught
+
+**The panel told an operator to install a model they already had.** The install prompt
+compared the _selected_ preset's models against the _active_ provider's model list — so with
+OpenAI active and the local preset selected, it searched OpenAI's 124 models for
+`qwen2.5:7b`, failed to find it, and printed `ollama pull qwen2.5:7b` to someone whose Ollama
+was running with that model loaded. Caught by reading the rendered panel in a browser, not by
+any test — every unit test passed, because each half was individually correct. Fixed by
+making the probe follow the selection (`?probe=<presetId>`), and the response now reports
+`probedBaseUrl` so the panel can refuse to read an answer about a different host. A preset
+id rather than a URL, so an admin-supplied string never becomes a server-side fetch target.
+
+**A claim in the UI that the measurements contradicted.** The first draft of the panel copy
+said local answer quality was "measurably lower". Then `qwen2.5:7b` scored 12/12 on the
+answer checks — identical to `gpt-4o-mini` — and the sentence became false. Rewritten to the
+limits that are real: one validated model, slower, and smaller models rejected for failing to
+abstain. This is the second time in this repository that plausible-sounding copy was written
+before the measurement and had to be corrected after it.
+
+**The abstain path failed for a reason that was not the abstain path.** `qwen2.5:3b` scored
+6/12, with five answerable questions abstaining. The obvious reading was that the local
+reranker could not hold the 0.67 threshold. Inspecting the raw completion showed the reranker
+was fine — grade 1.00 — and the model had answered `"5 MB"`: correct, and with no `[1]`
+marker, so the citation check withheld it as unverifiable. The system was behaving exactly as
+designed; the diagnosis would have been wrong without looking at the actual model output. A
+worked example was added to the answer prompt, which took `qwen2.5:3b` from 6/12 to 7/12 and
+left OpenAI unchanged at 12/12 — re-measured, because changing a shared prompt to help a weak
+model is exactly how the strong path regresses unnoticed.
+
+### Verified
+
+Ollama installed on this machine, four models pulled, and every figure below observed:
+
+- **Ingest**: 142 documents embedded with `nomic-embed-text` at 768d in 1.7 s. The vector
+  column was created at 768 from `EMBEDDING_DIMENSIONS`, with no schema edit.
+- **`qwen2.5:7b`**: recall@1 100%, recall@3 100%, MRR 1.000, **12/12 answer checks**, and the
+  relevance grades separate cleanly — answerable 1.0000, unanswerable 0.0000.
+- **`qwen2.5:3b`**: 7/12. **`llama3.2:3b`**: 4/12, graded every unanswerable question fully
+  relevant, and dragged hybrid recall@1 down to 56%. Both rejected, both recorded in
+  `docs/self-hosted.md` rather than silently dropped.
+- **OpenAI, re-measured after the prompt change**: recall@1 100%, MRR 1.000, 12/12. No
+  regression.
+- **Latency**: 4.4 s local against 2.7 s OpenAI for the same question, both correct, both
+  citing and both carrying the deprecation notice.
+- **Endpoints**, by curl against a running API: GET reports active config plus probe; PUT
+  switches to local and lists the five installed models; an unreachable address reports
+  `reachable: false` with the connection error; DELETE resets to `.env`; an invalid base URL
+  is a 400 naming the field.
+- **The panel**, in a browser against a production build: renders the active configuration,
+  the measured note per preset, the `ollama pull` commands plus the download link when the
+  server is stopped, and the `.env` lines plus rebuild command for the embedding-width
+  change. With Ollama running and the model present, no install prompt appears — the bug
+  above, fixed and re-checked.
+
+Typecheck clean, 231 tests passing.
+
+### Left undone
+
+The dashboard cannot change the embedding model, and deliberately: the vec0 column width is
+a literal, vectors from two models are not comparable, and a form field that quietly empties
+search is worse than no field. It prints the `.env` lines and the rebuild command instead.
+The migration refuses to open a database whose stored width disagrees with the configured
+one, which is the check that turns a silent retrieval failure into a startup error.

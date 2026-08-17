@@ -1,9 +1,9 @@
 import type { AnswerResponse, Citation, DeprecationNotice, SearchResult } from '@hatko/shared';
-import { config } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import { chatText, ProviderError } from '../providers/openai.ts';
 import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
 import { hasGroundedSupport, rerank } from '../retrieval/rerank.ts';
+import { activeModels } from '../settings.ts';
 
 /**
  * Grounded answering.
@@ -28,7 +28,12 @@ Rules:
 
 1. DEPRECATION. If any supplied passage is marked DEPRECATED and describes a version, API or practice the question touches, your answer MUST state in its own words that it is deprecated and name what supersedes it. Do this even when the substantive answer comes from the current document and you do not cite the deprecated one. Someone asking about a retired API needs to be told it is retired, not quietly handed the new answer. Never present a DEPRECATED passage as current practice.
 
-2. CITATIONS. Every factual claim carries a marker naming the passage it came from, written as [1], [2] and so on. Cite only numbers you were given; never write a number that is not in the list.
+2. CITATIONS. Every factual claim carries a marker naming the passage it came from, written as [1], [2] and so on. Cite only numbers you were given; never write a number that is not in the list. An answer carrying no marker at all is discarded without being read, so a correct answer with no [n] is worth exactly as much as no answer.
+
+   Question: What is the timeout for the upload step?
+   Answer: The upload step times out after 30 seconds [2].
+
+   Note the form: the fact, then its marker, in one short sentence. "30 seconds" alone would be discarded.
 
 3. HONESTY. If the passages do not answer the question, say so plainly and cite nothing. Do not guess, and do not fall back on general knowledge.
 
@@ -168,7 +173,7 @@ async function generateWithModel(
   signal?: AbortSignal,
 ): Promise<string> {
   return chatText({
-    model: config.answerModel,
+    model: activeModels().answerModel,
     system: SYSTEM_PROMPT,
     user: buildPrompt(query, passages),
     ...(onDelta ? { onDelta } : {}),

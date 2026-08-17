@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
-import type { SecretSource, SecretStatus } from '@hatko/shared';
-import { config, requireAppSecret } from './config.ts';
+import type { ActiveModels, SecretSource, SecretStatus } from '@hatko/shared';
+import { config, describeProvider, requireAppSecret } from './config.ts';
 import { getDb, type Db } from './db/client.ts';
 
 /**
@@ -19,6 +19,9 @@ import { getDb, type Db } from './db/client.ts';
 
 export const SETTING_KEYS = {
   openaiApiKey: 'openai.api_key',
+  modelBaseUrl: 'models.base_url',
+  answerModel: 'models.answer',
+  rerankModel: 'models.rerank',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
@@ -45,7 +48,7 @@ export class ConfigurationError extends Error {
  * settings panel renders exactly what this module produces. Re-exported so callers of
  * core do not need to know which package the contract is declared in.
  */
-export type { SecretSource, SecretStatus };
+export type { ActiveModels, SecretSource, SecretStatus };
 
 // --- encryption -------------------------------------------------------------
 
@@ -132,6 +135,44 @@ export function getSecret(db: Db, key: SettingKey): string | null {
   return decryptSecret(row.value);
 }
 
+/**
+ * Plain, unencrypted settings — model names and the provider address.
+ *
+ * Separate from `setSecret` rather than a flag on it, because the difference is not
+ * cosmetic: these are read back to the browser verbatim and a secret never is. Writing
+ * a key through this function would publish it on the settings endpoint, and the two
+ * being different functions is what stops that being a one-character mistake.
+ */
+export function setSetting(db: Db, key: SettingKey, value: string, updatedBy?: string): void {
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error('Refusing to store an empty setting.');
+
+  db.prepare(
+    `INSERT INTO settings (key, value, is_secret, hint, updated_by, updated_at)
+     VALUES (?, ?, 0, NULL, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+     ON CONFLICT (key) DO UPDATE SET
+       value      = excluded.value,
+       is_secret  = 0,
+       hint       = NULL,
+       updated_by = excluded.updated_by,
+       updated_at = excluded.updated_at`,
+  ).run(key, trimmed, updatedBy ?? null);
+}
+
+/**
+ * Plaintext value, or null when unset.
+ *
+ * Refuses to return a row marked secret. Without that check, renaming a key in
+ * SETTING_KEYS — or a later feature storing something sensitive under a name this
+ * function is asked for — would quietly hand ciphertext to the settings endpoint, and
+ * the bug would look like a display glitch rather than a leak.
+ */
+export function getSetting(db: Db, key: SettingKey): string | null {
+  const row = readRow(db, key);
+  if (!row || row.is_secret === 1) return null;
+  return row.value;
+}
+
 // --- API key resolution -----------------------------------------------------
 
 /**
@@ -180,7 +221,80 @@ export function getApiKeyStatus(db: Db = getDb()): SecretStatus {
       updatedBy: null,
     };
   }
+  // Last, so a key set either way still wins and is still reported as itself: a
+  // self-hosted server can be started with one, and this panel should name what is
+  // actually being sent. Its own state rather than `unset` because a working
+  // installation must not be reported as broken — pointed at a local server with no
+  // key, the panel used to show "not configured, embedding and answer generation will
+  // fail" beside a system answering questions perfectly well.
+  if (!config.isOpenAI) {
+    return {
+      configured: true,
+      source: 'self-hosted',
+      hint: config.providerLabel,
+      updatedAt: null,
+      updatedBy: null,
+    };
+  }
   return { configured: false, source: 'unset', hint: null, updatedAt: null, updatedBy: null };
+}
+
+/**
+ * Whether a model provider can be called at all.
+ *
+ * The question every gate actually wanted to ask. They asked `resolveApiKey() !== null`
+ * instead, which was the same question only while OpenAI was the only possible
+ * provider: pointed at a local server, that test refuses to run the vector arm of a
+ * retriever that would work fine.
+ */
+export function providerConfigured(db: Db = getDb()): boolean {
+  const models = activeModels(db);
+  return !models.isOpenAI || resolveApiKey(db) !== null;
+}
+
+// --- model selection --------------------------------------------------------
+
+/**
+ * Which models are actually in use, database over environment.
+ *
+ * The same precedence as the API key, for the same reason: an admin choosing a model on
+ * the settings page is making a more deliberate and more recent statement than whatever
+ * the process booted with. Resolved per call rather than cached, so a change takes
+ * effect on the next request instead of the next restart — these are three indexed
+ * reads from a local SQLite file, against a network call to a model server.
+ *
+ * The embedding model is deliberately absent. It is fixed by the width of the vector
+ * column, so changing it is a schema rebuild and not a setting; `activeModels` reports
+ * it read-only so the panel can explain that rather than offer a control that would
+ * corrupt the index. See docs/self-hosted.md.
+ */
+export function activeModels(db: Db = getDb()): ActiveModels {
+  const storedBaseUrl = getSetting(db, SETTING_KEYS.modelBaseUrl);
+  const baseUrl = (storedBaseUrl ?? config.modelBaseUrl).replace(/\/+$/, '');
+  const { isOpenAI, label } = describeProvider(baseUrl);
+
+  const storedAnswer = getSetting(db, SETTING_KEYS.answerModel);
+  const storedRerank = getSetting(db, SETTING_KEYS.rerankModel);
+
+  return {
+    baseUrl,
+    isOpenAI,
+    providerLabel: label,
+    answerModel: storedAnswer ?? config.answerModel,
+    rerankModel: storedRerank ?? config.rerankModel,
+    embeddingModel: config.embeddingModel,
+    embeddingDimensions: config.embeddingDimensions,
+    source: storedBaseUrl || storedAnswer || storedRerank ? 'database' : 'environment',
+  };
+}
+
+/** Drop every stored model override, returning to what `.env` specifies. */
+export function clearModelSettings(db: Db): void {
+  db.prepare('DELETE FROM settings WHERE key IN (?, ?, ?)').run(
+    SETTING_KEYS.modelBaseUrl,
+    SETTING_KEYS.answerModel,
+    SETTING_KEYS.rerankModel,
+  );
 }
 
 /**

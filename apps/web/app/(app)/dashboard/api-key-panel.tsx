@@ -37,6 +37,11 @@ const SOURCE_COPY: Record<SecretStatus['source'], { badge: string; detail: strin
     badge: 'from the environment',
     detail: 'Read from OPENAI_API_KEY. Saving a key here will take precedence over it.',
   },
+  'self-hosted': {
+    badge: 'self-hosted models',
+    detail:
+      'OPENAI_BASE_URL points at a local model server, which needs no key. Saving one here sends it to that server as a bearer token.',
+  },
   unset: {
     badge: 'not configured',
     detail: 'Embedding and answer generation will fail until a key is supplied.',

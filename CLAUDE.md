@@ -304,8 +304,8 @@ Each step ends somewhere demonstrable.
 | 8b  | Production config + deploy guide, hatko.tugrap.dev   | **done** — guide written; deploy is step 13       |
 | 8c  | Audit of the four bonus features                     | **done** — `7350417`, 3 false claims corrected    |
 | 9   | Rate limiting on search, answer and the MCP tool     | **done** — one allowance, 429 verified live       |
-| 10  | Streaming answers — completes a bonus                | **done** — SSE, verified live end to end           |
-| 11  | Self-hosted models, OpenAI path stays default        |                                                   |
+| 10  | Streaming answers — completes a bonus                | **done** — SSE, verified live end to end          |
+| 11  | Self-hosted models, OpenAI path stays default        | **done** — qwen2.5:7b 12/12, admin-selectable     |     |
 | 12  | 3D embedding view on the dashboard                   |                                                   |
 | 13  | Run the deploy against hatko.tugrap.dev              |                                                   |
 | 14  | README, AI usage log, history cleanup                |                                                   |

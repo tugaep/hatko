@@ -28,6 +28,20 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
 
   /**
+   * Where the model API lives. Default is OpenAI itself.
+   *
+   * This is the whole of "self-hosted models": Ollama, llama.cpp, LM Studio and
+   * vLLM all serve the two endpoints this project calls — `/embeddings` and
+   * `/chat/completions` — in OpenAI's own request and response shape. So running
+   * with no external provider is a different address, not a second client, and
+   * certainly not a provider interface with two implementations.
+   *
+   * What it costs in measured quality, and the two things that have to change with
+   * it (vector width, abstain threshold), are in docs/self-hosted.md.
+   */
+  OPENAI_BASE_URL: z.url().default('https://api.openai.com/v1'),
+
+  /**
    * Root application secret. Better Auth signs sessions with it, and settings.ts
    * HKDF-derives an independent key from it to encrypt stored secrets. Optional
    * here so migrations and reads work on a fresh clone; the code paths that
@@ -96,12 +110,52 @@ const env = parsed.data;
 /** Absolute path, resolved against the repository root if relative. */
 const absolute = (p: string) => (path.isAbsolute(p) ? p : path.resolve(REPO_ROOT, p));
 
+export const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+/**
+ * What a base URL means, in the two terms the rest of the code asks about.
+ *
+ * A function rather than two derived config fields because the address is no longer
+ * fixed at boot: an admin can point the system at a different provider from the
+ * settings page, and that resolved value needs the same two answers. Deriving them in
+ * one place is what stops the startup banner and the live request from disagreeing
+ * about which provider is in use.
+ */
+export function describeProvider(baseUrl: string): { isOpenAI: boolean; label: string } {
+  // Trailing slashes stripped, so `http://host/v1/` and `http://host/v1` are one setting.
+  const normalised = baseUrl.replace(/\/+$/, '');
+  if (normalised === OPENAI_BASE_URL) return { isOpenAI: true, label: 'OpenAI' };
+  try {
+    return { isOpenAI: false, label: new URL(normalised).host };
+  } catch {
+    // A stored value can be malformed in a way the boot-time schema never sees. The
+    // request will fail regardless; naming the bad address beats throwing from a getter.
+    return { isOpenAI: false, label: normalised };
+  }
+}
+
+const modelBaseUrl = env.OPENAI_BASE_URL.replace(/\/+$/, '');
+const { isOpenAI, label: providerLabel } = describeProvider(modelBaseUrl);
+
 export const config = {
   repoRoot: REPO_ROOT,
   databasePath: absolute(env.DATABASE_PATH),
   corpusPath: absolute(env.CORPUS_PATH),
 
   openaiApiKey: env.OPENAI_API_KEY,
+  modelBaseUrl,
+  /**
+   * True when the provider is OpenAI itself. The one thing that turns on it: an API
+   * key is mandatory there and optional against a self-hosted server, which
+   * typically wants no credential at all.
+   */
+  isOpenAI,
+  /**
+   * Who to name in a provider error. Without this, a refused connection to a local
+   * server on port 11434 reported itself as an OpenAI failure and sent the reader
+   * to check a key that was never involved.
+   */
+  providerLabel,
   appSecret: env.BETTER_AUTH_SECRET,
   embeddingModel: env.EMBEDDING_MODEL,
   embeddingDimensions: env.EMBEDDING_DIMENSIONS,

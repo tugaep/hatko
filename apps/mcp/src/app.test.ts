@@ -48,7 +48,7 @@ const {
   config,
   getAuth,
   upsertAccount,
-  resolveApiKey,
+  providerConfigured,
   ProviderError,
   ConfigurationError,
   RateLimitError,
@@ -326,7 +326,7 @@ test('a rate-limit refusal names the wait, because the reader has to act on it',
  * `apps/api/src/app.test.ts` uses. Nothing above depends on it: the gate and the
  * published schema never touch the network.
  */
-const withProvider = resolveApiKey(getDb()) !== null ? test : test.skip;
+const withProvider = providerConfigured(getDb()) ? test : test.skip;
 
 withProvider('an abstention is not routed through the error boundary', async () => {
   // The product's most important behaviour must stay a *successful* result. If it

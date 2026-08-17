@@ -65,8 +65,17 @@ CREATE INDEX chunks_document_idx ON chunks (document_id);
 -- ---------------------------------------------------------------------------
 -- chunks_vec: dense vectors
 --
--- float[1536] matches text-embedding-3-small and EMBEDDING_DIMENSIONS. Changing
--- the embedding model to one of a different width needs a new migration.
+-- The width is substituted from EMBEDDING_DIMENSIONS at migration time — 1536 for
+-- text-embedding-3-small, 768 for a self-hosted nomic-embed-text — because vec0 takes
+-- a literal and one column cannot hold two widths. It used to be the literal 1536,
+-- which made switching embedding providers a schema edit.
+--
+-- Substitution, not a second migration: an ALTER cannot change a vec0 column width,
+-- so the alternative was drop-and-recreate, and every vector in it is invalid after a
+-- provider change anyway. Changing the width therefore means a full rebuild —
+-- `npm run db:reset && npm run ingest` — and migrate.ts refuses to open a database
+-- whose stored width disagrees with the configured one rather than letting the
+-- mismatch surface later as empty search results.
 --
 -- No ANN index is configured, and that is deliberate: the sample corpus produces
 -- 142 chunks, where an exhaustive cosine scan returns in about 1 ms. An
@@ -74,7 +83,7 @@ CREATE INDEX chunks_document_idx ON chunks (document_id);
 -- corpus two or three orders of magnitude larger this becomes the thing to revisit.
 -- ---------------------------------------------------------------------------
 CREATE VIRTUAL TABLE chunks_vec USING vec0 (
-  embedding float[1536] distance_metric=cosine
+  embedding float[{{EMBEDDING_DIMENSIONS}}] distance_metric=cosine
 );
 
 -- ---------------------------------------------------------------------------

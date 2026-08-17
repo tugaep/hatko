@@ -13,6 +13,7 @@ import {
   cx,
 } from '../../../components/ui.tsx';
 import { ApiKeyPanel } from './api-key-panel.tsx';
+import { ModelsPanel } from './models-panel.tsx';
 import { DocumentsPanel } from './documents-panel.tsx';
 import { IngestionPanel } from './ingestion-panel.tsx';
 import { UsersPanel } from './users-panel.tsx';
@@ -61,6 +62,8 @@ export function Dashboard() {
               <IndexHealthPanel health={stats.data?.index ?? null} />
               <ApiKeyPanel />
             </div>
+            {/* Beside the key, because the provider and the credential are one decision. */}
+            <ModelsPanel />
             <CategoryPanel byCategory={stats.data?.byCategory ?? null} />
           </Group>
 

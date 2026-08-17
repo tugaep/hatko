@@ -19,7 +19,14 @@ export {
   type IngestProgress,
   type Embedder,
 } from './ingest/pipeline.ts';
-export { embed, embedOne, chatJson, chatText, ProviderError } from './providers/openai.ts';
+export {
+  embed,
+  embedOne,
+  chatJson,
+  chatText,
+  listModels,
+  ProviderError,
+} from './providers/openai.ts';
 export { hybridSearch, type HybridOptions, type RetrievalArm } from './retrieval/search.ts';
 export { extractTerms, toFtsQuery } from './retrieval/query.ts';
 export {

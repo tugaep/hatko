@@ -1,18 +1,22 @@
 import { z } from 'zod';
 import { sseData } from '@hatko/shared';
 import { config } from '../config.ts';
-import { requireApiKey } from '../settings.ts';
+import { activeModels, requireApiKey, resolveApiKey } from '../settings.ts';
 
 /**
- * Minimal OpenAI client over stdlib fetch.
+ * Minimal OpenAI-protocol client over stdlib fetch.
  *
  * Hand-written rather than pulling in the SDK: this project calls exactly two
  * endpoints, and the parts that actually matter here — retry policy, honouring
  * Retry-After, and turning a provider failure into an error message that says
  * what to do — are the parts worth owning rather than inheriting.
+ *
+ * It is the *protocol* that is OpenAI's, not necessarily the server. `OPENAI_BASE_URL`
+ * points this at any host serving the same two endpoints, which is how the system runs
+ * on self-hosted models without a second client existing. The only behavioural
+ * difference is below: OpenAI requires a key and needs the `dimensions` parameter, and
+ * a local server generally wants neither.
  */
-
-const API_BASE = 'https://api.openai.com/v1';
 
 /** Raised for any provider failure. `retryable` tells the caller whether to bother. */
 export class ProviderError extends Error {
@@ -56,15 +60,25 @@ const isRetryableStatus = (status: number) => status === 429 || status >= 500;
  * detected and retried before anything is consumed.
  */
 async function post(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
-  const apiKey = requireApiKey();
+  // Resolved per request, not read from `config`, because an admin can change the
+  // provider from the settings page and the change has to reach the next call rather
+  // than the next restart.
+  const provider = activeModels();
+  // Mandatory against OpenAI, optional against a self-hosted server — but still sent
+  // when one is configured, because vLLM and friends can be started with `--api-key`
+  // and a local deployment on a shared network should be able to use it.
+  const apiKey = provider.isOpenAI ? requireApiKey() : resolveApiKey();
   let lastError: ProviderError | undefined;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let response: Response;
     try {
-      response = await fetch(`${API_BASE}${path}`, {
+      response = await fetch(`${provider.baseUrl}${path}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        headers: {
+          'content-type': 'application/json',
+          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+        },
         body: JSON.stringify(body),
         // The timeout applies whether or not the caller supplied a signal. It used
         // to be `signal ?? AbortSignal.timeout(...)`, so passing one — which every
@@ -76,10 +90,15 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
       });
     } catch (cause) {
       // Network failure or timeout — no status to reason about, always worth a retry.
-      lastError = new ProviderError(`Request to ${path} failed: ${(cause as Error).message}`, {
-        retryable: true,
-        cause,
-      });
+      // Named, because against a self-hosted server this is the usual failure and the
+      // usual cause is that nothing is listening: "fetch failed" sends the reader
+      // looking at the application, and the address it could not reach sends them to
+      // the model server they forgot to start.
+      lastError = new ProviderError(
+        `Request to ${provider.providerLabel}${path} failed: ${(cause as Error).message}` +
+          (provider.isOpenAI ? '' : ` (is the model server at ${provider.baseUrl} running?)`),
+        { retryable: true, cause },
+      );
       if (attempt < MAX_ATTEMPTS) {
         await sleep(BASE_DELAY_MS * 2 ** (attempt - 1));
         continue;
@@ -93,18 +112,32 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
     const retryable = isRetryableStatus(response.status);
 
     if (response.status === 401) {
-      throw new ProviderError('OpenAI rejected the API key (401). Check OPENAI_API_KEY in .env.', {
-        status: 401,
-      });
+      throw new ProviderError(
+        `${provider.providerLabel} rejected the API key (401). ` +
+          'Check OPENAI_API_KEY in .env, or the key in the admin settings page.',
+        { status: 401 },
+      );
     }
     if (response.status === 400) {
-      throw new ProviderError(`OpenAI rejected the request (400): ${detail.slice(0, 300)}`, {
-        status: 400,
-      });
+      throw new ProviderError(
+        `${provider.providerLabel} rejected the request (400): ${detail.slice(0, 300)}`,
+        { status: 400 },
+      );
+    }
+    // A local server answers 404 for a model it has not pulled, which is a
+    // configuration mistake rather than an outage — retrying it four times only
+    // delays the message that names the fix.
+    if (response.status === 404 && !provider.isOpenAI) {
+      throw new ProviderError(
+        `${provider.providerLabel} has no such model or endpoint (404) for ${path}: ` +
+          `${detail.slice(0, 200)}. Check EMBEDDING_MODEL, ANSWER_MODEL and RERANK_MODEL ` +
+          'name models the server has actually pulled.',
+        { status: 404 },
+      );
     }
 
     lastError = new ProviderError(
-      `OpenAI returned ${response.status} for ${path}: ${detail.slice(0, 300)}`,
+      `${provider.providerLabel} returned ${response.status} for ${path}: ${detail.slice(0, 300)}`,
       { status: response.status, retryable },
     );
     if (!retryable || attempt === MAX_ATTEMPTS) throw lastError;
@@ -120,6 +153,55 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
 
 const postJson = async (path: string, body: unknown, signal?: AbortSignal): Promise<unknown> =>
   (await post(path, body, signal)).json();
+
+const modelListSchema = z.object({ data: z.array(z.object({ id: z.string() })) });
+
+/**
+ * Ask the configured server which models it can serve.
+ *
+ * Not part of answering anything — it exists so the admin settings page can tell an
+ * operator that the local model they just selected is not installed, instead of letting
+ * them discover it as a 404 on someone's first question.
+ *
+ * Deliberately outside `post`: no retries and a short timeout, because this runs while
+ * an admin waits for a page and "the server is not running" is the answer, not a
+ * condition to back off from. It never throws — an unreachable provider is a normal
+ * state for this call to report.
+ */
+export async function listModels(
+  baseUrl: string,
+  apiKey: string | null,
+): Promise<{ reachable: boolean; models: string[]; error: string | null }> {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+      headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!response.ok) {
+      return {
+        reachable: false,
+        models: [],
+        error: `The provider answered ${response.status} when asked for its model list.`,
+      };
+    }
+
+    const parsed = modelListSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      // A server that answers but does not serve this endpoint is reachable, and the
+      // right move is to stop claiming to know what it has rather than to call it down.
+      return { reachable: true, models: [], error: 'The provider did not return a model list.' };
+    }
+
+    return { reachable: true, models: parsed.data.data.map((model) => model.id), error: null };
+  } catch (cause) {
+    return {
+      reachable: false,
+      models: [],
+      error: `Could not reach ${baseUrl}: ${(cause as Error).message}`,
+    };
+  }
+}
 
 /**
  * Requests are capped by input count rather than token count. The whole sample
@@ -146,7 +228,16 @@ export async function embed(texts: string[], signal?: AbortSignal): Promise<numb
     const batch = texts.slice(start, start + EMBEDDING_BATCH_SIZE);
     const raw = await postJson(
       '/embeddings',
-      { model: config.embeddingModel, input: batch, dimensions: config.embeddingDimensions },
+      {
+        model: config.embeddingModel,
+        input: batch,
+        // `dimensions` is OpenAI's Matryoshka truncation, specific to
+        // text-embedding-3-*. A self-hosted model has one native width and no way to
+        // honour a request for another, so asking is at best ignored and at worst a
+        // 400. The width is verified on the response below either way, which is the
+        // check that actually protects the vector column.
+        ...(activeModels().isOpenAI ? { dimensions: config.embeddingDimensions } : {}),
+      },
       signal,
     );
 
@@ -165,7 +256,9 @@ export async function embed(texts: string[], signal?: AbortSignal): Promise<numb
       if (item.embedding.length !== config.embeddingDimensions) {
         throw new ProviderError(
           `Model ${config.embeddingModel} returned ${item.embedding.length} dimensions, ` +
-            `expected ${config.embeddingDimensions}. Update EMBEDDING_DIMENSIONS and re-run migrations.`,
+            `expected ${config.embeddingDimensions}. Set EMBEDDING_DIMENSIONS=${item.embedding.length}, ` +
+            'then rebuild the index: npm run db:reset && npm run ingest. The vector column is ' +
+            'created at the configured width and cannot hold two widths at once.',
         );
       }
       out.push(item.embedding);

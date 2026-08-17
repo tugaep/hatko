@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { SearchResult } from '@hatko/shared';
-import { config } from '../config.ts';
 import { chatJson } from '../providers/openai.ts';
+import { activeModels } from '../settings.ts';
 
 /**
  * LLM reranking, doing two jobs.
@@ -103,7 +103,7 @@ async function gradeWithModel(
   signal?: AbortSignal,
 ): Promise<Map<number, number>> {
   const raw = await chatJson({
-    model: config.rerankModel,
+    model: activeModels().rerankModel,
     system: SYSTEM_PROMPT,
     user: buildPrompt(query, candidates),
     signal,

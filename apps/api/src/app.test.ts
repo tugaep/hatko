@@ -44,7 +44,7 @@ fs.writeFileSync(
     'current guidance.\n',
 );
 
-const { getDb, closeDb, ingest, config, getAuth, upsertAccount, resolveApiKey } =
+const { getDb, closeDb, ingest, config, getAuth, upsertAccount, providerConfigured } =
   await import('@hatko/core');
 const { createApp } = await import('./app.ts');
 
@@ -92,7 +92,7 @@ const userCookie = await cookieFor('user@test.local', 'user-password');
  * the 401 and 403 tables below reject before the handler runs and never touch the
  * network, and retrieval quality is covered in packages/core against a stub.
  */
-const withProvider = resolveApiKey(getDb()) !== null ? test : test.skip;
+const withProvider = providerConfigured(getDb()) ? test : test.skip;
 
 test.after(() => {
   closeDb();
