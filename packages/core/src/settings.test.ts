@@ -102,16 +102,16 @@ test('a stored key resolves ahead of the environment', () => {
 
 test('clearing the stored key falls back to the environment', () => {
   using ctx = tempDb();
+  const ENV_KEY = 'sk-environment-fallback-0000-0000';
+
   setSecret(ctx.db, SETTING_KEYS.openaiApiKey, REAL_KEY);
-  assert.equal(resolveApiKey(ctx.db), REAL_KEY);
+  assert.equal(resolveApiKey(ctx.db, ENV_KEY), REAL_KEY, 'the stored key wins while it exists');
 
   clearSecret(ctx.db, SETTING_KEYS.openaiApiKey);
 
   assert.equal(getSecret(ctx.db, SETTING_KEYS.openaiApiKey), null);
-  // OPENAI_API_KEY is unset under the test runner, so the fallback yields null
-  // rather than a stale value.
-  assert.equal(resolveApiKey(ctx.db), null);
-  assert.equal(getApiKeyStatus(ctx.db).source, 'unset');
+  assert.equal(resolveApiKey(ctx.db, ENV_KEY), ENV_KEY, 'and the environment takes over');
+  assert.equal(resolveApiKey(ctx.db, null), null, 'with neither set, nothing is resolved');
 });
 
 test('re-saving replaces rather than accumulating rows', () => {
@@ -148,8 +148,12 @@ test('a key saved under a different secret reports rotation, not "unset"', () =>
 
 test('a missing key produces an actionable error naming both ways to set it', () => {
   using ctx = tempDb();
+  // The fallback is passed explicitly rather than left to the ambient
+  // environment: config.ts loads .env from disk, so relying on absence would make
+  // this pass or fail based on the developer's machine — and would print a real
+  // key into the assertion output when it failed.
   assert.throws(
-    () => requireApiKey(ctx.db),
+    () => requireApiKey(ctx.db, null),
     (error: Error) => {
       assert.match(error.message, /admin settings/i);
       assert.match(error.message, /OPENAI_API_KEY/);

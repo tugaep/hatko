@@ -67,7 +67,7 @@ async function evaluate(arm: RetrievalArm, withRerank: boolean): Promise<Questio
     let hits = await hybridSearch(db, question.question, {
       arm,
       limit: RETRIEVE_DEPTH,
-      candidates: 30,
+      candidates: 10,
     });
 
     if (withRerank) hits = await rerank(question.question, hits);

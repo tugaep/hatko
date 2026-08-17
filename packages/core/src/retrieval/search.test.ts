@@ -208,3 +208,20 @@ test('same-topic-but-not-answering does not clear the abstain bar', async () => 
 
   assert.equal(hasGroundedSupport(graded), false, 'grade 1 must not be treated as support');
 });
+
+test('RRF damping keeps a confident single-arm hit ahead of a mediocre both-arm hit', () => {
+  const rrf = (k: number, ranks: number[]) => ranks.reduce((sum, r) => sum + 1 / (k + r), 0);
+
+  // The measured failure that set the default. With k=60 a passage ranked 20th by
+  // both arms outscores one ranked 1st by a single arm, because the constant
+  // swamps the rank difference — 1/80 + 1/80 beats 1/61. That is what dropped
+  // localization-guide.md from keyword rank 1 to outside the hybrid top 30.
+  assert.ok(rrf(60, [1]) < rrf(60, [20, 20]), 'k=60 loses the confident single-arm hit');
+
+  // At the tuned k the ordering is restored.
+  assert.ok(rrf(10, [1]) > rrf(10, [20, 20]), 'k=10 preserves it');
+
+  // Agreement between arms still counts when ranks are comparable, which is the
+  // property that makes fusion worth doing at all.
+  assert.ok(rrf(10, [2, 2]) > rrf(10, [1]), 'both arms agreeing still outranks one arm alone');
+});

@@ -20,12 +20,51 @@ import { toFtsQuery } from './query.ts';
  * commensurable — BM25 is unbounded, corpus-relative and negative in SQLite,
  * cosine is bounded 0..2 — so any weighted sum needs normalisation constants that
  * are really just fitted to one corpus. RRF discards the magnitudes and fuses the
- * *ranks*, which is scale-free and needs no tuning. The single constant k=60 is
- * the value from the original paper and is not corpus-specific.
+ * *ranks*, which is scale-free.
+ *
+ * RRF is not, however, parameter-free, and its usual defaults are wrong here.
+ * With the literature's k=60 and a 30-candidate pool, hybrid retrieval scored
+ * *worse* than the keyword arm alone — recall@1 78% against 89% — because summing
+ * 1/(k+rank) across arms rewards appearing mediocrely in both over appearing first
+ * in one. Both constants below were then chosen by sweeping them against the eval
+ * set. Measured outcome after tuning, with the rerank pass:
+ *
+ *   arm       recall@1  recall@3   MRR
+ *   keyword     100%      100%    1.000
+ *   vector       89%       89%    0.889
+ *   hybrid      100%      100%    1.000
+ *
+ * Hybrid matching rather than beating keyword-only on this corpus is worth
+ * stating plainly: the sample questions share vocabulary with their answers, which
+ * is the case BM25 is best at. The vector arm earns its place as insurance for
+ * queries phrased in words the corpus does not use — the private evaluation set is
+ * unseen — and it now costs nothing in accuracy to carry it.
  */
 
-/** Standard RRF damping. Larger values flatten the advantage of top ranks. */
-const RRF_K = 60;
+/**
+ * RRF damping. Larger values flatten the advantage of a high rank, which makes
+ * "retrieved by both arms" outweigh "retrieved first by one arm".
+ *
+ * The literature's k=60 comes from TREC runs fusing ~1000 candidates. Against 142
+ * chunks it is far too large: a rank-1 hit found by one arm scores 1/61 = 0.0164,
+ * while a mediocre rank-20 hit found by both scores 1/80 + 1/80 = 0.025 and wins.
+ * Measured on the eval set, k=60 dropped localization-guide.md from keyword rank 1
+ * to outside the hybrid top 30. The default here is chosen by sweep, not by
+ * citation — see the eval script.
+ */
+const DEFAULT_RRF_K = 10;
+
+/**
+ * Candidates drawn from each arm before fusion.
+ *
+ * The sweep found this matters more than k: at depth 10 the hybrid arm reaches
+ * recall@3 of 100%, at depth 20-30 it drops to 89% for every value of k tried.
+ * The reason is proportional — 30 candidates out of 142 chunks is a fifth of the
+ * corpus, so almost everything appears in both arms and the summed score rewards
+ * being mediocre twice over being right once. This should grow with the corpus,
+ * not stay fixed: it is a fraction of the collection, not an absolute.
+ */
+const DEFAULT_CANDIDATES = 10;
 
 /**
  * Column weights for bm25(heading, content). The heading is a stronger relevance
@@ -50,6 +89,8 @@ export interface HybridOptions {
   candidates?: number;
   category?: string;
   arm?: RetrievalArm;
+  /** RRF damping constant. Defaults to DEFAULT_RRF_K; exposed so the eval can sweep it. */
+  rrfK?: number;
   /** Injectable for tests; defaults to the OpenAI embeddings client. */
   embedder?: (text: string) => Promise<number[]>;
   signal?: AbortSignal;
@@ -82,7 +123,7 @@ interface FusedRow {
  * The full outer join is what keeps a passage found by only one arm — which is
  * the entire point of running two.
  */
-const FUSION_SQL = `
+const fusionSql = (rrfK: number) => `
 WITH vec AS (
   SELECT rowid AS chunk_id,
          distance,
@@ -109,7 +150,7 @@ SELECT
   d.title, d.source_path, d.category, d.is_deprecated, d.superseded_by,
   vec.distance, vec.rank AS vec_rank,
   kw.bm25, kw.rank AS kw_rank,
-  COALESCE(1.0 / (${RRF_K} + vec.rank), 0) + COALESCE(1.0 / (${RRF_K} + kw.rank), 0) AS rrf
+  COALESCE(1.0 / (${rrfK} + vec.rank), 0) + COALESCE(1.0 / (${rrfK} + kw.rank), 0) AS rrf
 FROM vec
 FULL OUTER JOIN kw ON kw.chunk_id = vec.chunk_id
 JOIN chunks    c ON c.id = COALESCE(vec.chunk_id, kw.chunk_id)
@@ -118,7 +159,7 @@ ORDER BY rrf DESC
 `;
 
 /** Vector-only, for when a query yields no usable keyword terms. */
-const VECTOR_ONLY_SQL = `
+const vectorOnlySql = (rrfK: number) => `
 WITH vec AS (
   SELECT rowid AS chunk_id,
          distance,
@@ -131,7 +172,7 @@ SELECT
   d.title, d.source_path, d.category, d.is_deprecated, d.superseded_by,
   vec.distance, vec.rank AS vec_rank,
   NULL AS bm25, NULL AS kw_rank,
-  1.0 / (${RRF_K} + vec.rank) AS rrf
+  1.0 / (${rrfK} + vec.rank) AS rrf
 FROM vec
 JOIN chunks    c ON c.id = vec.chunk_id
 JOIN documents d ON d.id = c.document_id
@@ -139,7 +180,7 @@ ORDER BY rrf DESC
 `;
 
 /** Keyword-only. Needs no embedding call, so the eval can run it without a key. */
-const KEYWORD_ONLY_SQL = `
+const keywordOnlySql = (rrfK: number) => `
 WITH kw AS (
   SELECT chunk_id, bm25, ROW_NUMBER() OVER (ORDER BY bm25) AS rank
   FROM (
@@ -156,7 +197,7 @@ SELECT
   d.title, d.source_path, d.category, d.is_deprecated, d.superseded_by,
   NULL AS distance, NULL AS vec_rank,
   kw.bm25, kw.rank AS kw_rank,
-  1.0 / (${RRF_K} + kw.rank) AS rrf
+  1.0 / (${rrfK} + kw.rank) AS rrf
 FROM kw
 JOIN chunks    c ON c.id = kw.chunk_id
 JOIN documents d ON d.id = c.document_id
@@ -221,8 +262,9 @@ export async function hybridSearch(
   options: HybridOptions = {},
 ): Promise<SearchResult[]> {
   const limit = options.limit ?? 8;
-  const candidates = options.candidates ?? 20;
+  const candidates = options.candidates ?? DEFAULT_CANDIDATES;
   const arm = options.arm ?? 'hybrid';
+  const rrfK = options.rrfK ?? DEFAULT_RRF_K;
   const embedder = options.embedder ?? ((text: string) => embedOne(text, options.signal));
 
   const ftsQuery = toFtsQuery(query);
@@ -245,16 +287,16 @@ export async function hybridSearch(
   if (useKeyword && useVector) {
     const vector = toVectorBlob(await embedder(query));
     rows = db
-      .prepare(FUSION_SQL)
+      .prepare(fusionSql(rrfK))
       .all({ vector, candidates: poolSize, ftsQuery: ftsQuery! }) as unknown as FusedRow[];
   } else if (useVector) {
     const vector = toVectorBlob(await embedder(query));
     rows = db
-      .prepare(VECTOR_ONLY_SQL)
+      .prepare(vectorOnlySql(rrfK))
       .all({ vector, candidates: poolSize }) as unknown as FusedRow[];
   } else {
     rows = db
-      .prepare(KEYWORD_ONLY_SQL)
+      .prepare(keywordOnlySql(rrfK))
       .all({ ftsQuery: ftsQuery!, candidates: poolSize }) as unknown as FusedRow[];
   }
 

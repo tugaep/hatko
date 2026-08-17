@@ -163,8 +163,19 @@ export function getApiKeyStatus(db: Db = getDb()): SecretStatus {
   return { configured: false, source: 'unset', hint: null, updatedAt: null, updatedBy: null };
 }
 
-/** Resolved key, database first, then environment. Null when neither is set. */
-export function resolveApiKey(db: Db = getDb()): string | null {
+/**
+ * Resolved key, database first, then environment. Null when neither is set.
+ *
+ * The environment fallback is a parameter rather than read straight from config
+ * so it can be controlled in tests. config.ts snapshots process.env at import and
+ * loads .env from disk, so a test asserting "no key configured" would otherwise
+ * pass or fail depending on whether the developer running it happens to have a
+ * real key on the machine — and would print that key into the failure output.
+ */
+export function resolveApiKey(
+  db: Db = getDb(),
+  envFallback: string | null = config.openaiApiKey ?? null,
+): string | null {
   try {
     const stored = getSecret(db, SETTING_KEYS.openaiApiKey);
     if (stored) return stored;
@@ -178,12 +189,15 @@ export function resolveApiKey(db: Db = getDb()): string | null {
         'Re-enter the key in the admin settings, or restore the previous secret.',
     );
   }
-  return config.openaiApiKey ?? null;
+  return envFallback;
 }
 
 /** Resolved key or an actionable error. Call sites are all provider requests. */
-export function requireApiKey(db: Db = getDb()): string {
-  const key = resolveApiKey(db);
+export function requireApiKey(
+  db: Db = getDb(),
+  envFallback: string | null = config.openaiApiKey ?? null,
+): string {
+  const key = resolveApiKey(db, envFallback);
   if (!key) {
     throw new Error(
       'No OpenAI API key is configured. Either set it in the admin settings page, ' +

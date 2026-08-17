@@ -129,6 +129,21 @@ Do not break this alignment.
 names. The brief requires that pointing ingestion at the real corpus be
 straightforward.
 
+**RRF k=10 and 10 candidates per arm, both chosen by sweep — do not restore the
+textbook k=60.** With k=60 and a 30-candidate pool, hybrid scored _worse_ than
+keyword alone (recall@1 78% vs 89%): summing 1/(k+rank) rewards ranking mediocrely
+in both arms over ranking first in one, which dropped `localization-guide.md` from
+keyword rank 1 to outside the hybrid top 30. k=60 assumes ~1000 candidates; 30 of
+142 chunks is a fifth of the corpus. Candidate depth should scale with the corpus,
+as a fraction rather than a constant. Pinned by a test in
+`packages/core/src/retrieval/search.test.ts`.
+
+**The reranker grades absolute relevance 0–3, not a ranking**, because abstention
+depends on it. Fused scores cannot support a threshold: RRF is rank-derived, so
+the top result scores the same constant whether it answers the question or is the
+least bad of 142. Measured, answerable questions score 1.00 and unanswerable ones
+at most 0.33, with the threshold at 0.67 between them.
+
 ---
 
 ## 6. Corpus facts that shape retrieval
@@ -136,11 +151,14 @@ straightforward.
 The sample corpus is 142 files, ~17.7k words, ~24k tokens. The difficulty is
 planted, not incidental:
 
-- **78 near-identical delivery reports.** Pure vector search returns a wall of
-  mush. This is the main reason retrieval is hybrid — the lexical arm is what
-  rescues queries like "why are sound assets built in a separate pass".
-- **`sdk-notes-v2.md` is deprecated and semantically near-identical to `v3`.** It
-  will out-rank v3 on some phrasings. Deprecation is detected at ingest, stored on
+- **78 near-identical delivery reports.** Measured: for "is hard-coding UI copy a
+  QA blocker" the vector arm returns four delivery reports in its top five and
+  misses the answer entirely, while the keyword arm puts it at rank 1. The lexical
+  arm is what cuts through the crowding.
+- **`sdk-notes-v2.md` is deprecated and semantically near-identical to `v3`.**
+  Measured: BM25 ranks v2 _above_ v3 for sample question 2, because v2 mentions
+  `lumen.track` more prominently than the document that replaced it. The rerank
+  pass is what corrects it — no lexical or vector tuning can. Deprecation is detected at ingest, stored on
   the document, passed to the answer prompt, and surfaced in the UI. A correct
   answer to sample question 2 says v2 is deprecated.
 - **Answers span documents.** `build-pipeline.md`, `incident-postmortem-2026-03.md`
@@ -214,16 +232,16 @@ These are the failure modes that have already happened or nearly happened here.
 
 Each step ends somewhere demonstrable.
 
-| #   | Step                                                 | Status                           |
-| --- | ---------------------------------------------------- | -------------------------------- |
-| 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9`             |
-| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**                         |
-| 3   | Hybrid retrieval + rerank + eval script              | **done** (vector arm unmeasured) |
-| 4   | RAG answers, citations, abstain path                 |                                  |
-| 5   | Better Auth, roles, server-side gating               |                                  |
-| 6   | Chat page, then dashboard                            |                                  |
-| 7   | MCP server                                           |                                  |
-| 8   | README, AI usage log, history cleanup                |                                  |
+| #   | Step                                                 | Status                              |
+| --- | ---------------------------------------------------- | ----------------------------------- |
+| 1   | Workspace, shared schemas, SQLite schema, migrations | **done** — `549c0b9`                |
+| 2   | Ingestion CLI → corpus indexed, runs recorded        | **done**                            |
+| 3   | Hybrid retrieval + rerank + eval script              | **done** — recall@1 100%, MRR 1.000 |
+| 4   | RAG answers, citations, abstain path                 |                                     |
+| 5   | Better Auth, roles, server-side gating               |                                     |
+| 6   | Chat page, then dashboard                            |                                     |
+| 7   | MCP server                                           |                                     |
+| 8   | README, AI usage log, history cleanup                |                                     |
 
 Step 3 lands **before** step 4 on purpose: retrieval is the top-graded axis, and
 tuning should be driven by measured recall@k, not by impressions from a chat box.

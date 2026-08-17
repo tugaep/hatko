@@ -55,6 +55,12 @@ relative to one another, and do not award a high grade merely because a passage 
 the best of a weak set: if nothing answers the question, every grade should be 0
 or 1. That outcome is expected and useful.
 
+Match the specific subject of the question, not just its topic. If the question
+names a particular network, product, version, team or time period, a passage about
+a *different* one does not answer it — grade it at most 1, however closely the
+wording matches. A question about limits for network X is not answered by the
+limits for network Y.
+
 A passage from a document marked deprecated should be graded on whether it answers
 the question as asked. If the question asks about current practice, a deprecated
 document describing superseded practice does not answer it.
