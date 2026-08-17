@@ -80,13 +80,53 @@ the history needs to know the decision changed rather than that the rule was ign
   debounce, off by default, plus the existing CLI and dashboard triggers.
 - **Live deployment** to `hatko.tugrap.dev`. Production config and a full deploy guide
   are in scope; the operator runs the deploy.
-- **Admin user-management UI** — list, invite, change role, deactivate. This is
-  **step 8**; the README/AI-usage/history step moved to **step 9**.
+- **Admin user-management UI** — list, invite, change role, deactivate. This was
+  **step 8**, and it pushed the README/AI-usage/history step to **step 9** — which the
+  18 Aug additions below then pushed to **step 14**. The number has moved twice; the
+  table in §9 is the authority, not this paragraph.
+
+**Added to scope on 18 Aug 2026, by the user, after the bonus-feature audit.** Five
+steps, inserted ahead of the README step. Two were on the bonus list, one was a gap the
+code documents about itself, and two are the user's own additions — which `bonus.md`
+explicitly invites: "extending the scope, or adding something that makes the system
+genuinely better is encouraged; tell us what you added and why."
+
+- **Rate limiting** (step 9). Named as a gap in `docs/mcp.md` §7 and
+  `docs/deployment.md` §10: a valid token can drive unbounded rerank calls, which is
+  real money, and `/answer` is the same. Security is a graded axis and this is the one
+  hole the audit left standing. In-memory fixed-window counter keyed by user id, no
+  dependency, returning the 429 `apiErrorSchema` already declares.
+- **Streaming answers** (step 10). Moved off the out-list below, deliberately. The last
+  search-experience item on `bonus.md`. Citation validation and the abstain decision
+  still run against the _complete_ text — streaming changes how an answer arrives, never
+  what is allowed to be claimed in it.
+- **Self-hosted models** (step 11). Removes the paid external dependency, which makes
+  "runs on a fresh machine" stronger rather than weaker. Two constraints, both real, and
+  both recorded here so nobody rediscovers them mid-step: (1) `EMBEDDING_DIMENSIONS=1536`
+  is compiled into the vec0 column width in migration 001, and every small local
+  embedding model is 384 or 768 — so local embeddings need a migration and a full
+  re-ingest, and one vector column cannot serve two providers at different widths;
+  (2) the abstain threshold is calibrated against `gpt-4o-mini`'s grades (answerable
+  1.00, unanswerable ≤0.33, threshold 0.67), and a 0.5B model will not hold that by
+  assumption. So local generation is only claimed once the eval script measures it, and
+  the OpenAI path stays the default.
+- **3D embedding view** (step 12). A dashboard tab projecting the stored vectors to three
+  dimensions. Not decoration: the argument this whole retriever rests on is that 78
+  near-identical delivery reports collapse into one indistinguishable cluster, and this
+  is that claim made visible instead of asserted. PCA over the 142×142 Gram matrix by
+  power iteration, and a canvas projection with drag-to-rotate — both stdlib, because
+  t-SNE and three.js are each a dependency for what fifty lines of arithmetic covers.
+- **Run the deploy** (step 13). Step 8b wrote the guide and its own verification
+  checklist but nobody has run it on a server, which `AI_USAGE.md` says plainly. The
+  bonus asks for a shareable link, so the guide has to become a deployment. Last before
+  the README, because it deploys whatever exists by then.
 
 **Out — deliberately, do not build:**
 
-- Streaming answers. Result highlighting is done; streaming is the only search-experience
-  item left and it stays out unless the final hours are quiet.
+- Per-client OAuth revocation. A "connected applications" panel that deletes one
+  client's tokens. Surfaced by the 18 Aug audit and recorded as a stated limit in
+  `docs/mcp.md` §7 instead. Deactivating the account is the immediate cut-off that does
+  exist; tying tokens to the session is the wrong fix and §7 says why.
 - Anything else not named above.
 
 If a task seems to need something from the "out" list, stop and ask. Do not
@@ -261,8 +301,14 @@ Each step ends somewhere demonstrable.
 | 7b  | Autonomous ingestion trigger — completes a bonus     | **done** — fs.watch, verified on a scratch corpus |
 | 7c  | OIDC on the MCP server — completes a bonus           | **done** — consent forced, full flow verified     |
 | 8   | Admin user management: list, add, role, deactivate   | **done** — lockout guards, revocation verified    |
-| 8b  | Production config + deploy guide, hatko.tugrap.dev   |                                                   |
-| 9   | README, AI usage log, history cleanup                |                                                   |
+| 8b  | Production config + deploy guide, hatko.tugrap.dev   | **done** — guide written; deploy is step 13       |
+| 8c  | Audit of the four bonus features                     | **done** — `7350417`, 3 false claims corrected    |
+| 9   | Rate limiting on search, answer and the MCP tool     |                                                   |
+| 10  | Streaming answers — completes a bonus                |                                                   |
+| 11  | Self-hosted models, OpenAI path stays default        |                                                   |
+| 12  | 3D embedding view on the dashboard                   |                                                   |
+| 13  | Run the deploy against hatko.tugrap.dev              |                                                   |
+| 14  | README, AI usage log, history cleanup                |                                                   |
 
 Step 3 lands **before** step 4 on purpose: retrieval is the top-graded axis, and
 tuning should be driven by measured recall@k, not by impressions from a chat box.
@@ -271,6 +317,13 @@ Steps 7b, 7c, 8 and 8b were added on 17 Aug 2026 — see the note in §3. 7b and
 finish two bonuses that were already half-built, which is why they come before the new
 feature: an incomplete thing already in the repository costs more to leave than a
 missing thing nobody has started.
+
+Steps 9 to 13 were added on 18 Aug 2026 — again see §3. The order is by risk, not by
+appeal. Rate limiting is first because it is small, self-contained and closes the last
+security gap. Self-hosted models come before the 3D view despite being less fun, because
+they are the only step that can move a measured retrieval number, and a change to the
+top-graded axis wants the most remaining time to be wrong in. The deploy is last, because
+it ships whatever exists when it runs.
 
 ---
 
