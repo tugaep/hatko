@@ -6,8 +6,18 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
-import { listDocuments, listIngestionRuns } from '../db/repository.ts';
+import { listDocumentsFiltered, listIngestionRuns } from '../db/repository.ts';
 import { ingest, type Embedder } from './pipeline.ts';
+
+/**
+ * Every document, for assertions that care about the whole corpus.
+ *
+ * `listDocumentsFiltered` is the only reader the API uses; the unfiltered
+ * `listDocuments` beside it existed for these four call sites and nothing else,
+ * so it is a local helper rather than a second repository function.
+ */
+const listDocuments = (db: ReturnType<typeof openDb>) =>
+  listDocumentsFiltered(db, { limit: 1000, offset: 0 }).items;
 
 /**
  * End-to-end ingestion against the real sample corpus.

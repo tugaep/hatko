@@ -899,11 +899,11 @@ test, and the branch it covered is exercised through `requirePermission`.
 audit: Better Auth owns the sign-in endpoint and validates its own body, so that
 schema had no validator to be and no consumer in either workspace.
 
-`listDocuments` is the one flagged item deliberately kept. It has no production
-caller — `listDocumentsFiltered` is what the API uses — but five tests read "every
-document", and replacing it means `{ limit: 1000, offset: 0 }` at each of them.
-Deleting four lines to add ten is not a saving, so it stays, recorded as a choice
-rather than left looking like an oversight.
+`listDocuments` went too, on a second pass: the four test call sites share one
+local helper in the file that uses them, rather than a repository function the API
+never calls. Also unexported, having no caller outside their own modules:
+`getIndexHealth`, `getCategoryBreakdown` (both reached through
+`getDashboardStats`) and `IGNORED_SEGMENTS`.
 
 ### A regression the fix for 15 introduced
 
@@ -943,3 +943,61 @@ schema would accept. Defects 18 and 19 turn out to be the same shape — a contr
 enforced inbound and not outbound, a limit bounded on the HTTP path and unbounded
 on the CLI path beside it. Three instances of one mistake, found by looking for
 asymmetries rather than by looking for bugs.
+
+### The last sweep: four more, and one that changed a reported number
+
+A final pass for anything still open, driven by a script that lists every exported
+symbol with no consumer outside its own declaration rather than by memory.
+
+**The eval measured a system slightly different from the one that ships.** It
+retrieved and reranked ten candidates through a local `RETRIEVE_DEPTH = 10`, while
+`answerQuestion` reranks six. A document at fused rank 7 could therefore be
+promoted to first in the eval and never be seen in production — the reported
+recall would be describing a retriever nobody runs. Both now come from one exported
+`DEFAULT_ANSWER_PASSAGES`, and the eval header states the depth, because recall@k
+means nothing without the size of the pool behind it.
+
+I expected this to cost a point or two. It cost nothing: keyword 100% / MRR 1.000,
+vector 89% / 0.889, hybrid 100% / 1.000, identical at six as at ten, and 12/12
+answer checks still pass. The abstain margin actually widened — hybrid's
+unanswerable relevance range tightened from 0.00–0.33 to 0.00–0.00. So the numbers
+in this file were never flattered by the deeper pool, which is worth knowing for
+certain rather than assuming.
+
+**A caller-supplied `AbortSignal` disabled the request timeout.** `signal ??
+AbortSignal.timeout(60_000)` means the 60-second bound applied only when nobody
+passed a signal — and every request-scoped call passes one. So the one path a user
+waits on was the one with no limit on how long a provider request could hang. Now
+`AbortSignal.any([signal, AbortSignal.timeout(60_000)])`.
+
+**A blank query returned eight arbitrary passages.** No keyword terms means the
+vector-only fallback, which embedded the empty string and returned whatever sat
+nearest the origin. `/api/search` is guarded by the schema's two-character
+minimum, but `hybridSearch` is exported and step 7's MCP tool is a second caller
+with its own boundary.
+
+**The dashboard's top-queries label was non-deterministic.** Grouping is
+case-insensitive, and a bare `query` beside a `GROUP BY` is legal in SQLite and
+returns an arbitrary group member — so the casing shown could change between two
+reads of unchanged data. `min(trim(query))` fixes it, and the trim is not
+cosmetic: a space sorts ahead of every letter, so the untrimmed minimum would have
+displayed the variant with the stray whitespace the grouping key already ignores.
+I found that because my first assertion guessed `BUILD PIPELINE` and the test
+returned `' build pipeline '`. The expectation was wrong and the code was right,
+but the failure was pointing at something real underneath it.
+
+### One thing deliberately not touched
+
+`apps/web` appeared during this session and is entirely untracked — step 6, in
+progress. The dead-export sweep flags ten helpers in it (`apiGet`, `formatBytes`,
+`highlightSegments` and so on), and every one of them is scaffolding for a chat
+page and dashboard being written right now. Deleting them would be deleting
+someone's work mid-sentence, so none of it is in this commit.
+
+I did check that nothing removed here breaks it: it imports only from
+`@sorrel/shared`, uses none of the symbols this pass deleted, and its own
+`requireUser` is a Next.js session helper unrelated to the core one that went. Its
+typecheck reports one error — `sign-in/page.tsx` imports a `sign-in-form.tsx` that
+has not been written yet — which is unfinished work rather than damage. Worth
+saying plainly because the root `tsconfig.json` excludes `apps/web`, so
+`npm run typecheck` at the repository root would never have told anyone.

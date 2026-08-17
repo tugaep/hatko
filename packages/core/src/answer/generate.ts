@@ -56,6 +56,17 @@ export interface AnswerOptions {
 
 const MAX_PASSAGE_CHARS = 2000;
 
+/**
+ * Passages retrieved, reranked, and offered to the answer model.
+ *
+ * Exported because the eval has to measure this depth and not one of its own. It
+ * used a local `RETRIEVE_DEPTH = 10`, so the reported recall@k described a rerank
+ * over ten candidates while the shipped answer path reranks six — a document at
+ * fused rank 7 could be promoted to first in the eval and never be seen in
+ * production. One constant, so the measurement and the product cannot drift.
+ */
+export const DEFAULT_ANSWER_PASSAGES = 6;
+
 function buildPrompt(query: string, passages: SearchResult[]): string {
   const rendered = passages
     .map((passage, index) => {
@@ -180,7 +191,7 @@ export async function answerQuestion(
   options: AnswerOptions = {},
 ): Promise<AnswerResponse> {
   const started = performance.now();
-  const limit = options.limit ?? 6;
+  const limit = options.limit ?? DEFAULT_ANSWER_PASSAGES;
 
   const retrieved = await hybridSearch(db, query, {
     limit,

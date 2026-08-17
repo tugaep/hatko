@@ -162,3 +162,42 @@ test('the abstain rate is the share of queries that abstained', () => {
   assert.equal(stats.recentAbstains.length, 1);
   assert.equal(stats.recentAbstains[0]?.query, 'junior developer salary');
 });
+
+/**
+ * Top queries are grouped case-insensitively, so the label shown for a group has
+ * to be chosen rather than left to SQLite. A bare `query` beside a `GROUP BY` is
+ * legal in SQLite and returns an arbitrary member, so the casing on the dashboard
+ * could change between two reads of unchanged data.
+ */
+test('a grouped query is labelled deterministically, not by whichever row won', () => {
+  using ctx = tempDb();
+
+  const insert = (query: string) =>
+    ctx.db
+      .prepare(
+        `INSERT INTO search_queries (user_id, source, query, result_count, abstained, latency_ms)
+         VALUES ('u', 'web', ?, 1, 0, 10)`,
+      )
+      .run(query);
+
+  for (const variant of [
+    'Build Pipeline',
+    'build pipeline',
+    'BUILD PIPELINE',
+    ' build pipeline ',
+  ]) {
+    insert(variant);
+  }
+  insert('something else');
+
+  const first = getSearchStats(ctx.db).topQueries;
+  const second = getSearchStats(ctx.db).topQueries;
+
+  assert.equal(first[0]?.count, 4, 'casing and surrounding space do not split the group');
+  assert.deepEqual(first, second, 'the same data reports the same label');
+  assert.equal(
+    first[0]?.query,
+    'BUILD PIPELINE',
+    'the label is the group minimum, not a coin toss',
+  );
+});

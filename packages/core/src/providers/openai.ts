@@ -53,7 +53,13 @@ async function postJson(path: string, body: unknown, signal?: AbortSignal): Prom
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
         body: JSON.stringify(body),
-        signal: signal ?? AbortSignal.timeout(60_000),
+        // The timeout applies whether or not the caller supplied a signal. It used
+        // to be `signal ?? AbortSignal.timeout(...)`, so passing one — which every
+        // request-scoped call does — silently removed the only bound on how long a
+        // provider request could hang, on the path a user is waiting on.
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
+          : AbortSignal.timeout(60_000),
       });
     } catch (cause) {
       // Network failure or timeout — no status to reason about, always worth a retry.

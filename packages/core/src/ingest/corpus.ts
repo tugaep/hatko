@@ -38,7 +38,7 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
  * is unambiguously tooling. If a corpus ever needs its own exclusions, this is the
  * seam to lift into configuration — until one does, a setting for it is a guess.
  */
-export const IGNORED_SEGMENTS = ['node_modules', 'CLAUDE.md'];
+const IGNORED_SEGMENTS = ['node_modules', 'CLAUDE.md'];
 
 /**
  * Hidden files and directories are tooling by convention — `.git`, `.obsidian`,

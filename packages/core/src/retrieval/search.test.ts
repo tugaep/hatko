@@ -192,6 +192,30 @@ test('limit is respected', async () => {
   assert.ok(results.length <= 3);
 });
 
+/**
+ * A blank query has nothing to match, and every arm treated it as one that did:
+ * no keyword terms means the vector-only fallback, which embedded the empty string
+ * and returned whichever passages sat nearest the origin. `/api/search` is guarded
+ * by the schema's two-character minimum, but this function is exported and step 7's
+ * MCP tool is a second caller with its own boundary.
+ */
+test('a blank query returns nothing rather than arbitrary passages', async () => {
+  for (const query of ['', '   ', '\n\t']) {
+    assert.deepEqual(await search(query), [], `"${query}" should retrieve nothing`);
+  }
+});
+
+/**
+ * Both are interpolated into SQL. `rrfK = 0` divides by zero at rank 1, which
+ * SQLite returns as NULL and COALESCE turns into a score of zero — so the best hit
+ * sorts last and the ranking inverts without erroring.
+ */
+test('retrieval knobs are rejected rather than producing a silently wrong order', async () => {
+  await assert.rejects(search('build', { candidates: -5 }), /non-negative integer/);
+  await assert.rejects(search('build', { rrfK: 0 }), /greater than zero/);
+  await assert.rejects(search('build', { rrfK: -1 }), /greater than zero/);
+});
+
 // --- rerank -----------------------------------------------------------------
 
 const gradeBy = (grades: Record<string, number>) => async (_q: string, c: SearchResult[]) =>

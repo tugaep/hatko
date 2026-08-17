@@ -3,7 +3,7 @@ import { closeDb, getDb } from '../db/client.ts';
 import { resolveApiKey } from '../settings.ts';
 import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
 import { rerank } from '../retrieval/rerank.ts';
-import { answerQuestion } from '../answer/generate.ts';
+import { answerQuestion, DEFAULT_ANSWER_PASSAGES } from '../answer/generate.ts';
 import { ANSWERABLE, EVAL_QUESTIONS, UNANSWERABLE, type EvalQuestion } from './questions.ts';
 
 /**
@@ -60,7 +60,15 @@ interface QuestionResult {
   contextHit: boolean;
 }
 
-const RETRIEVE_DEPTH = 10;
+/**
+ * The depth the answer path actually reranks, imported rather than restated.
+ *
+ * This was a local `10`, which meant the recall figures reported below described a
+ * rerank over ten candidates while the shipped answer path reranks six — so a
+ * document sitting at fused rank 7 could be promoted to first here and never be
+ * seen in production. The eval has to measure the system, not a nearby one.
+ */
+const RETRIEVE_DEPTH = DEFAULT_ANSWER_PASSAGES;
 
 async function evaluate(arm: RetrievalArm, withRerank: boolean): Promise<QuestionResult[]> {
   const db = getDb();
@@ -143,7 +151,11 @@ if (arms.length === 0) {
 
 console.log(
   `Retrieval eval — ${indexed.n} chunks, ${ANSWERABLE.length} answerable questions, ` +
-    `${UNANSWERABLE.length} unanswerable\n`,
+    `${UNANSWERABLE.length} unanswerable\n` +
+    // Stated, because recall@k means nothing without the size of the pool it was
+    // measured over, and a reader comparing these figures to the product needs to
+    // know they describe the same depth it reranks.
+    `Retrieving ${RETRIEVE_DEPTH} passages per question, the depth the answer path uses.\n`,
 );
 
 if (!hasKey && values.arm === 'all') {
@@ -256,7 +268,7 @@ if (values.answers) {
   let failures = 0;
 
   for (const question of EVAL_QUESTIONS) {
-    const response = await answerQuestion(db, question.question, { limit: 6 });
+    const response = await answerQuestion(db, question.question);
     const problems: string[] = [];
     /** Phrases the prose omitted but the structured notice supplied. */
     const viaNotice: string[] = [];

@@ -326,6 +326,13 @@ export async function hybridSearch(
   if (!Number.isFinite(rrfK) || rrfK <= 0) {
     throw new Error(`rrfK must be greater than zero, got ${rrfK}.`);
   }
+
+  // A blank query has no answer to find, and every arm treats it as one that does:
+  // the keyword arm yields no terms, so the fallback embeds the empty string and
+  // returns whichever eight passages happen to sit nearest the origin. `/api/search`
+  // is protected by `searchRequestSchema`'s two-character minimum, but this function
+  // is exported and step 7's MCP tool is a second caller with its own boundary.
+  if (query.trim().length === 0) return [];
   const embedder = options.embedder ?? ((text: string) => embedOne(text, options.signal));
 
   const ftsQuery = toFtsQuery(query);

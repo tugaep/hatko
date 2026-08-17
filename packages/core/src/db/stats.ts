@@ -25,7 +25,7 @@ import { listIngestionRuns } from './repository.ts';
  * point at passages that no longer exist. Surfacing both numbers makes that
  * visible on the dashboard instead of leaving it to be inferred from bad answers.
  */
-export function getIndexHealth(db: Db): IndexHealth {
+function getIndexHealth(db: Db): IndexHealth {
   const counts = db
     .prepare(
       `SELECT
@@ -64,7 +64,7 @@ export function getIndexHealth(db: Db): IndexHealth {
   };
 }
 
-export function getCategoryBreakdown(db: Db): CategoryBreakdown[] {
+function getCategoryBreakdown(db: Db): CategoryBreakdown[] {
   return (
     db
       .prepare(
@@ -142,7 +142,14 @@ export function getSearchStats(db: Db): SearchStats {
   const topQueries = (
     db
       .prepare(
-        `SELECT query, count(*) AS count, sum(abstained) AS abstained_count
+        // Grouped case-insensitively, so "Build pipeline" and "build pipeline" are
+        // one row. `min(trim(query))` rather than a bare `query`: SQLite allows the
+        // bare column beside a GROUP BY and returns an arbitrary member, so the
+        // casing the dashboard displayed could change between two reads of unchanged
+        // data. Trimmed inside the min because a space sorts ahead of every letter,
+        // so the untrimmed form would win and the label would carry the stray
+        // whitespace that the grouping key already ignores.
+        `SELECT min(trim(query)) AS query, count(*) AS count, sum(abstained) AS abstained_count
            FROM search_queries
           GROUP BY lower(trim(query))
           ORDER BY count DESC, query

@@ -77,12 +77,6 @@ export function getDocumentsBySourcePath(db: Db): Map<string, Document> {
   return new Map(rows.map((row) => [String(row.source_path), toDocument(row)]));
 }
 
-export function listDocuments(db: Db): Document[] {
-  return (db.prepare('SELECT * FROM documents ORDER BY source_path').all() as Row[]).map(
-    toDocument,
-  );
-}
-
 export interface DocumentUpsert {
   sourcePath: string;
   title: string;
