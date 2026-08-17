@@ -20,12 +20,57 @@ export interface SourceDocument {
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 
 /**
+ * Path segments that are never corpus content.
+ *
+ * Having no exclusions at all was a real defect, not a theoretical one: an agent
+ * plugin wrote a `CLAUDE.md` stub into the sample corpus and ingestion indexed it
+ * as a 43-byte document, taking the count to 143. Gitignoring the file was the
+ * wrong layer — it stopped the file being committed and did nothing to stop it
+ * being indexed.
+ *
+ * `node_modules` is the one that would hurt most. "Point CORPUS_PATH at the real
+ * corpus" is a stated requirement, and a documentation tree that lives inside a
+ * repository has thousands of `README.md` files under there.
+ *
+ * Deliberately short, and deliberately not including `README.md`: in a real
+ * documentation tree a README is often genuine content, and a default that
+ * silently drops it would be a worse bug than the one this fixes. Everything here
+ * is unambiguously tooling. If a corpus ever needs its own exclusions, this is the
+ * seam to lift into configuration — until one does, a setting for it is a guess.
+ */
+export const IGNORED_SEGMENTS = ['node_modules', 'CLAUDE.md'];
+
+/**
+ * Hidden files and directories are tooling by convention — `.git`, `.obsidian`,
+ * `.github/PULL_REQUEST_TEMPLATE.md`, `.DS_Store`. No corpus addresses a document
+ * by a dot-prefixed path.
+ */
+const isHidden = (segment: string) => segment.startsWith('.');
+
+function isIgnored(relativePath: string, ignore: readonly string[]): boolean {
+  return relativePath
+    .split('/')
+    .some(
+      (segment) =>
+        isHidden(segment) || ignore.some((entry) => entry.toLowerCase() === segment.toLowerCase()),
+    );
+}
+
+/**
  * Walk the corpus directory and return every markdown file, sorted by path.
  *
  * Sorted so that ingestion order — and therefore document ids — are stable
  * between runs on the same corpus, which makes ingest output diffable.
+ *
+ * Returns the excluded paths alongside the kept ones so the pipeline can report
+ * what it skipped. Silence is what made the `CLAUDE.md` case a defect: an
+ * exclusion nobody can see is indistinguishable from a document that failed to
+ * index.
  */
-export function listCorpusFiles(corpusRoot: string): string[] {
+export function scanCorpus(
+  corpusRoot: string,
+  ignore: readonly string[] = IGNORED_SEGMENTS,
+): { files: string[]; ignored: string[] } {
   if (!fs.existsSync(corpusRoot)) {
     throw new Error(
       `Corpus directory not found: ${corpusRoot}\n` +
@@ -33,12 +78,17 @@ export function listCorpusFiles(corpusRoot: string): string[] {
     );
   }
 
-  return fs
+  const all = fs
     .readdirSync(corpusRoot, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && MARKDOWN_EXTENSIONS.has(path.extname(entry.name)))
     .map((entry) => path.relative(corpusRoot, path.join(entry.parentPath, entry.name)))
     .map((rel) => rel.split(path.sep).join('/'))
     .sort();
+
+  return {
+    files: all.filter((rel) => !isIgnored(rel, ignore)),
+    ignored: all.filter((rel) => isIgnored(rel, ignore)),
+  };
 }
 
 /**

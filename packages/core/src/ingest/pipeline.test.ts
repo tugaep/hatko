@@ -221,6 +221,108 @@ test('every run is recorded whether or not anything changed', async () => {
   assert.ok(runs.every((r) => r.trigger === 'cli'));
 });
 
+/**
+ * Tooling that shares the corpus directory must not become documents.
+ *
+ * This is a regression test for something that actually happened: an agent plugin
+ * wrote a `CLAUDE.md` stub into the sample corpus and ingestion indexed it,
+ * silently taking the corpus from 142 documents to 143. `node_modules` is the case
+ * that would do real damage, since pointing CORPUS_PATH at a repository is a
+ * supported thing to do.
+ */
+test('tooling files sharing the corpus directory are not indexed', async () => {
+  using ctx = tempDb();
+  using corpus = tempCorpus();
+
+  const clean = await run(ctx.db, corpus.path);
+
+  fs.writeFileSync(path.join(corpus.path, 'CLAUDE.md'), '<claude-mem-context>\n\n');
+  fs.mkdirSync(path.join(corpus.path, 'node_modules', 'some-pkg'), { recursive: true });
+  fs.writeFileSync(
+    path.join(corpus.path, 'node_modules', 'some-pkg', 'README.md'),
+    '# Some Package\n\nUnrelated dependency documentation.\n',
+  );
+  fs.mkdirSync(path.join(corpus.path, '.github'), { recursive: true });
+  fs.writeFileSync(path.join(corpus.path, '.github', 'PULL_REQUEST_TEMPLATE.md'), '# PR\n\nx\n');
+
+  const ignored: string[] = [];
+  const after = await ingest(ctx.db, {
+    trigger: 'cli',
+    corpusPath: corpus.path,
+    embedder: stubEmbedder,
+    onProgress: (p) => {
+      if (p.message.startsWith('ignored ')) ignored.push(p.message);
+    },
+  });
+
+  assert.equal(after.docsTotal, clean.docsTotal, 'four stray markdown files, no new documents');
+  assert.equal(after.docsSkipped, clean.docsTotal, 'and nothing re-embedded');
+
+  const paths = listDocuments(ctx.db).map((d) => d.sourcePath);
+  assert.ok(!paths.includes('CLAUDE.md'), 'the plugin stub is not a document');
+  assert.ok(!paths.some((p) => p.startsWith('node_modules/')), 'dependency docs are not documents');
+  assert.ok(!paths.some((p) => p.startsWith('.github/')), 'hidden directories are not documents');
+
+  // An exclusion nobody can see is indistinguishable from a document that failed
+  // to index, which is the whole reason the original bug went unnoticed.
+  assert.equal(ignored.length, 1, 'the run reports what it ignored');
+  assert.match(ignored[0]!, /CLAUDE\.md/);
+});
+
+/**
+ * `docs_failed` on the run and the failed documents in the table have to agree.
+ *
+ * They did not. `markDocumentFailed` needs a row id, and for a document that was
+ * new this run there was none: the read path only recorded failures for documents
+ * already on record, and the write path's `upsertDocument` was rolled back by the
+ * same transaction that failed. A run would report two failures with one failed
+ * document visible anywhere — and "ingestion is observable" would hold only for
+ * the failures that happened to be re-runs.
+ *
+ * A short embedder return is the cheapest way to fail the write phase for real:
+ * the second document's slice is empty, so its vector is undefined and the
+ * transaction throws inside `toVectorBlob`.
+ */
+test('a failure on a document new this run is still visible afterwards', async () => {
+  using ctx = tempDb();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-failvis-'));
+
+  fs.writeFileSync(path.join(dir, 'a.md'), '# A\n\nAlpha content about widgets.\n');
+  fs.writeFileSync(path.join(dir, 'b.md'), '# B\n\nBeta content about gadgets.\n');
+  fs.writeFileSync(path.join(dir, 'empty.md'), '   \n\n');
+  fs.mkdirSync(path.join(dir, 'unreadable.md')); // a directory named like a file
+
+  const short: Embedder = async (texts) => (await stubEmbedder(texts)).slice(0, 1);
+  const result = await ingest(ctx.db, {
+    trigger: 'cli',
+    corpusPath: dir,
+    embedder: short,
+  });
+
+  const failed = listDocuments(ctx.db).filter((d) => d.status === 'failed');
+
+  assert.ok(result.docsFailed > 0, 'the run should record failures');
+  assert.equal(
+    failed.length,
+    result.docsFailed,
+    `run reported ${result.docsFailed} failures but ${failed.length} documents are marked failed`,
+  );
+  for (const doc of failed) {
+    assert.ok(doc.error, `${doc.sourcePath} is marked failed but carries no reason`);
+  }
+
+  // The empty file is the case that already worked; b.md is the one that did not.
+  const paths = failed.map((d) => d.sourcePath);
+  assert.ok(paths.includes('empty.md'));
+  assert.ok(paths.includes('b.md'), 'a write-phase failure on a brand-new document is recorded');
+
+  // A failed document must be retried rather than treated as up to date.
+  const retry = await ingest(ctx.db, { trigger: 'cli', corpusPath: dir, embedder: stubEmbedder });
+  assert.ok(retry.docsSkipped < result.docsTotal, 'failed documents are not skipped as unchanged');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('an embedding failure marks the run failed rather than leaving it running', async () => {
   using ctx = tempDb();
   const failing: Embedder = async () => {

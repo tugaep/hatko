@@ -12,11 +12,12 @@ import {
   startIngestionRun,
   upsertDocument,
   type ChunkInsert,
+  type DocumentUpsert,
   type RunCounts,
 } from '../db/repository.ts';
 import { embed } from '../providers/openai.ts';
 import { buildEmbeddingText, chunkMarkdown, estimateTokens, type RawChunk } from './chunk.ts';
-import { listCorpusFiles, readDocument, type SourceDocument } from './corpus.ts';
+import { categoryOf, scanCorpus, readDocument, titleOf, type SourceDocument } from './corpus.ts';
 
 /**
  * The ingestion pipeline.
@@ -78,6 +79,42 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
   } = options;
   const report = (progress: IngestProgress) => onProgress?.(progress);
 
+  /**
+   * Record a document that could not be indexed, creating its row if none exists.
+   *
+   * Must run *outside* the write transaction. A failure in there is rolled back,
+   * and an `upsertDocument` inside it is rolled back with the error it was meant to
+   * record — which is how a run came to report two failures while only one
+   * appeared in the document list, and index health counted one. `docs_failed` on
+   * the run and the failed documents themselves have to agree, or "ingestion is
+   * observable" is only true for the failures that happen to be re-runs.
+   *
+   * Never throws: bookkeeping must not abort a run over the 141 documents that
+   * were fine. Same rule as `recordSearchQuery`.
+   */
+  const recordFailure = (doc: DocumentUpsert, message: string) => {
+    try {
+      markDocumentFailed(db, upsertDocument(db, doc), message);
+    } catch {
+      report({ phase: 'write', message: `could not record the failure of ${doc.sourcePath}` });
+    }
+  };
+
+  /**
+   * What we know about a file we could not even read: its path. Enough to make the
+   * failure visible. The empty content hash matters — it can never equal a real
+   * one, so the next run always retries rather than treating the stub as current.
+   */
+  const placeholderFor = (sourcePath: string): DocumentUpsert => ({
+    sourcePath,
+    title: titleOf(sourcePath, ''),
+    category: categoryOf(sourcePath),
+    contentHash: '',
+    byteSize: 0,
+    isDeprecated: false,
+    supersededBy: null,
+  });
+
   const runId = startIngestionRun(db, trigger);
   const counts: RunCounts = {
     docsTotal: 0,
@@ -90,10 +127,16 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
 
   try {
     // --- 1. scan and diff ----------------------------------------------------
-    const files = listCorpusFiles(corpusPath);
+    const { files, ignored } = scanCorpus(corpusPath);
     const existing = getDocumentsBySourcePath(db);
     counts.docsTotal = files.length;
     report({ phase: 'scan', message: `${files.length} documents in corpus`, total: files.length });
+    if (ignored.length > 0) {
+      // Named rather than counted. A file silently missing from the index is the
+      // problem this exclusion list exists to fix, so the exclusion itself must
+      // not be silent.
+      report({ phase: 'scan', message: `ignored ${ignored.length}: ${ignored.join(', ')}` });
+    }
 
     // --- 2. read and chunk ---------------------------------------------------
     const planned: PlannedDocument[] = [];
@@ -119,8 +162,7 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
           // An empty file is not an error, but it has nothing to retrieve. Record
           // it so it appears in the dashboard rather than vanishing silently.
           counts.docsFailed++;
-          const documentId = upsertDocument(db, source);
-          markDocumentFailed(db, documentId, 'Document is empty; nothing to index.');
+          recordFailure(source, 'Document is empty; nothing to index.');
           continue;
         }
 
@@ -135,7 +177,12 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
         // One unreadable file must not abort the run.
         counts.docsFailed++;
         const message = error instanceof Error ? error.message : String(error);
+        // A document already on record keeps its stored title, category and hash —
+        // overwriting them with placeholders would discard what the last good
+        // ingest learned. A file never seen before has nothing to keep, and needs a
+        // row created or the failure is invisible.
         if (previous) markDocumentFailed(db, previous.id, message);
+        else recordFailure(placeholderFor(sourcePath), message);
         report({ phase: 'read', message: `failed: ${sourcePath} — ${message}` });
       }
     }
@@ -185,8 +232,11 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
       } catch (error) {
         counts.docsFailed++;
         const message = error instanceof Error ? error.message : String(error);
-        const documentId = existing.get(doc.source.sourcePath)?.id;
-        if (documentId !== undefined) markDocumentFailed(db, documentId, message);
+        // The transaction above has rolled back, so this runs on a clean
+        // connection and its row survives. Previously this looked up the pre-run
+        // snapshot and did nothing when the document was new — the case where the
+        // failure record is the only evidence the document exists at all.
+        recordFailure(doc.source, message);
         report({ phase: 'write', message: `failed: ${doc.source.sourcePath} — ${message}` });
       }
     }

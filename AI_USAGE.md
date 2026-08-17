@@ -308,7 +308,7 @@ Recording this first, because most of it did.
 ### Defects found
 
 Ordered by how much damage they would do. None were known before the audit.
-**Defects 1–4 are fixed** (see "Fixes" below); 5–13 are recorded and open.
+**Defects 1–6 are fixed** (see "Fixes" below); 7–13 are recorded and open.
 
 **1. Anyone can create an account and read the entire internal corpus.**
 `POST /api/auth/sign-up/email` is open. Verified over HTTP: a stranger registered
@@ -414,10 +414,11 @@ Correct from roughly 20 rows up.
   at module scope. A consumer that only wants `hybridSearch` inherits both. Step 7's
   MCP server is exactly that consumer.
 
-### Fixes for defects 1–4
+### Fixes for defects 1–6
 
-Fixed immediately because all four are cheap and two are security. The remaining
-nine are recorded above and triaged against the timebox, not silently dropped.
+Fixed because they are cheap, two are security, and two bear on stated
+requirements. The remaining seven are recorded above and triaged against the
+timebox, not silently dropped.
 
 **1. Sign-up closed.** A route registered ahead of the Better Auth mount rejects
 `/api/auth/sign-up/*` with 403. Not Better Auth's `disableSignUp`, because that flag
@@ -440,11 +441,45 @@ which is a deliberately different rule rather than the same bug.
 had to `ingest` and `eval`. `npm run eval -- --rerank --answers` now works, which
 means the numbers quoted in this file are reproducible by the documented command.
 
+**5. Ingestion excludes tooling that shares the corpus directory.** `scanCorpus`
+skips any hidden path segment plus `node_modules` and `CLAUDE.md`, and returns the
+excluded paths so the run names them — an exclusion nobody can see is
+indistinguishable from a document that failed to index, which is how the original
+went unnoticed. `node_modules` is the entry that matters: pointing `CORPUS_PATH` at
+a repository is supported, and the documentation tree inside one has thousands of
+dependency READMEs.
+
+Deliberately **not** excluding `README.md`. In a real documentation tree a README is
+often genuine content, and silently dropping it would be a worse bug than the one
+being fixed. Everything on the list is unambiguously tooling. No setting for it
+either: the seam is the function's parameter, and a `CORPUS_IGNORE` variable for a
+requirement nobody has stated yet is a guess dressed as flexibility.
+`listCorpusFiles` was deleted rather than kept as a wrapper once nothing called it.
+
+**6. A failure on a document new this run is now recorded.** One `recordFailure`
+helper upserts the row and marks it failed, called from all three failure paths.
+Two things made this invisible: the read path only recorded failures for documents
+already on record, and the write path's `upsertDocument` was rolled back by the very
+transaction whose failure it was meant to record — so it now runs after the
+rollback, on a clean connection. A document already on record still keeps its stored
+title, category and hash, because overwriting them with placeholders would discard
+what the last good ingest learned. The placeholder's content hash is empty, which
+can never equal a real one, so a failed document is always retried rather than
+mistaken for current.
+
 Verified over HTTP against the running server, not just in-process: sign-up returns
 403 and creates no row, sign-in still works, both body routes return 400 with no
 stack trace logged, and search and answer still return grounded cited results. The
 placeholder secret now aborts start-up with instructions for generating a real one.
-Four tests added, 119 pass. The two route tests exercise the API through
+
+Defects 5 and 6 were verified against the pre-fix commit in a scratch worktree
+rather than by assertion, since a regression test that would also have passed before
+the fix is worth nothing. With strays present the old tree indexed 144 documents
+including `CLAUDE.md` and a dependency README, and reported two failures with one
+visible; the new tree indexes 142, names the exclusion, and reports two failures with
+two visible.
+
+Six tests added, 121 pass. The two route tests exercise the API through
 `app.request` with real bodies — the gap that let defects 3 and 4 through was that
 every existing test called the code directly rather than the way a person would.
 
