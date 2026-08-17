@@ -335,10 +335,12 @@ export function listDocumentsFiltered(
     params.push(filter.category);
   }
   if (filter.q) {
-    // Parameterised LIKE. The wildcards are ours; the user's text is bound, so it
-    // cannot alter the statement.
-    where.push('(lower(title) LIKE ? OR lower(source_path) LIKE ?)');
-    const needle = `%${filter.q.toLowerCase()}%`;
+    // Parameterised, so the user's text cannot alter the statement — but binding is
+    // not the whole job. LIKE reads `%` and `_` in the *value* as wildcards, so
+    // searching for `_` matched every document and `%` matched all 142. Escaping
+    // them, and the escape character itself, makes the search mean what it says.
+    where.push(`(lower(title) LIKE ? ESCAPE '\\' OR lower(source_path) LIKE ? ESCAPE '\\')`);
+    const needle = `%${filter.q.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
     params.push(needle, needle);
   }
 

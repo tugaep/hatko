@@ -110,6 +110,83 @@ test('the category filter restricts results without emptying them', async () => 
   assert.ok(results.every((r) => r.category === 'delivery-reports'));
 });
 
+test('an unknown category returns nothing, without paying for an embedding', async () => {
+  let embedCalls = 0;
+  const counting = async (text: string) => {
+    embedCalls++;
+    return stubEmbedder(text);
+  };
+
+  const results = await hybridSearch(db, 'anything at all', {
+    category: 'no-such-category',
+    embedder: counting,
+  });
+
+  assert.equal(results.length, 0);
+  assert.equal(embedCalls, 0, 'a category that cannot match must not reach the provider');
+});
+
+/**
+ * The filter runs after fusion, so a truncated candidate pool silently loses
+ * in-category passages — and the loss is invisible, because the response is a
+ * plausible shorter list rather than an error.
+ *
+ * The old pool was `max(candidates * 4, 100)`. This corpus is only 142 chunks, so the
+ * hole was narrow; the fixture below reproduces the shape it takes at scale. 240
+ * filler documents repeat the query phrase and crowd the top of the ranking, while
+ * the single document in the target category mentions one term once and sits near the
+ * bottom. Under a capped pool it never reaches the filter, and the facet returns
+ * nothing at all for a category that plainly contains a match.
+ *
+ * Pinned to the keyword arm on purpose. Embeddings here are stubbed from a content
+ * hash, so the vector arm orders documents effectively at random and would find the
+ * target by luck often enough to make this pass without the fix — which is how the
+ * first version of this test fooled me. BM25 over these fixtures is deterministic.
+ */
+test('a category filter finds a passage that ranks low across the whole corpus', async () => {
+  const corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-deep-'));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-deep-db-'));
+  const deepDb = openDb(path.join(scratch, 'deep.db'));
+
+  fs.mkdirSync(path.join(corpus, 'filler'));
+  for (let i = 0; i < 240; i++) {
+    fs.writeFileSync(
+      path.join(corpus, 'filler', `note-${String(i).padStart(3, '0')}.md`),
+      `# Filler Note ${i}\n\n` +
+        'Quarterly telemetry calibration report. '.repeat(6) +
+        `Revision ${i}.\n`,
+    );
+  }
+
+  fs.mkdirSync(path.join(corpus, 'target'));
+  fs.writeFileSync(
+    path.join(corpus, 'target', 'buried.md'),
+    '# Buried Document\n\n' +
+      'Assorted unrelated prose about scheduling and staffing, mentioning ' +
+      'calibration exactly once, padded so its length matches the filler notes ' +
+      'and cannot win on brevity alone. '.repeat(2) +
+      '\n',
+  );
+
+  await ingest(deepDb, {
+    trigger: 'cli',
+    corpusPath: corpus,
+    embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
+  });
+
+  const results = await hybridSearch(deepDb, 'quarterly telemetry calibration report', {
+    arm: 'keyword',
+    category: 'target',
+  });
+
+  assert.equal(results.length, 1, 'the only document in the category must be found');
+  assert.equal(results[0]?.sourcePath, 'target/buried.md');
+
+  deepDb.close();
+  fs.rmSync(corpus, { recursive: true, force: true });
+  fs.rmSync(scratch, { recursive: true, force: true });
+});
+
 test('limit is respected', async () => {
   const results = await search('playable build pipeline', { limit: 3 });
   assert.ok(results.length <= 3);

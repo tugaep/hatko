@@ -224,11 +224,7 @@ test('a malformed search body is rejected with field-level detail', async () => 
  * reports an outage when someone sends a stray character.
  */
 test('a body that is not JSON is the caller’s fault, not a 500', async () => {
-  const routes = [
-    '/api/search',
-    '/api/answer',
-    '/api/admin/settings/api-key',
-  ] as const;
+  const routes = ['/api/search', '/api/answer', '/api/admin/settings/api-key'] as const;
 
   for (const route of routes) {
     for (const body of ['not json at all', '', '{"unterminated":']) {
@@ -391,6 +387,38 @@ test('documents can be filtered and paginated', async () => {
   ).json()) as { items: unknown[]; total: number };
   assert.equal(paged.items.length, 1);
   assert.equal(paged.total, 2, 'total counts all matches, not the page');
+});
+
+/**
+ * The search text is bound as a parameter, so it can never alter the statement — but
+ * that is only half the job. LIKE reads `%` and `_` inside the *value* as wildcards,
+ * so a search for `_` matched every document and `%` matched the whole corpus. The
+ * text a user types has to be matched as text.
+ *
+ * Neither fixture document contains either character, in its path or its title, so
+ * every search below must find nothing.
+ */
+test('LIKE wildcards typed into document search are matched literally', async () => {
+  for (const needle of ['%', '_', 'sdk_notes', '%pipeline%', '\\']) {
+    const response = await call(`/api/admin/documents?q=${encodeURIComponent(needle)}`, {
+      cookie: adminCookie,
+    });
+
+    assert.equal(response.status, 200, `q=${needle} should be a valid search`);
+    const payload = (await response.json()) as { total: number };
+    assert.equal(
+      payload.total,
+      0,
+      `q=${JSON.stringify(needle)} matched ${payload.total} documents`,
+    );
+  }
+
+  // The escaping must not break ordinary substring search.
+  const real = (await (
+    await call('/api/admin/documents?q=pipeline', { cookie: adminCookie })
+  ).json()) as { total: number; items: Array<{ sourcePath: string }> };
+  assert.equal(real.total, 1);
+  assert.equal(real.items[0]?.sourcePath, 'build-pipeline.md');
 });
 
 test('ingestion can be triggered by an admin and returns real counts', async () => {

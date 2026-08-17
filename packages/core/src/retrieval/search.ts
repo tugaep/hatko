@@ -229,6 +229,52 @@ function normaliseBm25(rows: FusedRow[]): Map<number, number> {
   return out;
 }
 
+/**
+ * How deep each arm reaches when a category filter is present, and 0 when the
+ * category holds nothing.
+ *
+ * The filter cannot go into the vector arm — vec0 filters only on columns declared in
+ * the virtual table, and this one holds embeddings alone — so the pool is drawn wide
+ * and the surplus discarded after fusion. Drawing *every* chunk is the version that
+ * cannot be wrong. The previous `max(candidates * 4, 100)` silently dropped any
+ * in-category passage ranking below 100th across the whole corpus, which for a small
+ * category in a large corpus is nearly all of them: a facet that quietly returns the
+ * wrong answer is worse than one that is slow.
+ *
+ * Measured over the nine answerable eval questions restricted to the category their
+ * expected document lives in: recall@1 44% and recall@3 100% either way, MRR 0.648 ->
+ * 0.667. So this buys a guarantee rather than a score, and costs nothing.
+ *
+ * Ranks deliberately stay global rather than being renumbered within the category.
+ * Renumbering is the obvious-looking fix — it would make a filtered search behave
+ * like an unfiltered one over that category — and it measured *much* worse: recall@1
+ * 22%, recall@3 67%, MRR 0.431. RRF's discrimination lives in the size of the rank
+ * gaps, and compressing 142 positions into 10 leaves every candidate within a factor
+ * of two of every other, so near-ties decide the ordering instead of relevance.
+ *
+ * The ceiling is a full scan of the collection. At 142 chunks that is about a
+ * millisecond, the same trade already accepted in having no ANN index. Two orders of
+ * magnitude larger, the move is a vec0 partition key on category so the filter goes
+ * into the scan itself — that needs a migration and a re-insert of every vector,
+ * which is why it is not here yet.
+ */
+function poolForCategory(db: Db, category: string): number {
+  const inCategory = Number(
+    (
+      db
+        .prepare(
+          `SELECT count(*) AS n
+             FROM chunks c JOIN documents d ON d.id = c.document_id
+            WHERE d.category = ?`,
+        )
+        .get(category) as { n: number }
+    ).n,
+  );
+
+  if (inCategory === 0) return 0;
+  return Number((db.prepare('SELECT count(*) AS n FROM chunks').get() as { n: number }).n);
+}
+
 function toSearchResult(row: FusedRow, keywordScores: Map<number, number>): SearchResult {
   return searchResultSchema.parse({
     chunkId: Number(row.id),
@@ -269,11 +315,13 @@ export async function hybridSearch(
 
   const ftsQuery = toFtsQuery(query);
 
-  // The category filter is applied after fusion rather than inside the vector
-  // scan, because vec0 can only filter on columns declared in the virtual table
-  // and this one holds embeddings alone. Widening the candidate pool compensates:
-  // at 142 chunks the extra scan is free.
-  const poolSize = options.category ? Math.max(candidates * 4, 100) : candidates;
+  // A category filter is applied after fusion, so the pool has to be wide enough
+  // that nothing in the category is lost to truncation first. See poolForCategory.
+  const poolSize = options.category ? poolForCategory(db, options.category) : candidates;
+
+  // An empty or unknown category cannot return anything. Short-circuiting saves a
+  // paid embedding round trip on a query whose answer is already known.
+  if (poolSize === 0) return [];
 
   // A query with no usable keyword terms has no lexical arm — falling back to
   // vector-only is correct, and passing an empty string to MATCH would be a

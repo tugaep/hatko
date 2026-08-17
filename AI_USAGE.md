@@ -308,7 +308,7 @@ Recording this first, because most of it did.
 ### Defects found
 
 Ordered by how much damage they would do. None were known before the audit.
-**Defects 1–9 are fixed** (see "Fixes" below); 10–13 are recorded and open.
+**Defects 1–11 are fixed** (see "Fixes" below); 12 and 13 are recorded and open.
 
 **1. Anyone can create an account and read the entire internal corpus.**
 `POST /api/auth/sign-up/email` is open. Verified over HTTP: a stranger registered
@@ -414,11 +414,11 @@ Correct from roughly 20 rows up.
   at module scope. A consumer that only wants `hybridSearch` inherits both. Step 7's
   MCP server is exactly that consumer.
 
-### Fixes for defects 1–9
+### Fixes for defects 1–11
 
 Fixed because they are cheap, two are security, and the rest bear on stated
-requirements. The remaining four are recorded above and triaged against the
-timebox, not silently dropped.
+requirements. The remaining two are recorded above and triaged against the timebox,
+not silently dropped.
 
 **1. Sign-up closed.** A route registered ahead of the Better Auth mount rejects
 `/api/auth/sign-up/*` with 403. Not Better Auth's `disableSignUp`, because that flag
@@ -495,6 +495,48 @@ The existing assertion here was `durationMs >= 0`, which 0 satisfies — a test 
 could not fail, on the exact value that was wrong. It now requires a cold ingest of
 142 documents to report more than zero.
 
+**10. The category filter draws a complete pool — and the obvious fix for it was
+measured, and thrown away.** This one deserves the space, because the first attempt
+repeated failure #2 above almost exactly.
+
+The filter runs after fusion, so the pool has to be drawn wide and the surplus
+discarded. The reasoning that followed was tidy: the ranks feeding RRF come from a
+pool spanning every category, filtering leaves gaps in them, so renumber the
+survivors densely and a filtered search behaves like an unfiltered one over that
+category. It was also wrong, and there is no eval question with a category filter, so
+one had to be written — nine answerable questions, each restricted to the category its
+expected document lives in:
+
+```
+                                         recall@1  recall@3   MRR
+before                                      44%      100%    0.648
+dense renumbering (the tidy argument)       22%       67%    0.431   ← much worse
+share-scaled pool, global ranks             44%      100%    0.648
+complete pool, global ranks                 44%      100%    0.667   ← shipped
+```
+
+Renumbering destroys the thing RRF runs on. Its discrimination lives in the _size_ of
+the rank gaps — a passage at keyword rank 1 against one at rank 40 is `1/11` against
+`1/50` — and compressing 142 positions into 10 leaves every candidate within a factor
+of two of every other, so near-ties decide the ordering instead of relevance. The
+argument was sound about the gaps in the ranks and wrong about the remedy.
+
+What shipped is smaller: when a category is given, draw every chunk. Ranks stay
+global. That buys no measurable accuracy — MRR moves 0.648 to 0.667 on nine questions,
+which is one document moving one place — but it closes a real hole. The old
+`max(candidates * 4, 100)` dropped any in-category passage ranking below 100th across
+the corpus, and the regression test for it returns **0 results** against the old code
+for a category that plainly contains a match. On a small category in a large corpus
+that is the normal case, not the edge. The ceiling is a full scan, which at 142 chunks
+is the trade already accepted in having no ANN index; the upgrade is a vec0 partition
+key on category, which needs a migration and a re-insert of every vector.
+
+**11. Document search escapes LIKE wildcards.** The user's text was bound, so it could
+never alter the statement — the comment saying so was right, and stopped one step
+short. LIKE reads `%` and `_` in the _value_, so searching for `_` returned every
+document and `sdk_notes` matched `sdk-notes-v2.md` through the wildcard. Escaped, with
+`ESCAPE '\'` declared.
+
 Verified over HTTP against the running server, not just in-process: sign-up returns
 403 and creates no row, sign-in still works, both body routes return 400 with no
 stack trace logged, and search and answer still return grounded cited results. The
@@ -512,16 +554,31 @@ including `CLAUDE.md` and a dependency README, and reported two failures with on
 visible; the new tree indexes 142, names the exclusion, and reports two failures with
 two visible.
 
-Ten tests added, 125 pass, including the first coverage of the dashboard analytics —
-figures a human reads to decide whether the system is healthy, and which had none.
+Thirteen tests added, 128 pass, including the first coverage of the dashboard
+analytics and of category-filtered retrieval, neither of which had any.
 
-Two of the fixes above landed on assertions that could not fail: `durationMs >= 0`
-on a value that was always 0, and a test whose name described a state the code never
-produced. Both are worth more than the defects themselves as a lesson. A passing
-test is evidence only if it would have failed, which is why defects 5 through 9 were
-each checked against the pre-fix behaviour — in a scratch worktree for the ingestion
-pair, and by running the old and new SQL side by side over identical rows for the
-window comparison, where the old form counted three rows and the new one two.
+Three of these fixes landed on assertions that could not fail: `durationMs >= 0` on a
+value that was always 0, a test whose name described a state the code never produced,
+and — my own, written during this pass — a category-filter regression test that
+passed against the broken code because the stubbed embedder orders the vector arm at
+random and found the buried document by luck. That one is the most instructive,
+because I wrote it _while_ thinking about this exact failure mode and still shipped
+it. It is now pinned to the keyword arm, where BM25 over the fixtures is
+deterministic, and it fails against the old code.
+
+A passing test is evidence only if it would have failed. So every fix from 5 onward
+was checked against the pre-fix behaviour rather than trusted: in a scratch worktree
+for the ingestion pair and the retrieval pool, and by running the old and new SQL side
+by side over identical rows for the window comparison, where the old form counted
+three and the new one two.
+
+One trap worth recording: the scratch worktree needs the repository's `node_modules`
+symlinked in to resolve workspace packages, and that symlink points `@sorrel/core`
+back at the _fixed_ tree. A "before" run of anything importing `@sorrel/core` by
+package name therefore tests the new code while looking like it tests the old. It
+caught me on the LIKE-escaping check, which passed in the worktree; the real
+comparison imports the pre-fix modules by absolute path, and there `%` and `_` matched
+every document.
 
 ### What this says about the review discipline
 
