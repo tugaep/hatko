@@ -219,6 +219,22 @@ test('every run is recorded whether or not anything changed', async () => {
   assert.ok(runs.every((r) => r.finishedAt !== null));
   assert.ok(runs.every((r) => r.durationMs !== null && r.durationMs >= 0));
   assert.ok(runs.every((r) => r.trigger === 'cli'));
+
+  /**
+   * A measured duration, not a subtraction of two second-resolution timestamps.
+   *
+   * `durationMs >= 0` above was an assertion that could not fail: the old
+   * derivation returned 0 for every run shorter than a second, which on this corpus
+   * was all of them — a real 1.5 second cold ingest of 142 documents recorded 0 ms.
+   * Reading and hashing 142 files and writing 142 documents in three stores cannot
+   * take zero time, so this is the assertion that distinguishes the two.
+   */
+  const cold = runs.at(-1)!;
+  assert.ok(
+    cold.durationMs !== null && cold.durationMs > 0,
+    `a cold ingest of ${cold.docsTotal} documents reported ${cold.durationMs} ms`,
+  );
+  assert.ok(cold.durationMs < 120_000, 'and a duration in milliseconds, not some other unit');
 });
 
 /**

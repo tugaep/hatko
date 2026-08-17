@@ -308,7 +308,7 @@ Recording this first, because most of it did.
 ### Defects found
 
 Ordered by how much damage they would do. None were known before the audit.
-**Defects 1–6 are fixed** (see "Fixes" below); 7–13 are recorded and open.
+**Defects 1–9 are fixed** (see "Fixes" below); 10–13 are recorded and open.
 
 **1. Anyone can create an account and read the entire internal corpus.**
 `POST /api/auth/sign-up/email` is open. Verified over HTTP: a stranger registered
@@ -414,10 +414,10 @@ Correct from roughly 20 rows up.
   at module scope. A consumer that only wants `hybridSearch` inherits both. Step 7's
   MCP server is exactly that consumer.
 
-### Fixes for defects 1–6
+### Fixes for defects 1–9
 
-Fixed because they are cheap, two are security, and two bear on stated
-requirements. The remaining seven are recorded above and triaged against the
+Fixed because they are cheap, two are security, and the rest bear on stated
+requirements. The remaining four are recorded above and triaged against the
 timebox, not silently dropped.
 
 **1. Sign-up closed.** A route registered ahead of the Better Auth mount rejects
@@ -467,10 +467,43 @@ what the last good ingest learned. The placeholder's content hash is empty, whic
 can never equal a real one, so a failed document is always retried rather than
 mistaken for current.
 
+**7. `getApiKeyStatus` decrypts before claiming a key is usable.** A stored value
+that will not decrypt now reports `source: 'unreadable', configured: false` — a
+state the type could not previously express, which is why the status disagreed with
+`resolveApiKey` beside it. It is distinct from `unset` because the remedy differs
+(re-enter the key, or restore the old secret) and distinct from `database` because
+nothing usable is configured. The hint survives, so an operator can still tell which
+key is stuck there, along with when and by whom it was set. The existing test was
+named _"reports rotation, not unset"_ and asserted nothing of the kind; it now
+asserts the state its name promised.
+
+**8. The rolling analytics windows compare like with like.** One `cutoff()` helper
+emits `strftime('%Y-%m-%dT%H:%M:%SZ', 'now', …)`, the same format the timestamps are
+written in, used by both the 7-day count and the 14-day chart so they cannot drift
+apart again. The interval is a literal from the two call sites, never user input.
+
+**9. Ingestion measures its own duration.** Migration 004 adds `duration_ms`, filled
+from `performance.now()` in the pipeline. Storing a measurement beats widening the
+timestamp format for two reasons: SQLite cannot alter a column DEFAULT without
+rebuilding the table, and the difference between two stored wall-clock strings is the
+wrong source for an elapsed time at any precision, because it moves if the system
+clock does. Rows predating the migration keep a NULL and fall back to the old
+subtraction, so historical runs report the coarse figure they were recorded with
+rather than losing it.
+
+The existing assertion here was `durationMs >= 0`, which 0 satisfies — a test that
+could not fail, on the exact value that was wrong. It now requires a cold ingest of
+142 documents to report more than zero.
+
 Verified over HTTP against the running server, not just in-process: sign-up returns
 403 and creates no row, sign-in still works, both body routes return 400 with no
 stack trace logged, and search and answer still return grounded cited results. The
 placeholder secret now aborts start-up with instructions for generating a real one.
+Through the admin route, a rotated secret turns
+`{"configured":true,"source":"database"}` into
+`{"configured":false,"source":"unreadable"}`. On the live database, migration 004
+applied cleanly and the next real ingest recorded 1919 ms where every previous run
+recorded 0.
 
 Defects 5 and 6 were verified against the pre-fix commit in a scratch worktree
 rather than by assertion, since a regression test that would also have passed before
@@ -479,9 +512,16 @@ including `CLAUDE.md` and a dependency README, and reported two failures with on
 visible; the new tree indexes 142, names the exclusion, and reports two failures with
 two visible.
 
-Six tests added, 121 pass. The two route tests exercise the API through
-`app.request` with real bodies — the gap that let defects 3 and 4 through was that
-every existing test called the code directly rather than the way a person would.
+Ten tests added, 125 pass, including the first coverage of the dashboard analytics —
+figures a human reads to decide whether the system is healthy, and which had none.
+
+Two of the fixes above landed on assertions that could not fail: `durationMs >= 0`
+on a value that was always 0, and a test whose name described a state the code never
+produced. Both are worth more than the defects themselves as a lesson. A passing
+test is evidence only if it would have failed, which is why defects 5 through 9 were
+each checked against the pre-fix behaviour — in a scratch worktree for the ingestion
+pair, and by running the old and new SQL side by side over identical rows for the
+window comparison, where the old form counted three rows and the new one two.
 
 ### What this says about the review discipline
 

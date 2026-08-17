@@ -116,6 +116,11 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
   });
 
   const runId = startIngestionRun(db, trigger);
+  // Elapsed time is measured here rather than derived from started_at and
+  // finished_at, which are stored with second resolution — see migration 004.
+  const startedAt = performance.now();
+  const elapsed = () => performance.now() - startedAt;
+
   const counts: RunCounts = {
     docsTotal: 0,
     docsIndexed: 0,
@@ -252,10 +257,10 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
       report({ phase: 'prune', message: `removed ${counts.docsDeleted} deleted documents` });
     }
 
-    finishIngestionRun(db, runId, counts);
+    finishIngestionRun(db, runId, counts, elapsed());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    finishIngestionRun(db, runId, counts, message);
+    finishIngestionRun(db, runId, counts, elapsed(), message);
     throw error;
   }
 

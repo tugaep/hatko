@@ -1,0 +1,20 @@
+-- ingestion_runs.duration_ms
+--
+-- `durationMs` was derived as finished_at - started_at. Both are written by
+-- strftime with second resolution, so any run shorter than a second reported 0 ms
+-- and every longer one was rounded to a whole second. Measured on the real corpus:
+-- a 1.5 second cold ingest of 142 documents and every idempotent re-run both
+-- recorded 0 ms. The dashboard's job is to show whether ingestion is healthy, and
+-- "0 ms" for work that demonstrably took time is not a rounding quibble — it is the
+-- figure an operator would use to decide the pipeline had not run at all.
+--
+-- Measured in the pipeline with performance.now() and stored, rather than widening
+-- the timestamp format to milliseconds. Two reasons: SQLite cannot alter a column
+-- DEFAULT without rebuilding the table, and the difference between two stored
+-- wall-clock strings is the wrong source for an elapsed time regardless of its
+-- precision — it moves if the system clock does.
+--
+-- Nullable, and rows written before this migration keep a NULL. The repository
+-- falls back to the old subtraction for those, so historical runs still report the
+-- coarse duration they were recorded with instead of losing it.
+ALTER TABLE ingestion_runs ADD COLUMN duration_ms INTEGER;

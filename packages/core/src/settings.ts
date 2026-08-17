@@ -22,10 +22,18 @@ export const SETTING_KEYS = {
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 
-/** Where a resolved secret came from, so the UI can say which one is live. */
-export type SecretSource = 'database' | 'environment' | 'unset';
+/**
+ * Where a resolved secret came from, so the UI can say which one is live.
+ *
+ * `unreadable` means a value is stored that will not decrypt, which in practice
+ * means BETTER_AUTH_SECRET changed after it was saved. It is a distinct state from
+ * `unset` because the remedy is different — re-enter the key, or restore the old
+ * secret — and distinct from `database` because nothing usable is configured.
+ */
+export type SecretSource = 'database' | 'environment' | 'unset' | 'unreadable';
 
 export interface SecretStatus {
+  /** Whether a *usable* secret is available. False when one is stored but unreadable. */
   configured: boolean;
   source: SecretSource;
   /** Last four characters, e.g. `…a91f`. Never the key itself. */
@@ -130,6 +138,26 @@ export function getSecret(db: Db, key: SettingKey): string | null {
 export function getApiKeyStatus(db: Db = getDb()): SecretStatus {
   const row = readRow(db, SETTING_KEYS.openaiApiKey);
   if (row) {
+    // Decrypting here answers the question actually being asked — is a usable key
+    // available — rather than the cheaper one the row alone can answer. Reporting
+    // the row's existence showed `configured: true, source: 'database'` for a value
+    // that would not decrypt, so after a secret rotation the settings page read
+    // healthy while every embedding and answer call failed. `resolveApiKey` was
+    // written to fail loudly in exactly this case; the status beside it disagreed.
+    try {
+      decryptSecret(row.value);
+    } catch {
+      return {
+        configured: false,
+        source: 'unreadable',
+        // The hint is derived from the plaintext at write time and stored, so it
+        // survives and still identifies which key is sitting there unusable.
+        hint: row.hint,
+        updatedAt: row.updated_at,
+        updatedBy: row.updated_by,
+      };
+    }
+
     return {
       configured: true,
       source: 'database',

@@ -145,6 +145,16 @@ test('a key saved under a different secret reports rotation, not "unset"', () =>
   // Falling through to the environment here would tell the operator no key is
   // configured while the admin screen plainly shows one — so it throws instead.
   assert.throws(() => resolveApiKey(ctx.db), /BETTER_AUTH_SECRET changed/);
+
+  // This test's name promised a state the code could not express. `getApiKeyStatus`
+  // never attempted decryption, so it reported `configured: true, source:
+  // 'database'` for a key that would not decrypt — the settings page reading
+  // healthy while every provider call failed on the key it was showing.
+  const status = getApiKeyStatus(ctx.db);
+  assert.equal(status.source, 'unreadable', 'a stored-but-undecryptable key is its own state');
+  assert.equal(status.configured, false, 'a key that cannot be decrypted is not configured');
+  assert.equal(status.hint, '…a91f', 'the hint still identifies which key is stuck there');
+  assert.ok(status.updatedAt, 'and when it was set, so the rotation can be dated');
 });
 
 test('a missing key produces an actionable error naming both ways to set it', () => {

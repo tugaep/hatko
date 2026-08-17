@@ -57,7 +57,15 @@ const toIngestionRun = (row: Row): IngestionRun => {
     error: row.error ?? null,
     startedAt,
     finishedAt,
-    durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : null,
+    // Measured by the pipeline. Rows written before migration 004 have no measured
+    // value and fall back to the second-resolution subtraction they were recorded
+    // with — coarse, but better than dropping the history.
+    durationMs:
+      row.duration_ms !== null && row.duration_ms !== undefined
+        ? Number(row.duration_ms)
+        : finishedAt
+          ? Date.parse(finishedAt) - Date.parse(startedAt)
+          : null,
   });
 };
 
@@ -216,16 +224,24 @@ export interface RunCounts {
   docsFailed: number;
 }
 
+/**
+ * Close out a run.
+ *
+ * `durationMs` is measured by the caller rather than derived from the two stored
+ * timestamps, which have second resolution — see migration 004.
+ */
 export function finishIngestionRun(
   db: Db,
   runId: number,
   counts: RunCounts,
+  durationMs: number,
   error?: string | null,
 ): void {
   db.prepare(
     `UPDATE ingestion_runs
         SET status = ?, docs_total = ?, docs_indexed = ?, docs_updated = ?,
             docs_skipped = ?, docs_deleted = ?, docs_failed = ?, error = ?,
+            duration_ms = ?,
             finished_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
       WHERE id = ?`,
   ).run(
@@ -237,6 +253,7 @@ export function finishIngestionRun(
     counts.docsDeleted,
     counts.docsFailed,
     error ?? null,
+    Math.max(0, Math.round(durationMs)),
     runId,
   );
 }

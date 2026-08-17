@@ -92,12 +92,26 @@ export function getCategoryBreakdown(db: Db): CategoryBreakdown[] {
  * rate is a reading list — the documents the corpus is missing — which is why
  * recent abstained queries are listed verbatim.
  */
+/**
+ * A cut-off in the same format the timestamps are stored in.
+ *
+ * `created_at` is written by `strftime('%Y-%m-%dT%H:%M:%SZ', ...)` — with a `T` and
+ * a trailing `Z` — while `datetime('now', ...)` returns `2026-08-10 08:00:00`, space
+ * separated and unterminated. Comparing the two is a string comparison where
+ * position 10 is `'T'` (0x54) against `' '` (0x20), so `'T'` always wins and every
+ * row on the boundary date counted as inside the window regardless of its time.
+ * Measured: a row 7 days and 6 hours old was reported as within the last 7 days.
+ *
+ * The interval is a literal from the two call sites below, never user input.
+ */
+const cutoff = (interval: string) => `strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '${interval}')`;
+
 export function getSearchStats(db: Db): SearchStats {
   const totals = db
     .prepare(
       `SELECT
          count(*)                                           AS total,
-         sum(CASE WHEN created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS last7,
+         sum(CASE WHEN created_at >= ${cutoff('-7 days')} THEN 1 ELSE 0 END) AS last7,
          sum(abstained)                                     AS abstained,
          avg(latency_ms)                                    AS avg_latency
        FROM search_queries`,
@@ -151,7 +165,7 @@ export function getSearchStats(db: Db): SearchStats {
       .prepare(
         `SELECT substr(created_at, 1, 10) AS day, count(*) AS count
            FROM search_queries
-          WHERE created_at >= datetime('now', '-13 days')
+          WHERE created_at >= ${cutoff('-13 days')}
           GROUP BY day
           ORDER BY day`,
       )
