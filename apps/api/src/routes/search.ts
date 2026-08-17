@@ -13,7 +13,7 @@ import {
   searchRequestSchema,
   searchResponseSchema,
 } from '@hatko/shared';
-import { requires } from '../middleware.ts';
+import { requires, throttle } from '../middleware.ts';
 import { jsonBody } from '../errors.ts';
 
 /**
@@ -30,11 +30,16 @@ import { jsonBody } from '../errors.ts';
  * validated coming out of the database, leaving the contract enforced in the one
  * direction the client does not depend on. Parsing also strips any field not in
  * the schema, so a response cannot quietly grow one.
+ *
+ * Both routes are throttled after the role check. These are the two endpoints in the
+ * system that spend money — a search costs an embedding and a rerank call, an answer
+ * costs those plus a generation — and until now nothing bounded how fast one account
+ * could spend it.
  */
 
 export const searchRoutes = new Hono();
 
-searchRoutes.post('/search', requires('search:run'), async (c) => {
+searchRoutes.post('/search', requires('search:run'), throttle(), async (c) => {
   const body = searchRequestSchema.parse(await jsonBody(c));
   const db = getDb();
   const started = performance.now();
@@ -62,7 +67,7 @@ searchRoutes.post('/search', requires('search:run'), async (c) => {
   return c.json(searchResponseSchema.parse({ query: body.query, results, latencyMs }));
 });
 
-searchRoutes.post('/answer', requires('answer:generate'), async (c) => {
+searchRoutes.post('/answer', requires('answer:generate'), throttle(), async (c) => {
   const body = answerRequestSchema.parse(await jsonBody(c));
   const db = getDb();
 

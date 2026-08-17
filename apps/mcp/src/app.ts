@@ -6,6 +6,7 @@ import {
   AuthorizationError,
   ConfigurationError,
   ProviderError,
+  RateLimitError,
   config,
   requireMcpPermission,
   type SessionUser,
@@ -64,6 +65,15 @@ export function toToolErrorText(error: unknown): string {
   }
 
   if (error instanceof ConfigurationError) return error.message;
+
+  /**
+   * Out of allowance. Forwarded verbatim, and it names the wait in seconds, because the
+   * reader here is a language model deciding what to do next: told only "rate limited" it
+   * will retry immediately or give up, and both are wrong. It is a tool error rather than
+   * an HTTP 429 on the transport deliberately — see `runSearchTool`, which counts tool
+   * calls rather than requests so that `initialize` and `tools/list` stay free.
+   */
+  if (error instanceof RateLimitError) return error.message;
 
   if (error instanceof z.ZodError) {
     // Describes the arguments the caller just sent, not the server's internals.

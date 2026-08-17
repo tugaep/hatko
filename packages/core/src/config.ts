@@ -64,6 +64,23 @@ const envSchema = z.object({
    */
   MCP_ALLOWED_HOSTS: z.string().default(''),
 
+  /**
+   * Requests each account may make to the paid retrieval paths per window.
+   *
+   * Configurable rather than a constant, because this repository has twice had to widen a
+   * security control that was blocking legitimate callers — the MCP host guard, for bare
+   * `localhost` and then for a proxied hostname — and a limit an operator cannot adjust is
+   * the same shape of mistake. Meeting a wall of 429s with no knob is how a protection
+   * gets removed instead of tuned.
+   *
+   * 30 per minute is deliberately generous for a person and still a hard ceiling on the
+   * runaway case: an `/answer` costs three provider calls, so this caps one account at
+   * roughly 90 a minute rather than at nothing. `0` disables the limiter, which is an
+   * escape hatch rather than a suggestion.
+   */
+  RATE_LIMIT_MAX: z.coerce.number().int().min(0).default(30),
+  RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
@@ -99,6 +116,9 @@ export const config = {
   mcpAllowedHosts: env.MCP_ALLOWED_HOSTS.split(',')
     .map((host) => host.trim())
     .filter(Boolean),
+
+  rateLimitMax: env.RATE_LIMIT_MAX,
+  rateLimitWindowSeconds: env.RATE_LIMIT_WINDOW_SECONDS,
 
   nodeEnv: env.NODE_ENV,
   isProduction: env.NODE_ENV === 'production',

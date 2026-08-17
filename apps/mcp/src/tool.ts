@@ -4,6 +4,7 @@ import {
   hybridSearch,
   recordSearchQuery,
   rerank,
+  retrievalRateLimiter,
   type SessionUser,
 } from '@hatko/core';
 import { searchRequestSchema, type SearchResult } from '@hatko/shared';
@@ -130,6 +131,17 @@ export async function runSearchTool(
   user: SessionUser,
   input: { query: string; limit?: number | undefined; category?: string | undefined },
 ): Promise<string> {
+  /**
+   * The same allowance the HTTP routes spend from, charged to the same account.
+   *
+   * Checked here rather than on the `/mcp` endpoint, because the endpoint also carries
+   * `initialize` and `tools/list` — calls that touch no model and cost nothing. Limiting
+   * there would make a client that reconnects often burn its budget without ever running
+   * a search, which is the opposite of what the limit is for. A tool call is where the
+   * money goes, so a tool call is what is counted.
+   */
+  retrievalRateLimiter.check(user.id);
+
   // Back through the shared schema, which is where `limit`'s default of 8 and the
   // trimming and length bounds live. The SDK has already validated the shape; this
   // applies the contract the HTTP route applies.

@@ -269,9 +269,16 @@ throws `Stateless transport cannot be reused across requests`. Retrieval itself 
 all 142 chunks exhaustively in about 1 ms, which beats an approximate index at this
 size; revisit around two orders of magnitude more.
 
-**No rate limiting.** A valid token can drive unbounded rerank calls, which is real
-money. The same is true of the HTTP API's `/answer`. Worth adding before this faces
-anything but trusted internal clients, and deliberately not built here.
+**Rate limiting is per account, in memory, per process.** A token no longer drives
+unbounded rerank calls: `search_corpus` draws from the same allowance as the HTTP API's
+`/search` and `/answer` — `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW_SECONDS`,
+keyed by user id, defaulting to 30 a minute. The limit is checked on the tool call rather
+than on the `/mcp` request, so `initialize` and `tools/list` stay free; a refusal comes
+back as a tool error naming the wait, not as an HTTP 429, because a JSON-RPC client reads
+the result rather than the status line. Where it stops: the counter lives in the process,
+so two MCP processes would each grant the full allowance and a restart forgets everything.
+That is correct for the one-process-per-service topology `docs/deployment.md` describes,
+and the fix if it ever changes is a shared store behind the same interface.
 
 **No query cache.** Two identical questions pay for both model calls twice. The
 cheapest win available if traffic ever repeats itself.
@@ -303,6 +310,7 @@ metric rather than a search.
 | `406 Not Acceptable`           | Client did not send `Accept: application/json, text/event-stream`.                                                                     |
 | `EADDRINUSE :::4100`           | Another MCP server is already on the port. `lsof -ti :4100` to find it.                                                                |
 | Every query abstains           | The index is empty. Run `npm run ingest`.                                                                                              |
+| `Too many requests…`           | The per-account allowance is spent. Wait the stated seconds, or raise `RATE_LIMIT_MAX`. Arrives as a tool error, not a 429 — see §7.    |
 | `OPENAI_API_KEY is not set`    | Queries are embedded and reranked at call time. Set the key in `.env`, or from the admin dashboard.                                    |
 
 The server rejects a request with **no** `Host` header at all. Real HTTP/1.1 clients

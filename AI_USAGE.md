@@ -1871,3 +1871,79 @@ the one interpolated identifier is a sort key mapped through a closed record, an
 and answer layers needed no changes.
 
 Typecheck clean, 194 tests passing.
+
+## Step 9: rate limiting (18 Aug 2026)
+
+Both `docs/mcp.md` §7 and `docs/deployment.md` §10 had named this as a known gap since
+they were written: a valid token could drive an unbounded number of rerank calls, and so
+could `/answer`. The limit exists for provider spend, not for abuse, and saying which one
+decided every design question below.
+
+**Keyed by user, not by IP.** Every route it guards already requires a session, so there
+is always a real account to charge, and the spend being capped is per account. IP would
+also be the wrong thing to trust behind the reverse proxy the deploy guide recommends: it
+arrives in a header the proxy sets, and treating a client-supplied header as identity is
+how a limiter becomes decorative.
+
+**A sliding window rather than a fixed one, and that was not the first draft.** The AI
+proposed the textbook fixed-window counter — a count and a window-start per key, reset
+when the window rolls. It is a line or two shorter and wrong at the boundary: 30 requests
+at 11:59:59 and 30 more at 12:00:01 is 60 in two seconds, every window, for ever. Keeping
+the timestamps of a key's recent requests instead costs a small array bounded by `max` and
+removes the hole, so there was no reason to accept it. A test pins the difference at
+specific instants rather than by sleeping.
+
+**Two behaviours I had to go back and fix after writing the tests.** A refused request
+originally recorded itself, which meant a caller hammering a closed door pushed its own
+recovery further away on every attempt — the limiter would have punished retrying rather
+than just refusing it, and a client politely polling once a second would never have got
+back in. And `retryAfterSeconds` could round down to `0`, which invites an immediate retry
+guaranteed to fail; it is now rounded up and floored at one. Both are tested, and both
+were found by asking what a well-behaved client would do next rather than by anything
+failing.
+
+**Where the check sits, on each surface, was the decision worth making.** On the HTTP API
+it is middleware mounted _after_ `requires`, so authorization refuses an anonymous caller
+before anyone's allowance is touched — limiting first would mean counting requests before
+knowing who made them, and a flood of unauthenticated requests could exhaust a real
+account's budget. There is a test for exactly that. On the MCP server it is inside
+`runSearchTool` rather than on the `/mcp` endpoint, because that endpoint also carries
+`initialize` and `tools/list`, which touch no model and cost nothing: limiting there would
+make a client that reconnects often burn its budget without ever running a search. The
+refusal arrives as a tool error naming the wait, not an HTTP 429, since a JSON-RPC client
+reads the result rather than the status line — and the message names seconds because the
+reader is a language model deciding what to do next.
+
+**One allowance, not one per route.** `/search`, `/answer` and the MCP tool all draw from
+the same per-account budget. Separate buckets would let a caller spend twice the intended
+amount by alternating endpoints, and `/answer` is the more expensive of the two at three
+provider calls against a search's two. Tested by exhausting the allowance through
+`/search` and then finding `/answer` closed.
+
+**The limit is configurable, and that is a lesson from this repository rather than a
+preference.** `MCP_ALLOWED_HOSTS` exists because the host guard had to be widened twice
+after blocking legitimate callers, and the note in that commit was that a control which
+blocks legitimate traffic gets switched off rather than tuned. A rate limit with no knob
+is the same shape of mistake, so `RATE_LIMIT_MAX` and `RATE_LIMIT_WINDOW_SECONDS` are
+environment values, `0` disables the limiter, and both servers print the active setting at
+startup — because a protection an operator believes is on when it is off is worse than not
+having one.
+
+**Verified rather than asserted.** Both servers were started and their new startup lines
+read, including the `DISABLED` warning under `RATE_LIMIT_MAX=0`. Then against the running
+API: sign in as the demo admin, send thirty requests that are counted but reach no
+provider, and the thirty-first answered `429` with `retry-after: 60` and
+`{"error":{"code":"rate_limited",…}}`. `rate_limited` was declared in `apiErrorSchema`
+from step 1 and had no producer until now — the same story as the `startup` ingestion
+trigger, which sat unused until the watcher earned it.
+
+Both wirings were mutation-tested: removing `throttle()` from the search route fails the
+API tests, and deleting the limiter call from `runSearchTool` fails the MCP one. The MCP
+test drives the limiter directly to exhaust the allowance rather than making thirty real
+searches, which is not a dodge around the thing under test — the check runs before any
+embedding, so the one call that matters needs no provider, and what gets pinned is that
+the MCP path consults the limiter at all. That is the half no unit test can see, and it
+fails silently: forget the call and MCP traffic is simply uncapped while everything else
+still passes.
+
+Typecheck clean, 208 tests passing.

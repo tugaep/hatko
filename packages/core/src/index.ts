@@ -1,5 +1,12 @@
 export { config, REPO_ROOT, type Config } from './config.ts';
 export * from './settings.ts';
+export {
+  createRateLimiter,
+  retrievalRateLimiter,
+  RateLimitError,
+  type RateLimiter,
+  type RateLimiterOptions,
+} from './rate-limit.ts';
 export * from './db/index.ts';
 export * from './db/repository.ts';
 export * from './db/stats.ts';

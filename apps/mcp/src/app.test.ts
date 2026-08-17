@@ -51,6 +51,8 @@ const {
   resolveApiKey,
   ProviderError,
   ConfigurationError,
+  RateLimitError,
+  retrievalRateLimiter,
 } = await import('@hatko/core');
 const { createApp, toToolErrorText } = await import('./app.ts');
 
@@ -308,6 +310,15 @@ test('a configuration error is forwarded, because it is the fix', () => {
   assert.match(text, /No OpenAI API key is set/);
 });
 
+test('a rate-limit refusal names the wait, because the reader has to act on it', () => {
+  // Forwarded rather than generalised. The caller is a language model choosing what to do
+  // next: told only "too many requests" it retries at once or gives up, and both are wrong.
+  const text = toToolErrorText(new RateLimitError(42));
+
+  assert.match(text, /42 seconds/);
+  assert.doesNotMatch(text, /unexpected/i, 'a known refusal was reported as an internal fault');
+});
+
 /**
  * A tool call embeds and reranks the query, so it reaches the model provider and
  * there is no seam to inject a stub through HTTP. Skipped without a key so the suite
@@ -503,4 +514,45 @@ test('a configured public host is accepted, and others still are not', async () 
   // Widening the list must not turn the check off.
   const foreign = await send('evil.example.com');
   assert.equal(foreign.status, 403, 'a foreign Host was accepted');
+});
+
+/**
+ * The rate limit, at the tool rather than at the transport.
+ *
+ * Last in the file on purpose: it spends the test account's whole allowance, and the
+ * limiter is process-wide, so anything after it that called the tool as this user would be
+ * refused. Deliberately not reset afterwards — a hatch for un-spending an allowance is
+ * exactly the kind of thing that ends up being called in production.
+ *
+ * The allowance is exhausted by driving the limiter directly instead of by making thirty
+ * real searches. That is not a shortcut around the thing being tested: `runSearchTool`
+ * checks the limit *before* it embeds or reranks anything, so the one call that matters
+ * here needs no provider at all. What this pins is that the MCP path consults the limiter
+ * — which no unit test can see, and which fails silently, since forgetting the call leaves
+ * MCP traffic simply uncapped while every other test still passes.
+ */
+test('the MCP tool spends from the same allowance, and says so when it is gone', async () => {
+  const userId = (
+    db.prepare('SELECT "id" FROM "user" WHERE "email" = ?').get('user@test.local') as { id: string }
+  ).id;
+
+  assert.throws(() => {
+    // One more than the allowance, so the loop ends by exhausting it rather than by
+    // guessing the number. `config.rateLimitMax` is the same value the server uses.
+    for (let i = 0; i <= config.rateLimitMax; i++) retrievalRateLimiter.check(userId);
+  }, RateLimitError);
+
+  const response = await rpc(
+    'tools/call',
+    { name: 'search_corpus', arguments: { query: 'minimum language set', limit: 2 } },
+    bearer(userToken),
+  );
+
+  // 200 with `isError`, not an HTTP 429: the transport is fine, the tool call is what was
+  // refused, and a JSON-RPC client reads the result rather than the status line.
+  assert.equal(response.status, 200);
+
+  const { result } = await envelope(response);
+  assert.equal(result?.isError, true, 'an exhausted allowance was reported as a success');
+  assert.match(result?.content?.[0]?.text ?? '', /Too many requests/);
 });

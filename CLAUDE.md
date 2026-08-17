@@ -303,7 +303,7 @@ Each step ends somewhere demonstrable.
 | 8   | Admin user management: list, add, role, deactivate   | **done** — lockout guards, revocation verified    |
 | 8b  | Production config + deploy guide, hatko.tugrap.dev   | **done** — guide written; deploy is step 13       |
 | 8c  | Audit of the four bonus features                     | **done** — `7350417`, 3 false claims corrected    |
-| 9   | Rate limiting on search, answer and the MCP tool     |                                                   |
+| 9   | Rate limiting on search, answer and the MCP tool     | **done** — one allowance, 429 verified live       |
 | 10  | Streaming answers — completes a bonus                |                                                   |
 | 11  | Self-hosted models, OpenAI path stays default        |                                                   |
 | 12  | 3D embedding view on the dashboard                   |                                                   |

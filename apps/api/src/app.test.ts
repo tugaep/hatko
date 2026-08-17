@@ -814,3 +814,90 @@ async function deactivatedFixture(): Promise<void> {
   ).id;
   db.prepare('UPDATE "user" SET "disabled" = 1 WHERE "id" = ?').run(id);
 }
+
+// --- rate limiting ----------------------------------------------------------
+
+/**
+ * The allowance on the two routes that spend money.
+ *
+ * Exhausted with malformed bodies rather than real queries, which is not a dodge — it is
+ * the behaviour worth pinning. `throttle()` sits after the role check and before the
+ * handler, so a request is counted whether or not it goes on to reach the retriever. That
+ * is the correct order: a caller flooding the endpoint with rubbish is still a caller
+ * flooding the endpoint, and it means this test needs no provider key while still
+ * exercising the real middleware chain.
+ *
+ * Its own account, because the limiter is process-wide and keyed by user — spending the
+ * shared fixtures' allowance here would make unrelated tests fail depending on the order
+ * they ran in.
+ */
+async function throttleFixture(email: string): Promise<string> {
+  await upsertAccount(db, { email, password: 'throttle-password', name: 'Throttle', role: 'user' });
+  return cookieFor(email, 'throttle-password');
+}
+
+test('an account past its allowance is refused with 429 and told how long to wait', async () => {
+  const cookie = await throttleFixture('throttled@test.local');
+
+  for (let i = 0; i < config.rateLimitMax; i++) {
+    const response = await call('/api/search', { method: 'POST', cookie, body: { query: '' } });
+    assert.equal(response.status, 400, `request ${i + 1} was not counted as a normal request`);
+  }
+
+  const refused = await call('/api/search', { method: 'POST', cookie, body: { query: '' } });
+  assert.equal(refused.status, 429, 'the allowance was not enforced');
+
+  const body = (await refused.json()) as { error: { code: string; message: string } };
+  assert.equal(body.error.code, 'rate_limited');
+  // `Retry-After` is what a client library acts on without being told to. A 429 carrying
+  // only prose leaves every caller to invent its own backoff.
+  const retryAfter = Number(refused.headers.get('retry-after'));
+  assert.ok(retryAfter >= 1, 'no usable Retry-After header');
+  assert.ok(retryAfter <= config.rateLimitWindowSeconds, 'Retry-After exceeds the window');
+});
+
+test('the allowance is per account, so one caller cannot lock out another', async () => {
+  // The test above has already exhausted `throttled@test.local`. If the limiter were
+  // global, or keyed by anything the two share, this second account would be refused
+  // too — and one client in a retry loop could deny search to everyone.
+  const cookie = await throttleFixture('not-throttled@test.local');
+
+  const response = await call('/api/search', { method: 'POST', cookie, body: { query: '' } });
+  assert.equal(response.status, 400, 'an unrelated account was caught by another’s limit');
+});
+
+test('the answer route draws from the same allowance as search', async () => {
+  /**
+   * One budget, not one per route. Two separate allowances would let a caller spend twice
+   * the intended amount by alternating endpoints — and `/answer` is the more expensive of
+   * the two, at three provider calls against a search's two.
+   */
+  const cookie = await throttleFixture('shared-budget@test.local');
+
+  for (let i = 0; i < config.rateLimitMax; i++) {
+    const response = await call('/api/search', { method: 'POST', cookie, body: { query: '' } });
+    assert.equal(response.status, 400);
+  }
+
+  const refused = await call('/api/answer', { method: 'POST', cookie, body: { query: '' } });
+  assert.equal(refused.status, 429, '/answer had an allowance of its own');
+});
+
+test('an anonymous flood cannot spend a real account’s allowance', async () => {
+  /**
+   * The reason `throttle()` is mounted after `requires` rather than before it. Limiting
+   * first would mean counting requests before knowing who made them — so either every
+   * anonymous caller shares one bucket, or worse, a request that will be rejected as
+   * unauthenticated still charges somebody. Here authorization refuses first and nothing
+   * is spent.
+   */
+  const cookie = await throttleFixture('untouched@test.local');
+
+  for (let i = 0; i < config.rateLimitMax + 5; i++) {
+    const response = await call('/api/search', { method: 'POST', body: { query: 'sound assets' } });
+    assert.equal(response.status, 401);
+  }
+
+  const mine = await call('/api/search', { method: 'POST', cookie, body: { query: '' } });
+  assert.equal(mine.status, 400, 'an anonymous flood consumed a real account’s allowance');
+});

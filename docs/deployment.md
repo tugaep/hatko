@@ -295,8 +295,12 @@ content and credentials live.
 
 Stated rather than implied, because each is a real gap and none is hard to add later.
 
-- **No rate limiting.** A signed-in account can drive unlimited rerank calls, which is
-  real spend. Fine behind an internal sign-in; add a limit before anything wider.
+- **Rate limiting does not survive a second process.** There is a limit now —
+  `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW_SECONDS` per account across `/search`,
+  `/answer` and the MCP tool, 30 a minute by default — but the counter is in memory, so
+  running two API processes would grant each account the allowance twice and a restart
+  forgets what anyone had spent. One process per service, which is what this guide sets
+  up, is the condition under which it means what it says.
 - **No horizontal scaling.** SQLite means one machine. The protocol layers are stateless,
   so the ceiling is the database file, and the migration path is Postgres + pgvector —
   a storage swap rather than a redesign, because retrieval is confined to

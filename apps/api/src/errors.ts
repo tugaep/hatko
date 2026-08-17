@@ -4,6 +4,7 @@ import {
   ConfigurationError,
   IngestionInProgressError,
   ProviderError,
+  RateLimitError,
   UserManagementError,
 } from '@hatko/core';
 import type { ApiError } from '@hatko/shared';
@@ -115,6 +116,18 @@ export function toErrorResponse(error: unknown, c: Context): Response {
 
   if (error instanceof IngestionInProgressError) {
     return c.json(envelope('conflict', error.message), 409);
+  }
+
+  /**
+   * Out of allowance. `Retry-After` is set as well as the message, because it is the
+   * header a client library acts on without being told to — a 429 carrying only prose
+   * leaves every caller to invent its own backoff, and the ones that invent badly retry
+   * immediately. `rate_limited` was declared in `apiErrorSchema` from the start and had
+   * no producer until now.
+   */
+  if (error instanceof RateLimitError) {
+    c.header('Retry-After', String(error.retryAfterSeconds));
+    return c.json(envelope('rate_limited', error.message), 429);
   }
 
   /**

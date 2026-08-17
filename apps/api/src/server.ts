@@ -23,6 +23,16 @@ const server = serve({ fetch: app.fetch, port: config.apiPort }, (info) => {
   console.log(
     `  model key  ${keyStatus.configured ? `${keyStatus.source} (${keyStatus.hint})` : 'not configured — set it in the admin settings page'}`,
   );
+  // Printed because it is switchable, and a protection an operator believes is on when it
+  // is off is worse than not having it. `RATE_LIMIT_MAX=0` says so here rather than only
+  // in the file it was set in.
+  console.log(
+    `  rate limit ${
+      config.rateLimitMax > 0
+        ? `${config.rateLimitMax} search or answer requests per ${config.rateLimitWindowSeconds}s per account`
+        : 'DISABLED (RATE_LIMIT_MAX=0) — provider spend is unbounded'
+    }`,
+  );
   if (Number(chunks) === 0) {
     console.log('\n  The index is empty. Run `npm run ingest`, or trigger it from the dashboard.');
   }
