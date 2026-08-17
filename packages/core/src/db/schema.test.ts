@@ -83,6 +83,25 @@ test('migrations apply cleanly and are idempotent', () => {
   assert.deepEqual(applied, onDisk);
   assert.ok(onDisk.length > 0, 'there is at least one migration to apply');
 
+  // No two indexes on the same table and columns. Migration 003 added a second
+  // index on search_queries(user_id) identical to migration 001's, so every write
+  // maintained the same B-tree twice; migration 005 drops it. Checked as a rule
+  // rather than by name so the next duplicate is caught too.
+  const indexes = ctx.db
+    .prepare(
+      `SELECT tbl_name, sql FROM sqlite_master
+        WHERE type = 'index' AND sql IS NOT NULL`,
+    )
+    .all() as Array<{ tbl_name: string; sql: string }>;
+
+  const columnsOf = (sql: string) => /\(([^)]*)\)\s*$/.exec(sql)?.[1]?.replace(/\s+/g, ' ').trim();
+  const seen = new Set<string>();
+  for (const index of indexes) {
+    const key = `${index.tbl_name}(${columnsOf(index.sql)})`;
+    assert.ok(!seen.has(key), `duplicate index on ${key}`);
+    seen.add(key);
+  }
+
   // Re-opening the same file must not attempt to re-apply anything.
   assert.doesNotThrow(() => {
     const again = openDb(ctx.db.location()!);

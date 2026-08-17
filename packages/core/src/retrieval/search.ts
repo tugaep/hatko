@@ -311,6 +311,21 @@ export async function hybridSearch(
   const candidates = options.candidates ?? DEFAULT_CANDIDATES;
   const arm = options.arm ?? 'hybrid';
   const rrfK = options.rrfK ?? DEFAULT_RRF_K;
+
+  // Both are interpolated into SQL where a bad value fails in a way nobody would
+  // trace back to here. A negative `candidates` reaches sqlite-vec as a `k` and
+  // throws its raw message; `rrfK = -1` makes `1.0 / (rrfK + rank)` divide by zero
+  // at rank 1, which SQLite returns as NULL and COALESCE turns into a score of 0 —
+  // so the best hit sorts last and the ranking silently inverts. Neither is
+  // reachable from the API; both are on the options object the eval sweeps, and a
+  // sweep that quietly produces garbage at one end of its range is how a constant
+  // gets tuned wrong.
+  if (!Number.isInteger(candidates) || candidates < 0) {
+    throw new Error(`candidates must be a non-negative integer, got ${candidates}.`);
+  }
+  if (!Number.isFinite(rrfK) || rrfK <= 0) {
+    throw new Error(`rrfK must be greater than zero, got ${rrfK}.`);
+  }
   const embedder = options.embedder ?? ((text: string) => embedOne(text, options.signal));
 
   const ftsQuery = toFtsQuery(query);

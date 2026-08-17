@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { auth, config, getDb, getSessionUser } from '@sorrel/core';
+import { config, getAuth, getDb, getSessionUser } from '@sorrel/core';
+import { sessionResponseSchema } from '@sorrel/shared';
 import { HttpError, toErrorResponse, notFound } from './errors.ts';
 import { searchRoutes } from './routes/search.ts';
 import { adminRoutes } from './routes/admin.ts';
@@ -65,14 +66,16 @@ export function createApp() {
    * Its handler is a Web fetch handler and Hono speaks the same interface, so it
    * mounts directly with no adapter in between.
    */
-  app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+  app.on(['GET', 'POST'], '/api/auth/*', (c) => getAuth().handler(c.req.raw));
 
   /**
    * Who am I. Returns `{ user: null }` rather than 401 when signed out, because
    * "not signed in" is the answer to this question, not a failure to answer it —
    * the client uses it to decide what to render on first load.
    */
-  app.get('/api/session', async (c) => c.json({ user: await getSessionUser(c.req.raw.headers) }));
+  app.get('/api/session', async (c) =>
+    c.json(sessionResponseSchema.parse({ user: await getSessionUser(c.req.raw.headers) })),
+  );
 
   app.route('/api', searchRoutes);
   app.route('/api/admin', adminRoutes);

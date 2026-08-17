@@ -148,6 +148,3 @@ export function nodeSqliteDialect(db: DatabaseSync): Dialect {
     createIntrospector: (kysely) => new SqliteIntrospector(kysely),
   };
 }
-
-export { toBindable, returnsRows };
-export { CompiledQuery };

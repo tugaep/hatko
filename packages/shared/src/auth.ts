@@ -21,11 +21,11 @@ export const sessionUserSchema = z.object({
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
 
-export const signInRequestSchema = z.object({
-  email: z.email(),
-  password: z.string().min(8).max(200),
-});
-export type SignInRequest = z.infer<typeof signInRequestSchema>;
+// There is deliberately no sign-in request schema here. Better Auth owns the
+// sign-in endpoint and validates its own body, so a second definition of that
+// shape would have no validator to be, and the one written earlier had no
+// consumer in either workspace. The session *response* below is different: it is
+// this application's own route, and the browser reads it.
 
 export const sessionResponseSchema = z.object({
   user: sessionUserSchema.nullable(),

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { AuthorizationError, ProviderError } from '@sorrel/core';
+import {
+  AuthorizationError,
+  ConfigurationError,
+  IngestionInProgressError,
+  ProviderError,
+} from '@sorrel/core';
 import type { ApiError } from '@sorrel/shared';
 import type { Context } from 'hono';
 
@@ -20,6 +25,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   unauthorized: 401,
   forbidden: 403,
   not_found: 404,
+  conflict: 409,
   rate_limited: 429,
   upstream_failed: 502,
   internal: 500,
@@ -106,9 +112,16 @@ export function toErrorResponse(error: unknown, c: Context): Response {
     );
   }
 
-  // A missing or undecryptable API key surfaces as a plain Error from core, and
-  // its message is written to be actionable, so it is passed through.
-  if (error instanceof Error && /API key/i.test(error.message)) {
+  if (error instanceof IngestionInProgressError) {
+    return c.json(envelope('conflict', error.message), 409);
+  }
+
+  // A missing or undecryptable credential. The message is written to be
+  // actionable and carries nothing internal, so it is forwarded. Matched on the
+  // type: this was previously a regex over the message text, which put the
+  // message and its matcher in different files and would have forwarded any
+  // internal error that happened to mention an API key.
+  if (error instanceof ConfigurationError) {
     return c.json(envelope('bad_request', error.message), 400);
   }
 

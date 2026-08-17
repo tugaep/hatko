@@ -7,7 +7,12 @@ import {
   recordSearchQuery,
   rerank,
 } from '@sorrel/core';
-import { answerRequestSchema, searchRequestSchema } from '@sorrel/shared';
+import {
+  answerRequestSchema,
+  answerResponseSchema,
+  searchRequestSchema,
+  searchResponseSchema,
+} from '@sorrel/shared';
 import { requires } from '../middleware.ts';
 import { jsonBody } from '../errors.ts';
 
@@ -18,6 +23,13 @@ import { jsonBody } from '../errors.ts';
  * field-by-field, so the API and the browser cannot disagree about the contract,
  * and an oversized or malformed query is rejected at the boundary with field-level
  * detail instead of reaching the retriever.
+ *
+ * Responses are parsed against the same schemas on the way out, which they were
+ * not before: `c.json()` accepts any object, so renaming `results` to `resultz`
+ * type-checked clean and would have reached the browser. Rows were already
+ * validated coming out of the database, leaving the contract enforced in the one
+ * direction the client does not depend on. Parsing also strips any field not in
+ * the schema, so a response cannot quietly grow one.
  */
 
 export const searchRoutes = new Hono();
@@ -47,7 +59,7 @@ searchRoutes.post('/search', requires('search:run'), async (c) => {
     latencyMs,
   });
 
-  return c.json({ query: body.query, results, latencyMs });
+  return c.json(searchResponseSchema.parse({ query: body.query, results, latencyMs }));
 });
 
 searchRoutes.post('/answer', requires('answer:generate'), async (c) => {
@@ -69,5 +81,5 @@ searchRoutes.post('/answer', requires('answer:generate'), async (c) => {
   // An abstention is a correct outcome, not an error, so it is a 200 carrying
   // `abstained: true`. Returning 4xx would make the client treat honest
   // uncertainty as a failure and probably retry it.
-  return c.json(response);
+  return c.json(answerResponseSchema.parse(response));
 });

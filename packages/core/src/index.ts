@@ -7,6 +7,7 @@ export * from './ingest/corpus.ts';
 export * from './ingest/chunk.ts';
 export {
   ingest,
+  IngestionInProgressError,
   type IngestOptions,
   type IngestProgress,
   type Embedder,
@@ -21,7 +22,9 @@ export {
   MIN_USEFUL_GRADE,
   type RerankOptions,
 } from './retrieval/rerank.ts';
-export { EVAL_QUESTIONS, ANSWERABLE, UNANSWERABLE, type EvalQuestion } from './eval/questions.ts';
+// The evaluation set is deliberately NOT re-exported. It is a development fixture,
+// and shipping it in the package the API imports puts the answers to the eval in
+// the server bundle. `eval/run.ts` and the query tests import it by path.
 export {
   answerQuestion,
   validateCitations,
@@ -29,14 +32,12 @@ export {
   type AnswerOptions,
 } from './answer/generate.ts';
 export {
-  auth,
+  getAuth,
   getSessionUser,
   requirePermission,
-  requireUser,
   AuthorizationError,
   type Permission,
   type Role,
   type SessionUser,
 } from './auth/index.ts';
 export { upsertAccount, demoAccounts, type DemoAccount } from './auth/accounts.ts';
-export { nodeSqliteDialect } from './db/kysely-dialect.ts';

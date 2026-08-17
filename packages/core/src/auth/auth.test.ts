@@ -23,7 +23,7 @@ const dbFile = path.join(dir, 'auth.db');
 process.env.DATABASE_PATH = dbFile;
 
 const { getDb, closeDb } = await import('../db/client.ts');
-const { auth, getSessionUser, requirePermission, requireUser, AuthorizationError } =
+const { getAuth, getSessionUser, requirePermission, AuthorizationError } =
   await import('./index.ts');
 const { can } = await import('@sorrel/shared');
 const { upsertAccount } = await import('./accounts.ts');
@@ -36,7 +36,7 @@ const db = getDb();
 const PASSWORD = 'correct-horse-battery';
 
 async function createUser(email: string, role: 'user' | 'admin') {
-  const created = await auth.api.signUpEmail({
+  const created = await getAuth().api.signUpEmail({
     body: { email, password: PASSWORD, name: email.split('@')[0]! },
   });
   db.prepare('UPDATE "user" SET role = ? WHERE id = ?').run(role, created.user.id);
@@ -45,7 +45,7 @@ async function createUser(email: string, role: 'user' | 'admin') {
 
 /** Sign in and return the cookie header a browser would send back. */
 async function signIn(email: string, password = PASSWORD): Promise<string | null> {
-  const response = await auth.api.signInEmail({
+  const response = await getAuth().api.signInEmail({
     body: { email, password },
     asResponse: true,
   });
@@ -107,7 +107,7 @@ test('re-seeding an existing account stores a hash, not the plaintext', async ()
   assert.ok(!row.password.includes(account.password), 'plaintext survived the update path');
 
   // And the reset password must still authenticate afterwards.
-  const ctx = await auth.$context;
+  const ctx = await getAuth().$context;
   assert.equal(await ctx.password.verify({ hash: row.password, password: account.password }), true);
 
   const bytes = fs.readFileSync(dbFile).toString('binary');
@@ -122,7 +122,7 @@ test('re-seeding applies the role by server-side write', async () => {
 });
 
 test('a stored credential verifies against the right password and no other', async () => {
-  const ctx = await auth.$context;
+  const ctx = await getAuth().$context;
   const row = db.prepare('SELECT password FROM account WHERE "userId" = ?').get(adminId) as {
     password: string;
   };
@@ -157,7 +157,7 @@ test('a forged cookie is rejected', async () => {
 });
 
 test('the session cookie is httpOnly and same-site', async () => {
-  const response = await auth.api.signInEmail({
+  const response = await getAuth().api.signInEmail({
     body: { email: 'user@test.local', password: PASSWORD },
     asResponse: true,
   });
@@ -172,7 +172,7 @@ test('the session cookie is httpOnly and same-site', async () => {
 test('a client cannot assign itself a role at sign-up', async () => {
   // `input: false` on the role field. Without it this request would create an
   // admin, and every authorization check downstream would be decorative.
-  await auth.api.signUpEmail({
+  await getAuth().api.signUpEmail({
     body: {
       email: 'sneaky@test.local',
       password: PASSWORD,
@@ -242,11 +242,10 @@ test('an admin holds every permission a user does, and the admin-only ones too',
   }
 });
 
-test('requireUser accepts any session but still refuses none', async () => {
-  const cookie = await signIn('user@test.local');
-  assert.equal((await requireUser(new Headers({ cookie: cookie! }))).role, 'user');
-  await assert.rejects(requireUser(new Headers()), /Sign in/);
-});
+// `requireUser` was removed: every protected route declares a permission, so a
+// "signed in, role irrelevant" check had no caller outside this test. The
+// no-session case it covered is asserted by "permissions are refused without a
+// session" above, which exercises the same branch through `requirePermission`.
 
 test('the permission map refuses an absent or unknown role', () => {
   // Fail closed. An account whose role column was corrupted loses access rather

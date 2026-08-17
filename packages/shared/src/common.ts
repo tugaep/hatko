@@ -11,6 +11,18 @@ import { z } from 'zod';
  */
 
 /**
+ * The width a category may occupy.
+ *
+ * Exported so the producer can clamp to it. The category is derived from a
+ * directory name, which is arbitrary-length input, and the ingest write path is
+ * raw SQL that never applies this schema — so a bound enforced only on the read
+ * side turns a long folder name into a row that can be written and never read.
+ * `categoryOf` in packages/core/src/ingest/corpus.ts is the one producer, and it
+ * truncates to this.
+ */
+export const CATEGORY_MAX_CHARS = 64;
+
+/**
  * A document's category is its top-level directory within the corpus, discovered
  * at ingest time — deliberately an open string rather than an enum.
  *
@@ -21,7 +33,7 @@ import { z } from 'zod';
  *
  * Files at the corpus root fall back to CATEGORY_UNCATEGORISED.
  */
-export const documentCategorySchema = z.string().min(1).max(64);
+export const documentCategorySchema = z.string().min(1).max(CATEGORY_MAX_CHARS);
 export type DocumentCategory = z.infer<typeof documentCategorySchema>;
 
 export const CATEGORY_UNCATEGORISED = 'uncategorised';
@@ -53,6 +65,8 @@ export const apiErrorSchema = z.object({
       'unauthorized',
       'forbidden',
       'not_found',
+      /** The request is valid but the server's current state refuses it — see IngestionInProgressError. */
+      'conflict',
       'rate_limited',
       'upstream_failed',
       'internal',

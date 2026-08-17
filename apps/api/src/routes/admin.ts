@@ -12,7 +12,12 @@ import {
   listIngestionRuns,
   setSecret,
 } from '@sorrel/core';
-import { listDocumentsQuerySchema, triggerIngestionRequestSchema } from '@sorrel/shared';
+import {
+  documentSchema,
+  listDocumentsQuerySchema,
+  paginated,
+  triggerIngestionRequestSchema,
+} from '@sorrel/shared';
 import { z } from 'zod';
 import { requires } from '../middleware.ts';
 import { HttpError, jsonBody } from '../errors.ts';
@@ -28,6 +33,13 @@ import { HttpError, jsonBody } from '../errors.ts';
 
 export const adminRoutes = new Hono();
 
+/**
+ * The paged-documents contract, built from the shared `paginated` helper — which
+ * until now had no caller anywhere, so the shape it describes and the shape this
+ * route returned were only ever the same by inspection.
+ */
+const documentPageSchema = paginated(documentSchema);
+
 adminRoutes.get('/documents', requires('documents:manage'), (c) => {
   const query = listDocumentsQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
 
@@ -39,7 +51,9 @@ adminRoutes.get('/documents', requires('documents:manage'), (c) => {
     ...(query.q ? { q: query.q } : {}),
   });
 
-  return c.json({ items, total, limit: query.limit, offset: query.offset });
+  return c.json(
+    documentPageSchema.parse({ items, total, limit: query.limit, offset: query.offset }),
+  );
 });
 
 /** One document with its passages, so the dashboard can show what was indexed. */

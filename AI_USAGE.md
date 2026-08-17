@@ -618,3 +618,328 @@ because they test the corpus the system has. Defects 3 and 4 are different and w
 a 500 on malformed input and two documented commands that do nothing are both on the
 happy path of a reviewer's first ten minutes, and no test covers either because
 every test calls the code directly rather than the way a person would.
+
+---
+
+## Second audit of steps 1–5 (17 Aug 2026)
+
+A second pass over the same five steps, run after the fixes above had landed, with
+the same brief and the same rule: no finding counts unless something actually run
+reproduces it. It exists because the first audit was AI reviewing its own output
+and I did not want to take "all thirteen fixed" on trust.
+
+What was run: `npm run typecheck` and `npm test` (131 pass, 0 fail); the eval across
+all three arms with and without `--rerank`, and `--answers` against the live
+provider; the API driven end to end through `app.request()` as anonymous, `user`
+and `admin`; and six throwaway probe scripts covering the chunker, the FTS query
+builder, hybrid retrieval, the ingestion pipeline, the analytics queries and
+symlink handling.
+
+Nothing from defects 1–13 regressed. Nine new defects, none overlapping the first
+set. **None of these are fixed yet** — they are recorded here and triaged below.
+
+### What held up, re-verified
+
+- **The documented retrieval numbers still reproduce exactly.** With `--rerank`:
+  keyword 100% recall@1 / MRR 1.000, vector 89% / 0.889, hybrid 100% / 1.000.
+  Without it, 89% / 67% / 78%. The docstring in `search.ts` says "with the rerank
+  pass" and means it — the table is not quietly reporting the best run.
+- **12/12 answer checks pass live**, including all three abstentions.
+- **The abstain threshold's margin reproduces**: answerable 1.00, unanswerable
+  0.00–0.33, threshold 0.67.
+- **Still no mock implementations in production code.** Every `stub`/`fake` in the
+  tree is in a `.test.ts` file or injected through a typed option; nothing in
+  `packages/` or `apps/` special-cases the sample questions.
+- **Authorization survived every escalation I could construct**: a `role=admin`
+  cookie appended to a user session, `role` in a sign-in body, a forged session
+  token, and `__proto__` in a search body all fail closed. 401 and 403 stay
+  distinct on every route. Sign-up is refused on `/sign-up/email`, `/sign-up`,
+  `/sign-up/`, with a query string, and through `x/../sign-up/email`.
+- **Boundary validation is complete on the HTTP surface.** Query too short, too
+  long, non-numeric `limit`, `limit=999`, `offset=-1`, `null` and `[]` bodies,
+  non-JSON bodies and `id` values of `0`, `-1`, `abc` and `1e999` all return 400
+  with field-level detail. None reached the retriever.
+- **LIKE escaping holds** — `%`, `_` and `\` each return 0 documents, not 142.
+- **The chunk ceiling holds under pathological input**: a 5000-character unbroken
+  token at `maxChars=100` produces 51 chunks and none over the ceiling.
+- **The three stores stay in step** at 142/142/142, ingestion accounting balances
+  (indexed + updated + skipped + failed = total), and a file deleted between scan
+  and read is recorded as failed rather than lost.
+- **p95 nearest-rank is now right**: ten samples of 10–90 and 1000 report p95 =
+  1000, not the minimum.
+
+### Defects found
+
+**14. A directory name longer than 64 characters permanently bricks the system.**
+The worst thing in this pass by a wide margin. `documentCategorySchema` is
+`z.string().min(1).max(64)`; the category is the corpus's top-level directory name
+and the write path is raw SQL that never applies the schema. So ingestion reports
+success — verified, `indexed 2 failed 0` — and from that moment every read path
+that parses a document row throws a `ZodError`: `listDocuments`,
+`listDocumentsFiltered`, `getDocumentsBySourcePath`, `getDashboardStats`, and
+`hybridSearch`, which parses through `searchResultSchema`. User-facing search
+included. The next ingest run throws too, at `getDocumentsBySourcePath`, so it
+cannot heal itself; recovery means hand-editing the database. And because
+`errors.ts` maps `ZodError` to 400 `bad_request`, a user whose search just broke is
+told _their request_ could not be validated. A 68-character folder name is
+unremarkable in a real documentation tree, and "point `CORPUS_PATH` at the real
+corpus" is a stated requirement. The asymmetry is the lesson: rows are validated on
+the way out of the database and not on the way in, so the schema turns a bad write
+into an unrecoverable read.
+
+**15. `scanCorpus` follows symlinks, so the corpus boundary is not a boundary.**
+Two verified consequences. A directory symlink pointing outside `CORPUS_PATH`
+indexes the files behind it — a `linked -> ../private` symlink put `salaries.md`
+into the index under category `linked`, and it appeared in neither the file list nor
+the `ignored` list. A self-referential symlink yields the same document sixteen
+times under sixteen distinct paths (`loop/loop/.../real.md`), which is sixteen
+embeddings paid for and sixteen interchangeable results. This is the same class of
+defect as #5 — a foreign file reaching the index — and the exclusion list added to
+fix that one does not cover it.
+
+**16. A fenced code block containing a `#` comment is split as if it were a
+heading, and the chunk stops being verbatim.** `HEADING_RE` is applied line by line
+with no fence tracking. Verified on a runbook containing ` ```sh ` and
+`# install dependencies`: the fence is torn across two chunks, the first ending on
+an unclosed ` ```sh `; the enclosing `## Setup` heading is lost, because the
+comment registers as level 1 and `headingForGroup` returns null for any group
+reaching the document top; and the rejoin inserts a blank line, so 150 source bytes
+come back as 152. `RawChunk.content` is documented as a "verbatim slice of the
+source document" and the schema comment says "what is displayed is what was
+written" — both stop being true. The sample corpus contains zero code fences, which
+is exactly why it went unnoticed, and an internal documentation corpus with
+runbooks in it is the case the brief asks the system to handle.
+
+**17. A byte-order mark defeats title and heading detection.** `﻿# Titled` does
+not match `/^#\s+(.+?)\s*$/m`, so `titleOf` falls through to the humanised filename
+— verified, `bom.md` was titled "Bom" rather than "Titled" — and `HEADING_RE` misses
+the same line, so the document becomes one level-0 section and
+`buildEmbeddingText` prefixes a filename-derived title instead of the real one. A
+BOM is what Windows tooling and Confluence exports produce. One `.replace(/^﻿/, '')`
+in `readDocument` closes it.
+
+**18. Response contracts are declared and never enforced.** `searchResponseSchema`,
+`answerResponseSchema` and `sessionResponseSchema` exist in `@sorrel/shared` and no
+route parses against them. Verified by mutation: renaming `results` to `resultz` in
+the `/api/search` response passes `npm run typecheck` clean, because `c.json()`
+accepts any object. The inbound direction is strict — every database row goes
+through `documentSchema.parse` — so the enforcement is one-directional, and it is
+the direction the browser does _not_ depend on. `getDashboardStats` is the
+exception and does parse its output. "Shared types across the frontend/backend
+boundary" is a graded criterion, and right now the shared types describe the
+boundary rather than holding it.
+
+**19. `npm run ask -- "question" --limit=abc` answers "No documents cover this."**
+`Number(values.limit)` yields `NaN`, `slice(0, NaN)` yields zero passages, and
+`answerQuestion` abstains. Verified. A malformed CLI flag produces a confident false
+statement about the corpus, which is the single behaviour the working agreement
+names as the product's most important. The HTTP path is safe — `searchRequestSchema`
+coerces and bounds `limit`, and `answerRequestSchema` has no `limit` at all — so
+this is CLI-only, and the fix is the argument check the eval CLI already does for
+`--k`.
+
+**20. Two concurrent ingestion runs each claim to have indexed everything.** Both
+read the pre-run snapshot before either writes, so `isUpdate` is false in both and
+five documents are reported as ten indexed. Verified: two overlapping runs, both
+`succeeded idx=5 upd=0`. The data is fine — chunks, vectors and FTS rows all end at
+5, confirming the first audit's finding that the synchronous write phases cannot
+interleave mid-transaction — but the run log, whose entire job is observability,
+is wrong. The admin dashboard's "Trigger ingestion" button has no guard against a
+double click.
+
+**21. An embedder returning too few vectors fails with an unactionable message.**
+`slice[i]!` in the pipeline's write phase asserts away a value that can be
+`undefined`; the document is then recorded as failed with `Cannot read properties of
+undefined (reading 'length')`. Unreachable through the real client, which validates
+batch counts and re-sorts by the response's explicit index — but the error is
+recorded on the document and shown in the dashboard, and "actionable message" is a
+stated rule.
+
+**22. Two internal retrieval knobs are unvalidated and fail badly.**
+`hybridSearch({ candidates: -5 })` throws sqlite-vec's raw message, which would
+surface as a 500. `rrfK: -1` makes SQLite divide by zero at rank 1, which returns
+NULL, which `COALESCE` turns into a score of 0 — so the best hit sorts last and the
+ranking silently inverts. Neither is reachable from the API; both are exposed on the
+options object the eval sweeps. A robustness note rather than a live bug, recorded
+because a sweep that quietly produces garbage at one end of its range is how a
+tuning constant gets chosen wrong.
+
+### Redundancy, still open
+
+The four items the first audit listed under "Redundancy and coupling" were recorded
+and not acted on. All four are still present, and one now blocks the next step:
+
+- **`search_queries_user_idx2` still duplicates `search_queries_user_idx`.**
+  Confirmed against the live database — both indexes exist on `(user_id)`.
+- **`errors.ts` still classifies a configuration error by `/API key/i`** on the
+  message text.
+- **`EVAL_QUESTIONS`, `ANSWERABLE` and `UNANSWERABLE` are still exported from the
+  `@sorrel/core` barrel**, so the API ships the evaluation set.
+- **Importing `@sorrel/core` still requires `BETTER_AUTH_SECRET` and opens the
+  database.** Verified: `import('@sorrel/core')` with the secret unset throws
+  `BETTER_AUTH_SECRET is not set to a real value` before any export is reachable.
+  Step 7's MCP server wants `hybridSearch` and nothing else, and cannot have it
+  without inheriting Better Auth and a database handle.
+
+Newly found dead code, all of it small:
+
+- **`paginated()` in `packages/shared/src/common.ts:73` has no callers anywhere** —
+  not in `packages`, not in `apps`, not in tests. A generic helper written for a
+  response shape nothing returns.
+- **`toBindable`, `returnsRows` and `CompiledQuery` are exported from
+  `kysely-dialect.ts:152–153` and imported by nobody.** The first two are used
+  inside the file; `CompiledQuery` is a pass-through re-export of a Kysely type.
+- **`requireUser` and `listDocuments` have no production callers**, only tests.
+  `listDocumentsFiltered` is what the API uses.
+
+### What this pass says
+
+The first audit's conclusion — that the tests are strong and test the corpus the
+system has — holds, and this pass is more evidence for it than against. Six of the
+nine new defects (14, 15, 16, 17, 21, 22) cannot occur on the sample corpus:
+nothing in it has a long directory name, a symlink, a code fence, a BOM, or a
+short embedder. Defect 14 is the one worth sitting with, because it is not a gap in
+coverage but a gap in _shape_: a schema used on one side of an I/O boundary and not
+the other converts a survivable bad input into an unrecoverable state, and the
+tests cannot find it because they only ever write inputs the schema would accept.
+Defects 18 and 19 are the same asymmetry in two other places — a contract that
+validates one direction, and a limit that is bounded on the HTTP path and unbounded
+on the CLI path beside it.
+
+### Fixes for defects 14–22
+
+All nine are fixed, along with the four redundancy items and the dead code. Twelve
+tests added, 143 pass, and the new tests were run against the pre-fix source
+first: eight fail there and pass here. The retrieval numbers are unchanged —
+hybrid 100% recall@1, MRR 1.000, 12/12 answer checks — and the sample corpus still
+produces 142 documents and 142 chunks with the longest at 1029 characters, checked
+chunk-content-by-chunk-content against the already-indexed database rather than by
+counting. A fresh-machine bootstrap into an empty database — migrate, seed, ingest
+— indexes all 142 in 1.5 seconds with no failures. Every path these changes touch
+is one this corpus never takes.
+
+**14. The category is clamped where it is produced.** `CATEGORY_MAX_CHARS` moved
+into `@sorrel/shared`, the schema is built from it, and `categoryOf` truncates to
+it — so the one place a category is derived cannot emit a value the read side
+rejects. The test asserts the output against `documentCategorySchema` rather than
+against the number 64, so the bound and the clamp cannot drift apart. Truncation
+rather than rejection because a category is a facet label and not an identity;
+identity is `source_path`, which is untouched.
+
+**15. `scanCorpus` no longer follows symlinks.** The recursive `readdirSync` is
+replaced by an explicit walk, because `{ recursive: true }` follows symlinks with
+no way to opt out. Skipped links are reported in `ignored` — labelled
+`(symlink)` — for the same reason the ignore list is reported at all. Two tests:
+one for the link that escapes the corpus root, one for the loop that returned the
+same file sixteen times.
+
+**16. The chunker tracks code fences.** A `FENCE_RE` toggle in
+`splitIntoSections`, matching CommonMark closely enough to be right rather than
+merely short: the closing delimiter must be the same character and at least as
+long as the opening one, so a ` ` ```` block may contain a ``` line as
+content. Three tests, including one asserting the chunk is byte-for-byte the
+source. Writing the first of these caught me out — I set `targetChars: 80` on an
+87-character document, so it split at the ordinary merge boundary and the test
+failed against the _fixed_ code. The assertion was measuring the wrong thing;
+the split I was seeing was correct behaviour.
+
+**17. The BOM is stripped at the decode**, in `readDocument`, and only from the
+text. The content hash is still taken over the raw bytes, so adding or removing a
+BOM is still a change to the file — asserted, because stripping before hashing
+would have been the easy version of this fix and a quiet idempotency bug.
+
+**18. Responses are parsed against the shared schemas on the way out.**
+`/api/search`, `/api/answer`, `/api/session` and the admin document list now
+`.parse()` their payloads. The list route uses `paginated(documentSchema)`, which
+is what turned that orphaned helper from dead code into the thing it was written
+for. Type-checking still cannot catch a renamed field — Zod does not help `tsc` —
+but the rename that used to pass everything now fails two tests at runtime, which
+is the demonstration that matters. Parsing also strips undeclared fields, so a
+response cannot quietly grow one; there is a test for that too.
+
+**19. `--limit` is validated in the ask CLI**, the way `--k` already was in the
+eval CLI. `--limit=abc` now exits 1 with `--limit must be an integer between 1 and
+20`, instead of answering "No documents cover this."
+
+**20. A second concurrent ingestion is refused.** A module-scoped flag, and an
+`IngestionInProgressError` that `errors.ts` maps to 409. That meant adding
+`conflict` to the shared error-code enum — the alternative was reusing
+`rate_limited`, which would have been two fewer lines and the wrong word for what
+happened. The test asserts the refused run opens no `ingestion_runs` row it never
+fills, and that the guard releases afterwards.
+
+**21. The embedder count is checked and named.** `Embedder returned 0 vectors for
+1 passages` rather than `Cannot read properties of undefined (reading 'length')`.
+The existing failure-visibility test now also asserts the message is not the
+property-access one, so the improvement is pinned rather than merely made.
+
+**22. `candidates` and `rrfK` are validated** at the top of `hybridSearch`, with
+the divide-by-zero consequence spelled out in the comment.
+
+**The four redundancy items.** Migration 005 drops `search_queries_user_idx2`, and
+the schema test now checks for duplicate indexes as a rule rather than by name, so
+the next one is caught too. `ConfigurationError` replaces the `/API key/i` regex in
+`errors.ts`, which put a message and its matcher in two different files and would
+have forwarded any internal error mentioning an API key. The evaluation set is no
+longer re-exported from the `@sorrel/core` barrel. And `auth` became `getAuth()`,
+built on first use — `import('@sorrel/core')` no longer throws
+`BETTER_AUTH_SECRET is not set to a real value` before any export is reachable,
+which is what step 7's MCP server needed. The lazy version had to be written as a
+factory with an inferred return type: annotating it `ReturnType<typeof betterAuth>`
+widens the options generic back to `BetterAuthOptions` and loses `$context`, which
+the seed script uses for password hashing.
+
+**Dead code.** `paginated()` is now used rather than deleted. `toBindable`,
+`returnsRows` and `CompiledQuery` are no longer exported from the Kysely dialect —
+the first two are used inside the file, and the third was a pass-through re-export
+of a library type. `requireUser` is gone: every protected route declares a
+permission, so a "signed in, role irrelevant" check had no caller outside its own
+test, and the branch it covered is exercised through `requirePermission`.
+`signInRequestSchema` is gone too, found in the pre-commit sweep rather than the
+audit: Better Auth owns the sign-in endpoint and validates its own body, so that
+schema had no validator to be and no consumer in either workspace.
+
+`listDocuments` is the one flagged item deliberately kept. It has no production
+caller — `listDocumentsFiltered` is what the API uses — but five tests read "every
+document", and replacing it means `{ limit: 1000, offset: 0 }` at each of them.
+Deleting four lines to add ten is not a saving, so it stays, recorded as a choice
+rather than left looking like an oversight.
+
+### A regression the fix for 15 introduced
+
+Worth its own heading because it is the kind of thing a fix pass produces and a
+fix pass is least likely to look for.
+
+Rewriting the walk so it stops following symlinks also stopped it descending into
+excluded directories — correct for indexing, and it made their contents vanish
+from the `ignored` list rather than merely from the index. `node_modules` went from
+"every vendored `README.md` listed" to nothing at all. That is precisely the
+property the list exists to provide, and defect 5 in the first audit was that
+property being missing.
+
+Caught by re-running the probe script from the audit rather than trusting the new
+tests, which passed: they asserted what the fix was _for_ and nothing about what it
+might have cost. The walk now names an excluded directory once, with a trailing
+slash — `node_modules/`, `.obsidian/` — which is visible without being thousands of
+lines, and the case is pinned by a test asserting one entry each for two excluded
+directories holding six files between them. The same sweep found symlinked
+non-markdown files being announced when the ordinary files beside them are skipped
+in silence; those are quiet again.
+
+### What the second pass cost, and whether it was worth it
+
+Six of the nine defects cannot occur on the sample corpus, and the seventh (18) is
+invisible until a client exists to be broken by it. So the honest summary is that
+this pass bought almost nothing for the demo and a good deal for the claim that
+the system works on a corpus it has not seen — which is the claim the brief
+actually makes. The two that would have shown up in a demo are 19, where a typo in
+a CLI flag produces a confident falsehood about the corpus, and 20, where a
+double-clicked button doubles the embedding bill.
+
+Defect 14 is the one I would keep if I could keep only one, and not for its blast
+radius. It is a schema applied to one side of an I/O boundary and not the other,
+and the tests could not have found it because they only ever write inputs the
+schema would accept. Defects 18 and 19 turn out to be the same shape — a contract
+enforced inbound and not outbound, a limit bounded on the HTTP path and unbounded
+on the CLI path beside it. Three instances of one mistake, found by looking for
+asymmetries rather than by looking for bugs.

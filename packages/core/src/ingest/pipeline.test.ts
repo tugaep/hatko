@@ -325,7 +325,16 @@ test('a failure on a document new this run is still visible afterwards', async (
   );
   for (const doc of failed) {
     assert.ok(doc.error, `${doc.sourcePath} is marked failed but carries no reason`);
+    assert.doesNotMatch(
+      doc.error!,
+      /Cannot read properties of undefined/,
+      'the reason names the mismatch, not the property access that tripped over it',
+    );
   }
+  assert.match(
+    failed.find((d) => d.sourcePath === 'b.md')?.error ?? '',
+    /Embedder returned 0 vectors for 1 passages/,
+  );
 
   // The empty file is the case that already worked; b.md is the one that did not.
   const paths = failed.map((d) => d.sourcePath);
@@ -354,4 +363,42 @@ test('an embedding failure marks the run failed rather than leaving it running',
   assert.equal(latest?.status, 'failed');
   assert.match(latest?.error ?? '', /provider unavailable/);
   assert.ok(latest?.finishedAt, 'a failed run is still closed out');
+});
+
+/**
+ * Two overlapping runs left the three stores consistent — the write phases are
+ * synchronous — but both read the pre-run snapshot before either wrote, so both
+ * saw every document as new and five documents were reported as ten indexed. The
+ * run log is the whole of "ingestion is observable", and it was the part that lied.
+ */
+test('a second run started while one is in flight is refused, not run alongside it', async () => {
+  using ctx = tempDb();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sorrel-concurrent-'));
+  for (let i = 0; i < 3; i++) {
+    fs.writeFileSync(path.join(dir, `d${i}.md`), `# D${i}\n\nContent number ${i}.\n`);
+  }
+
+  const slow: Embedder = async (texts) => {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return stubEmbedder(texts);
+  };
+
+  const [first, second] = await Promise.allSettled([
+    ingest(ctx.db, { trigger: 'cli', corpusPath: dir, embedder: slow }),
+    ingest(ctx.db, { trigger: 'api', corpusPath: dir, embedder: slow }),
+  ]);
+
+  assert.equal(first.status, 'fulfilled');
+  assert.equal(second.status, 'rejected');
+  assert.match((second as PromiseRejectedResult).reason.message, /already in progress/);
+
+  const runs = listIngestionRuns(ctx.db);
+  assert.equal(runs.length, 1, 'the refused run does not open a row it never fills');
+  assert.equal(runs[0]?.docsIndexed, 3, 'three documents are reported as three, not six');
+
+  // And a run started afterwards still works — the guard releases.
+  const after = await ingest(ctx.db, { trigger: 'cli', corpusPath: dir, embedder: stubEmbedder });
+  assert.equal(after.docsSkipped, 3);
+
+  fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -32,6 +32,23 @@ export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
  */
 export type SecretSource = 'database' | 'environment' | 'unset' | 'unreadable';
 
+/**
+ * Raised when the system is missing or cannot read a credential it needs.
+ *
+ * A type rather than a message the API pattern-matches. `errors.ts` classified
+ * this by testing `/API key/i` against an arbitrary Error's text, which is both
+ * fragile — the message and its matcher are edited in different files — and too
+ * broad, since any internal failure mentioning an API key would have been
+ * reported to the client as its own bad request. The messages are written to be
+ * actionable and are safe to forward; the type is what says so.
+ */
+export class ConfigurationError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ConfigurationError';
+  }
+}
+
 export interface SecretStatus {
   /** Whether a *usable* secret is available. False when one is stored but unreadable. */
   configured: boolean;
@@ -198,10 +215,11 @@ export function resolveApiKey(
     // A stored key that will not decrypt means BETTER_AUTH_SECRET changed. Falling
     // through to the environment silently would be worse than saying so: the
     // operator would see "key not configured" while the admin screen shows one set.
-    throw new Error(
+    throw new ConfigurationError(
       `The stored API key could not be decrypted (${(error as Error).message}). ` +
         'This usually means BETTER_AUTH_SECRET changed after the key was saved. ' +
         'Re-enter the key in the admin settings, or restore the previous secret.',
+      { cause: error },
     );
   }
   return envFallback;
@@ -214,7 +232,7 @@ export function requireApiKey(
 ): string {
   const key = resolveApiKey(db, envFallback);
   if (!key) {
-    throw new Error(
+    throw new ConfigurationError(
       'No OpenAI API key is configured. Either set it in the admin settings page, ' +
         'or set OPENAI_API_KEY in .env (copy .env.example to .env).',
     );

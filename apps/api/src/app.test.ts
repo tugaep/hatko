@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { searchResponseSchema, sessionResponseSchema } from '@sorrel/shared';
 
 /**
  * The API surface, exercised through `app.request()`.
@@ -36,10 +37,8 @@ fs.writeFileSync(
     'current guidance.\n',
 );
 
-const { getDb, closeDb, ingest, config } = await import('@sorrel/core');
-const { auth } = await import('@sorrel/core');
-const { upsertAccount } = await import('@sorrel/core');
-const { resolveApiKey } = await import('@sorrel/core');
+const { getDb, closeDb, ingest, config, getAuth, upsertAccount, resolveApiKey } =
+  await import('@sorrel/core');
 const { createApp } = await import('./app.ts');
 
 const db = getDb();
@@ -71,7 +70,7 @@ await upsertAccount(db, {
 const app = createApp();
 
 async function cookieFor(email: string, password: string): Promise<string> {
-  const response = await auth.api.signInEmail({ body: { email, password }, asResponse: true });
+  const response = await getAuth().api.signInEmail({ body: { email, password }, asResponse: true });
   assert.equal(response.status, 200, `sign-in failed for ${email}`);
   return response.headers.getSetCookie().join('; ');
 }
@@ -435,4 +434,40 @@ test('ingestion can be triggered by an admin and returns real counts', async () 
   assert.equal(payload.run.status, 'succeeded');
   assert.equal(payload.run.trigger, 'api', 'the run is attributed to the API, not the CLI');
   assert.equal(payload.run.docsSkipped, 2, 'unchanged documents are skipped');
+});
+
+/**
+ * Responses are parsed against the shared schemas on the way out.
+ *
+ * They were not before: `c.json()` accepts any object, so renaming `results` to
+ * `resultz` type-checked clean and would have shipped. Rows were already validated
+ * coming *out* of the database, which left the contract enforced only in the
+ * direction the browser does not consume. Asserting through the schema rather than
+ * by naming fields, so this test and the client agree by construction.
+ */
+withProvider('search and session responses match the shared contract exactly', async () => {
+  const search = await call('/api/search', {
+    method: 'POST',
+    cookie: userCookie,
+    body: { query: 'why are sound assets built separately' },
+  });
+  assert.equal(search.status, 200);
+  const searchBody = await search.json();
+  assert.doesNotThrow(() => searchResponseSchema.parse(searchBody));
+
+  const session = await call('/api/session', { cookie: userCookie });
+  const sessionBody = await session.json();
+  assert.doesNotThrow(() => sessionResponseSchema.parse(sessionBody));
+});
+
+test('a response cannot carry a field the contract does not declare', async () => {
+  const response = await call('/api/admin/documents?limit=1', { cookie: adminCookie });
+  const body = (await response.json()) as Record<string, unknown>;
+
+  // Zod strips unknown keys, so parsing on the way out also bounds what leaves.
+  assert.deepEqual(
+    Object.keys(body).sort(),
+    ['items', 'limit', 'offset', 'total'],
+    'the paged shape is exactly what `paginated(documentSchema)` declares',
+  );
 });

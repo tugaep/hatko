@@ -47,6 +47,22 @@ const DEFAULT_MAX_CHARS = 2000;
 /** ATX headings only. The corpus uses no setext headings. */
 const HEADING_RE = /^(#{1,6})\s+(.*)$/;
 
+/**
+ * A fenced code block delimiter: three or more backticks or tildes, indented by
+ * up to three spaces, per CommonMark.
+ *
+ * Tracked because `#` starts a comment in most of the languages a runbook embeds,
+ * and a line-by-line heading scan cannot tell `# install dependencies` inside a
+ * shell block from a document heading. Measured on a runbook with one ```sh
+ * block: the fence was cut in half across two chunks, the first left with an
+ * unclosed delimiter; the enclosing `## Setup` heading was lost, because the
+ * comment registered as level 1 and a group reaching the document top is labelled
+ * null; and rejoining the pieces with a blank line turned 150 source bytes into
+ * 152, so the chunk stopped being the verbatim slice this module promises. The
+ * sample corpus contains no code fences, which is exactly why none of that showed.
+ */
+const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
+
 interface Section {
   heading: string | null;
   /** 1-6 for an ATX heading; 0 for content preceding the first heading. */
@@ -68,8 +84,19 @@ function splitIntoSections(body: string): Section[] {
     buffer = [];
   };
 
+  /** The delimiter that opened the current fence, or null outside one. */
+  let fence: string | null = null;
+
   for (const line of lines) {
-    const match = HEADING_RE.exec(line);
+    const delimiter = FENCE_RE.exec(line)?.[1];
+    if (delimiter) {
+      // A fence closes only on the same character, at least as long as the one
+      // that opened it — so a ```` block may contain a ``` line as content.
+      if (fence === null) fence = delimiter;
+      else if (delimiter[0] === fence[0] && delimiter.length >= fence.length) fence = null;
+    }
+
+    const match = fence === null ? HEADING_RE.exec(line) : null;
     if (match) {
       flush();
       // The level-1 heading is normally the document title. It is kept in the

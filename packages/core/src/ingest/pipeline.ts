@@ -68,7 +68,40 @@ interface PlannedDocument {
   isUpdate: boolean;
 }
 
+/** Raised when a second run is started while one is still going. */
+export class IngestionInProgressError extends Error {
+  constructor() {
+    super('An ingestion run is already in progress. Wait for it to finish.');
+    this.name = 'IngestionInProgressError';
+  }
+}
+
+/**
+ * Whether a run is currently between its scan and its final write.
+ *
+ * Two overlapping runs left the stores consistent — the write phases are
+ * synchronous, so they cannot interleave mid-transaction — but both read the
+ * pre-run snapshot before either wrote, so both saw every document as new and
+ * five documents were reported as ten indexed. The run log is the whole of
+ * "ingestion is observable", and it was the part that lied. It also means a
+ * double-clicked dashboard button pays for every embedding twice.
+ *
+ * Module scope rather than per-database: this process holds one connection, and
+ * that is the thing being contended for.
+ */
+let running = false;
+
 export async function ingest(db: Db, options: IngestOptions): Promise<IngestionRun> {
+  if (running) throw new IngestionInProgressError();
+  running = true;
+  try {
+    return await runIngest(db, options);
+  } finally {
+    running = false;
+  }
+}
+
+async function runIngest(db: Db, options: IngestOptions): Promise<IngestionRun> {
   const {
     trigger,
     force = false,
@@ -213,14 +246,25 @@ export async function ingest(db: Db, options: IngestOptions): Promise<IngestionR
       const slice = embeddings.slice(cursor, cursor + doc.chunks.length);
       cursor += doc.chunks.length;
 
-      const inserts: ChunkInsert[] = doc.chunks.map((chunk, i) => ({
-        heading: chunk.heading,
-        content: chunk.content,
-        tokenCount: estimateTokens(chunk.content),
-        embedding: slice[i]!,
-      }));
-
       try {
+        // Named rather than asserted with `slice[i]!`. An embedder returning fewer
+        // vectors than texts recorded "Cannot read properties of undefined
+        // (reading 'length')" against the document, which tells an operator
+        // reading the dashboard nothing about what to do. The real client already
+        // checks its own batch counts, so this guards the injected-embedder seam.
+        if (slice.length !== doc.chunks.length) {
+          throw new Error(
+            `Embedder returned ${slice.length} vectors for ${doc.chunks.length} passages.`,
+          );
+        }
+
+        const inserts: ChunkInsert[] = doc.chunks.map((chunk, i) => ({
+          heading: chunk.heading,
+          content: chunk.content,
+          tokenCount: estimateTokens(chunk.content),
+          embedding: slice[i]!,
+        }));
+
         transaction(db, () => {
           const documentId = upsertDocument(db, doc.source);
           replaceChunks(db, documentId, inserts);

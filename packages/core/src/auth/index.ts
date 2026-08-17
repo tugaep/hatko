@@ -13,56 +13,83 @@ import { nodeSqliteDialect } from '../db/kysely-dialect.ts';
  * the session on the server.
  */
 
-export const auth = betterAuth({
-  database: { dialect: nodeSqliteDialect(getDb()), type: 'sqlite' },
-  // Validated by the same gate that guards the settings encryption key, so the
-  // `.env.example` placeholder cannot sign sessions. See config.ts.
-  secret: requireAppSecret(),
-  baseURL: config.apiUrl,
-  // The browser app runs on a different origin from the API, so it must be named
-  // explicitly; Better Auth rejects requests from origins not listed here.
-  trustedOrigins: [config.webUrl],
+/**
+ * Written as a factory whose return type is inferred rather than annotated.
+ * Annotating it `ReturnType<typeof betterAuth>` widens the options generic back to
+ * `BetterAuthOptions` and loses `$context`, which `accounts.ts` needs for password
+ * hashing.
+ */
+function buildAuth() {
+  return betterAuth({
+    database: { dialect: nodeSqliteDialect(getDb()), type: 'sqlite' },
+    // Validated by the same gate that guards the settings encryption key, so the
+    // `.env.example` placeholder cannot sign sessions. See config.ts.
+    secret: requireAppSecret(),
+    baseURL: config.apiUrl,
+    // The browser app runs on a different origin from the API, so it must be named
+    // explicitly; Better Auth rejects requests from origins not listed here.
+    trustedOrigins: [config.webUrl],
 
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 8,
-    // No verification mail in a local demo, and pretending otherwise would leave
-    // seeded accounts unable to sign in.
-    requireEmailVerification: false,
-  },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 8,
+      // No verification mail in a local demo, and pretending otherwise would leave
+      // seeded accounts unable to sign in.
+      requireEmailVerification: false,
+    },
 
-  user: {
-    additionalFields: {
-      role: {
-        type: 'string',
-        defaultValue: 'user',
-        /**
-         * The security-critical line in this file. `input: false` means the role
-         * is never read from request data, so a crafted sign-up or profile update
-         * carrying `"role":"admin"` cannot grant it. Roles change only through a
-         * deliberate server-side write — the seed script.
-         */
-        input: false,
+    user: {
+      additionalFields: {
+        role: {
+          type: 'string',
+          defaultValue: 'user',
+          /**
+           * The security-critical line in this file. `input: false` means the role
+           * is never read from request data, so a crafted sign-up or profile update
+           * carrying `"role":"admin"` cannot grant it. Roles change only through a
+           * deliberate server-side write — the seed script.
+           */
+          input: false,
+        },
       },
     },
-  },
 
-  session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
-  },
-
-  advanced: {
-    // Cookies are readable only by the server and are not sent on cross-site
-    // navigations, which is the baseline defence against session theft via XSS
-    // and against CSRF on state-changing routes.
-    defaultCookieAttributes: {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.isProduction,
+    session: {
+      expiresIn: 60 * 60 * 24 * 7,
+      updateAge: 60 * 60 * 24,
     },
-  },
-});
+
+    advanced: {
+      // Cookies are readable only by the server and are not sent on cross-site
+      // navigations, which is the baseline defence against session theft via XSS
+      // and against CSRF on state-changing routes.
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: config.isProduction,
+      },
+    },
+  });
+}
+
+let instance: ReturnType<typeof buildAuth> | undefined;
+
+/**
+ * The Better Auth instance, built on first use.
+ *
+ * Lazy because this module is re-exported from the `@sorrel/core` barrel, and at
+ * module scope the construction above both opens the database and calls
+ * `requireAppSecret()`. That made `import('@sorrel/core')` throw
+ * "BETTER_AUTH_SECRET is not set to a real value" before any export was
+ * reachable — so a consumer wanting only `hybridSearch` inherited a database
+ * handle and a mandatory session secret. Step 7's MCP server is exactly that
+ * consumer. Nothing else changes: the first call that needs auth still fails the
+ * same way, with the same message.
+ */
+export function getAuth(): ReturnType<typeof buildAuth> {
+  instance ??= buildAuth();
+  return instance;
+}
 
 /** Better Auth's user record, before it is narrowed to the shared contract. */
 interface RawUser {
@@ -99,7 +126,7 @@ function toSessionUser(raw: RawUser): SessionUser {
  * role — the only input is an opaque signed token.
  */
 export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
-  const session = await auth.api.getSession({ headers });
+  const session = await getAuth().api.getSession({ headers });
   if (!session?.user) return null;
   return toSessionUser(session.user as RawUser);
 }
@@ -138,13 +165,6 @@ export async function requirePermission(
   if (!can(user.role, permission)) {
     throw new AuthorizationError(403, 'Your account does not have access to this.');
   }
-  return user;
-}
-
-/** Require a session without demanding a particular permission. */
-export async function requireUser(headers: Headers): Promise<SessionUser> {
-  const user = await getSessionUser(headers);
-  if (!user) throw new AuthorizationError(401, 'Sign in to continue.');
   return user;
 }
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { CATEGORY_UNCATEGORISED } from '@sorrel/shared';
+import { CATEGORY_MAX_CHARS, CATEGORY_UNCATEGORISED } from '@sorrel/shared';
 
 /** A source file read from disk, before chunking or embedding. */
 export interface SourceDocument {
@@ -66,6 +66,21 @@ function isIgnored(relativePath: string, ignore: readonly string[]): boolean {
  * what it skipped. Silence is what made the `CLAUDE.md` case a defect: an
  * exclusion nobody can see is indistinguishable from a document that failed to
  * index.
+ *
+ * Symlinks are not followed, and this is the reason the walk is written out
+ * rather than left to `readdirSync({ recursive: true })`, which follows them with
+ * no way to opt out. Two measured consequences of following them: a directory
+ * symlink pointing outside the corpus pulled the files behind it into the index —
+ * the same "foreign file in the corpus" defect the exclusion list above exists to
+ * prevent, reached by a route the exclusion list cannot see — and a
+ * self-referential symlink yielded the same document sixteen times under sixteen
+ * paths, which is sixteen embeddings bought and sixteen interchangeable results
+ * returned. A symlink inside a documentation tree is aliasing or tooling; the
+ * document it points at is either already in the corpus or deliberately outside it.
+ *
+ * An excluded directory is reported once, by name, rather than descended into to
+ * enumerate what it holds. That keeps the exclusion visible — the whole point of
+ * returning this list — without `node_modules` producing thousands of lines of it.
  */
 export function scanCorpus(
   corpusRoot: string,
@@ -78,17 +93,46 @@ export function scanCorpus(
     );
   }
 
-  const all = fs
-    .readdirSync(corpusRoot, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && MARKDOWN_EXTENSIONS.has(path.extname(entry.name)))
-    .map((entry) => path.relative(corpusRoot, path.join(entry.parentPath, entry.name)))
-    .map((rel) => rel.split(path.sep).join('/'))
-    .sort();
+  const found: string[] = [];
+  const skipped: string[] = [];
 
-  return {
-    files: all.filter((rel) => !isIgnored(rel, ignore)),
-    ignored: all.filter((rel) => isIgnored(rel, ignore)),
+  const walk = (directory: string) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      const rel = path.relative(corpusRoot, absolute).split(path.sep).join('/');
+
+      const extension = path.extname(entry.name);
+      const couldBeContent = MARKDOWN_EXTENSIONS.has(extension) || extension === '';
+
+      // Reported rather than dropped quietly, for the same reason the ignore list
+      // is reported: a path that exists on disk and not in the index has to be
+      // explainable without reading this function. Only when it could have been
+      // content, though — a link with a non-markdown extension is skipped as
+      // silently as the ordinary file of that kind beside it. An extensionless
+      // name is assumed to be a directory link, since following it is exactly the
+      // case worth announcing.
+      if (entry.isSymbolicLink()) {
+        if (couldBeContent) skipped.push(`${rel} (symlink)`);
+        continue;
+      }
+      if (entry.isDirectory()) {
+        // Named once rather than descended into. Listing every markdown file under
+        // an excluded tree is how `node_modules` turns this list into thousands of
+        // lines; saying nothing is how the exclusion becomes indistinguishable from
+        // a document that failed to index. The directory itself is the useful unit.
+        if (isIgnored(rel, ignore)) skipped.push(`${rel}/`);
+        else walk(absolute);
+        continue;
+      }
+      if (!entry.isFile() || !MARKDOWN_EXTENSIONS.has(extension)) continue;
+
+      (isIgnored(rel, ignore) ? skipped : found).push(rel);
+    }
   };
+
+  walk(corpusRoot);
+
+  return { files: found.sort(), ignored: skipped.sort() };
 }
 
 /**
@@ -97,10 +141,21 @@ export function scanCorpus(
  *
  * Derived rather than enumerated so that a corpus organised differently from the
  * sample still ingests.
+ *
+ * Truncated to the width `documentCategorySchema` accepts, because this is the
+ * only place a category is produced and the write path is raw SQL that does not
+ * apply the schema. Without the clamp a directory name of 65 characters ingested
+ * "successfully" and then made the row unreadable: every path that parses a
+ * document — the admin list, the dashboard, the next ingest's diff, and
+ * `hybridSearch`, which parses through `searchResultSchema` — threw a ZodError
+ * from then on, with no way back short of editing the database by hand. A
+ * category is a facet label, not an identity, so trimming a pathological one is
+ * a fair trade for a row that can always be read back.
  */
 export function categoryOf(sourcePath: string): string {
   const [first, ...rest] = sourcePath.split('/');
-  return rest.length > 0 && first ? first : CATEGORY_UNCATEGORISED;
+  const category = rest.length > 0 && first ? first : CATEGORY_UNCATEGORISED;
+  return category.slice(0, CATEGORY_MAX_CHARS);
 }
 
 /** First level-1 heading, falling back to a title derived from the filename. */
@@ -162,7 +217,13 @@ export function detectDeprecation(
 export function readDocument(corpusRoot: string, sourcePath: string): SourceDocument {
   const absolute = path.join(corpusRoot, sourcePath);
   const raw = fs.readFileSync(absolute);
-  const body = raw.toString('utf8');
+  // A byte-order mark sits before the first `#`, so `/^#\s+/m` does not match it
+  // and the document loses both its title — falling back to a humanised filename —
+  // and its level-1 heading, which then also costs the chunker its section
+  // labelling. It is what Windows tooling and Confluence exports emit. Stripped
+  // from the text only: the content hash is taken over the raw bytes below, so
+  // adding or removing a BOM still counts as a change to the file.
+  const body = raw.toString('utf8').replace(/^﻿/, '');
   const title = titleOf(sourcePath, body);
   const { isDeprecated, supersededBy } = detectDeprecation(title, body);
 

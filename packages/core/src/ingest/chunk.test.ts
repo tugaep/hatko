@@ -182,6 +182,86 @@ test('empty input produces no chunks rather than one empty chunk', () => {
   assert.deepEqual(chunkMarkdown('   \n\n  \n'), []);
 });
 
+/**
+ * `#` opens a comment in most of the languages a runbook embeds, so a line-by-line
+ * heading scan reads a shell comment as a document heading. This asserts all three
+ * things that went wrong: the block stayed whole, its section kept its own heading,
+ * and the content is still the verbatim source. No document in the sample corpus
+ * contains a code fence, so nothing here was covered before.
+ */
+test('a `#` comment inside a code fence is content, not a heading', () => {
+  const source = [
+    '# Deploy Runbook',
+    '',
+    '## Setup',
+    '',
+    'Run the installer.',
+    '',
+    '```sh',
+    '# install dependencies',
+    'npm ci',
+    '```',
+  ].join('\n');
+
+  // Comfortably above the 87-character source, so any split here is the fence
+  // being cut rather than the ordinary merge-to-target boundary.
+  const chunks = chunkMarkdown(source, { targetChars: 400, maxChars: 400 });
+
+  assert.equal(chunks.length, 1, 'the fence is not cut in half');
+  assert.equal(chunks[0]!.content, source, 'the passage is the verbatim source, byte for byte');
+});
+
+/**
+ * The section boundary is still allowed to fall between the heading and the block
+ * it introduces — what must not happen is the fence itself being split, or the
+ * section losing its heading to a comment inside the block.
+ */
+test('a code fence stays whole when its section is split off', () => {
+  const source = [
+    '# Deploy Runbook',
+    '',
+    '## Setup',
+    '',
+    'Run the installer.',
+    '',
+    '```sh',
+    '# install dependencies',
+    'npm ci',
+    '```',
+  ].join('\n');
+
+  const chunks = chunkMarkdown(source, { targetChars: 80, maxChars: 200 });
+
+  assert.equal(chunks.at(-1)!.heading, 'Setup', 'the shell comment did not become the heading');
+  assert.ok(chunks.at(-1)!.content.includes('```sh\n# install dependencies\nnpm ci\n```'));
+  assert.equal(
+    chunks.map((chunk) => chunk.content).join('\n\n'),
+    source,
+    'the pieces still reassemble into the source exactly',
+  );
+});
+
+test('a heading after a closed fence is still a heading', () => {
+  const chunks = chunkMarkdown(
+    '# Doc\n\n```sh\n# a comment\n```\n\n## Rollback\n\nRevert the tag.',
+    { targetChars: 20, maxChars: 200 },
+  );
+
+  // Fence tracking must not swallow the rest of the document: the section after
+  // the closing delimiter splits and is labelled exactly as it would be without
+  // the fence above it.
+  assert.equal(chunks.length, 2);
+  assert.equal(chunks[1]!.heading, 'Rollback');
+});
+
+test('a longer fence may contain a shorter delimiter as content', () => {
+  const source = '# Doc\n\n````md\n```\n# inner\n```\n````\n\n## After\n\nTail.';
+  const chunks = chunkMarkdown(source, { targetChars: 20, maxChars: 300 });
+
+  assert.equal(chunks.length, 2, 'the inner ``` closes nothing');
+  assert.equal(chunks[1]!.heading, 'After');
+});
+
 test('embedding text prefixes context a passage would otherwise lose', () => {
   const text = buildEmbeddingText(
     'Network Specs: AppLovin',

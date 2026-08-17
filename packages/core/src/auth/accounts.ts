@@ -1,6 +1,6 @@
 import type { Role } from '@sorrel/shared';
 import type { Db } from '../db/client.ts';
-import { auth } from './index.ts';
+import { getAuth } from './index.ts';
 
 /**
  * Account creation and password reset, used by the seed script.
@@ -45,7 +45,7 @@ export async function upsertAccount(db: Db, account: DemoAccount): Promise<Upser
     db.prepare('UPDATE "user" SET role = ? WHERE id = ?').run(account.role, id);
 
   if (existing) {
-    const ctx = await auth.$context;
+    const ctx = await getAuth().$context;
     // Hash first. updatePassword is the storage step, not the credential step.
     const hashed = await ctx.password.hash(account.password);
     await ctx.internalAdapter.updatePassword(existing.id, hashed);
@@ -53,7 +53,7 @@ export async function upsertAccount(db: Db, account: DemoAccount): Promise<Upser
     return 'updated';
   }
 
-  const created = await auth.api.signUpEmail({
+  const created = await getAuth().api.signUpEmail({
     body: { email: account.email, password: account.password, name: account.name },
   });
   setRole(created.user.id);

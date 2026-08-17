@@ -20,6 +20,21 @@ const { values, positionals } = parseArgs({
 
 const query = positionals.join(' ').trim();
 
+/**
+ * Checked rather than passed through as `Number(...)`.
+ *
+ * `--limit=abc` gave NaN, `slice(0, NaN)` gave zero passages, and the answer path
+ * abstained — so a typo in a flag produced "No documents cover this.", a confident
+ * false statement about the corpus, which is the one behaviour this system must
+ * never get wrong. The HTTP surface was never exposed to it, because
+ * `searchRequestSchema` coerces and bounds the same value.
+ */
+const limit = Number(values.limit);
+if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+  console.error(`--limit must be an integer between 1 and 20, got "${values.limit}"`);
+  process.exit(1);
+}
+
 if (values.help || !query) {
   console.log(`Usage: npm run ask -- "<question>" [options]
 
@@ -40,7 +55,7 @@ try {
     process.exit(1);
   }
 
-  const response = await answerQuestion(db, query, { limit: Number(values.limit) });
+  const response = await answerQuestion(db, query, { limit });
 
   console.log(`\n${response.answer}\n`);
 
