@@ -217,6 +217,29 @@ test('a request under a foreign Host is rejected', async () => {
   assert.equal(response.status, 403);
 });
 
+/**
+ * The order of the two gates, pinned because a document depended on it and got it wrong.
+ *
+ * `docs/deployment.md` §7 told an operator to probe an unconfigured deployment
+ * anonymously and read a 403 as "MCP_ALLOWED_HOSTS is missing the hostname". It cannot
+ * be: the rebinding guard lives in the transport, which is only reached once the bearer
+ * check has passed, so an anonymous request is 401 under any Host whatsoever. The
+ * verification step that existed to catch that misconfiguration was structurally unable
+ * to see it, and the operator would meet the real 403 later, from every client at once.
+ *
+ * The ordering itself is right — refusing an unauthenticated caller before parsing its
+ * body is the correct precedence, and the guard is defence in depth behind it. What was
+ * wrong was the claim made about it, so the claim is what gets a test.
+ */
+test('an anonymous caller under a foreign Host is refused as unauthenticated, not as a bad Host', async () => {
+  const response = await rpc('initialize', INITIALIZE, { host: 'evil.example.com' });
+  assert.equal(
+    response.status,
+    401,
+    'the bearer check runs first, so no probe without a token can reveal the Host config',
+  );
+});
+
 test('every loopback spelling of this host is accepted', async () => {
   // The other half of the check above. If this fails, the security control has
   // become an outage for anyone who wrote the address differently.

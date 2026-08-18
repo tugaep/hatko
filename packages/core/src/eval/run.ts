@@ -5,7 +5,8 @@ import { activeModels, providerConfigured } from '../settings.ts';
 import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
 import { rerank } from '../retrieval/rerank.ts';
 import { answerQuestion, DEFAULT_ANSWER_PASSAGES } from '../answer/generate.ts';
-import { ANSWERABLE, EVAL_QUESTIONS, UNANSWERABLE, type EvalQuestion } from './questions.ts';
+import { ANSWERABLE, EVAL_QUESTIONS, UNANSWERABLE } from './questions.ts';
+import { summarise, type QuestionResult } from './metrics.ts';
 
 /**
  * `npm run eval [-- --arm=hybrid|vector|keyword|all] [--k=5]`
@@ -50,17 +51,6 @@ if (!Number.isInteger(K) || K < 1) {
   process.exit(1);
 }
 
-interface QuestionResult {
-  question: EvalQuestion;
-  /** 1-based rank of the first expected document, or null if absent from the top-k pool. */
-  rank: number | null;
-  topScore: number | null;
-  topDocument: string | null;
-  /** Best rerank grade, 0..1. Null when reranking is off or unavailable. */
-  bestRelevance: number | null;
-  contextHit: boolean;
-}
-
 /**
  * The depth the answer path actually reranks, imported rather than restated.
  *
@@ -99,24 +89,6 @@ async function evaluate(arm: RetrievalArm, withRerank: boolean): Promise<Questio
   }
 
   return results;
-}
-
-function summarise(results: QuestionResult[]) {
-  const answerable = results.filter((r) => r.question.expected.length > 0);
-  const hitsAt = (k: number) =>
-    answerable.filter((r) => r.rank !== null && r.rank <= k).length / answerable.length;
-
-  // Mean reciprocal rank over answerable questions; a miss contributes zero.
-  const mrr =
-    answerable.reduce((sum, r) => sum + (r.rank === null ? 0 : 1 / r.rank), 0) / answerable.length;
-
-  return {
-    recall1: hitsAt(1),
-    recall3: hitsAt(3),
-    recallK: hitsAt(K),
-    mrr,
-    misses: answerable.filter((r) => r.rank === null || r.rank > K),
-  };
 }
 
 const pct = (value: number) => `${(value * 100).toFixed(0)}%`.padStart(4);
@@ -179,7 +151,7 @@ const resultsByArm = new Map<RetrievalArm, QuestionResult[]>();
 for (const arm of arms) {
   const results = await evaluate(arm, values.rerank);
   resultsByArm.set(arm, results);
-  const summary = summarise(results);
+  const summary = summarise(results, K);
   byArm.set(arm, summary);
 
   if (values.detail) {

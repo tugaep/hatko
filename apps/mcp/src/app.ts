@@ -171,7 +171,13 @@ const RPC_INTERNAL = -32603;
  * deployment and turns the protection off rather than adding one hostname.
  */
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
-const allowedHosts = [
+/**
+ * Exported so the startup banner can print it. An operator has no other way to confirm
+ * `MCP_ALLOWED_HOSTS` reached the process: the guard sits behind the bearer check, so an
+ * unauthenticated probe is refused with a 401 whether the hostname is configured or not,
+ * and the misconfiguration only appears later as a 403 for every real client.
+ */
+export const allowedHosts = [
   ...LOOPBACK_HOSTS,
   ...LOOPBACK_HOSTS.map((host) => `${host}:${config.mcpPort}`),
   ...config.mcpAllowedHosts,

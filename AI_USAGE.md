@@ -2401,3 +2401,96 @@ the host guard accepts the proxied hostname, still answers 403 to `evil.example.
 discovery advertises the public origin rather than localhost.
 
 Typecheck clean, 245 tests passing, format:check clean, eval unchanged.
+
+---
+
+## Step 13b — test coverage per implementation step, and a deploy dry run
+
+Asked to put a test behind every implementation step and to verify the system is ready to
+deploy to `hatko.tugrap.dev`. The audit found four steps whose logic had no runnable check
+and one defect, which was in the deployment guide rather than in the code.
+
+**What was already covered, and was left alone.** Steps 1–5, 7, 7b, 7c, 8, 9, 10, 11 and 12
+each had tests that fail if the step's logic breaks — 245 of them. Adding more to those
+would have been volume, not coverage.
+
+**Gap 1 — the eval arithmetic (step 3).** `summarise` lived inside `eval/run.ts`, which is a
+script: importing it runs an evaluation, so the recall@k and MRR functions could not be
+tested. Those numbers are the evidence cited for the RRF constant, the candidate depth and
+the rerank pass — every retrieval decision in the repository was justified by output from
+code with nothing checking it. A metric that is wrong is worse than one that is missing: it
+reads as measurement and never fails. Extracted to `eval/metrics.ts`, unchanged, and the two
+conventions a reader has to trust are now pinned — a miss contributes zero to MRR rather
+than leaving the average (dropping it would turn 1-in-10 recall into a perfect score), and
+unanswerable questions are excluded rather than counted as failures. Re-ran the full eval
+after the extraction to confirm the figures were unaffected: hybrid recall@1 100%,
+MRR 1.000, 12/12 answer checks.
+
+**Gap 2 — the API error boundary (steps 6, 10).** `web/lib/api.ts` turns every non-2xx into
+something a person reads, and had no test. The case that matters is not a validation error;
+it is a 502 from the reverse proxy, which is HTML and not this application's envelope. Both
+paths now assert, including that field-level `details` survive to the form and that a 200
+with an unreadable body is reported as a version mismatch instead of reaching a component as
+`undefined`.
+
+**Gap 3 — the streaming client (step 10).** Streaming moved the failure modes and the
+browser half was untested. A refusal _before_ the stream still has a status and must throw
+like any other call; a failure _after_ the first byte cannot, so the per-event schema check
+is the only thing between a malformed payload and a component rendering `undefined` as an
+answer. Seven cases, `fetch` stubbed rather than a server started. The one worth naming:
+an aborted stream must propagate the abort, because turning it into a network error would
+put "Could not reach the API" on screen every time someone changes their question.
+
+**Gap 4 — the proxy matcher (step 6).** `proxy.ts` fixes the layout redirecting every
+signed-out visitor to `/chat`, but its matcher is a hand-written list, and a page added
+under `app/(app)/` inherits the gate without inheriting the matcher — silently returning to
+the bug. Moved the list to `lib/pathname-header.ts` beside the header name and checked it
+against the directory listing. `proxy.ts` itself is not imported: it pulls `next/server`,
+which does not resolve under plain Node, and the two lines it adds are what `next build`
+already checks. The part that rots is the list.
+
+**Defect — a verification step that could not detect what it claimed to.**
+`docs/deployment.md` §7 told the operator to probe MCP unauthenticated and read a 403 as
+"`MCP_ALLOWED_HOSTS` is missing the hostname". It cannot be. The rebinding guard lives in
+the transport, which is reached only after the bearer check, so an anonymous request is 401
+under every `Host` — including the one that was forgotten. Confirmed live: anonymous +
+`Host: evil.example.com` returns 401, authenticated + the same Host returns 403. So the
+check written to catch that misconfiguration was structurally blind to it, and the operator
+would have met the real 403 later, from every client at once, on a deployment that had just
+passed its own checklist.
+
+The ordering is right — refusing an unauthenticated caller before parsing its body is
+correct precedence — so the claim was the thing to fix, not the code. The guide now says
+plainly that no unauthenticated probe can verify the host list, and points at the startup
+banner instead, which the MCP server now prints (`hosts  localhost, …, hatko.tugrap.dev`).
+That was the missing half: the setting had no observable effect until a client failed. A
+test pins the ordering so the two cannot drift again.
+
+**The deploy dry run**, against a scratch database with the production values from
+`docs/deployment.md` — `NODE_ENV=production`, the `hatko.tugrap.dev` URLs,
+`MCP_ALLOWED_HOSTS=hatko.tugrap.dev`. Everything below was observed, not inferred:
+
+- 9 migrations, seed, ingest 142/142 on an empty database
+- `/health` → `{"status":"ok","indexedChunks":142}`; discovery advertises
+  `https://hatko.tugrap.dev/mcp` as the resource and the public origin as the issuer
+- session cookie issued as `__Secure-better-auth.session_token; HttpOnly; Secure; SameSite=Lax`
+- a regular user gets 403 on all seven admin routes, on ingestion trigger and on creating an
+  admin account, and 200 on search — the role gate holds on the deployed configuration
+- a grounded answer citing `sdk-notes-v3.md` with the v2 deprecation notice attached, and
+  `"No documents cover this."` with `abstained: true, citations: []` on the salary question
+- MCP over a session bearer under the public Host: initialize, `tools/list`, and a
+  `search_corpus` call returning the right passage at judged 1.00
+- rate limiting driven from the environment: `RATE_LIMIT_MAX=2` → two 200s then 429 with
+  `retry-after: 54`, while `/api/session` stayed reachable so a throttled user can still
+  authenticate
+- `NEXT_PUBLIC_API_URL=https://hatko.tugrap.dev npm run build:web` bakes the production
+  origin into the client bundle and leaves no `localhost:4000` in it — the guide calls this
+  load-bearing and it had never been checked
+
+Where AI was wrong: nowhere in this pass produced a wrong fix, but the pass exists because
+of what the previous ones asserted. The deployment guide's §7 was written by reasoning about
+what the host guard does rather than by running it, and it read as authoritative for two
+steps. Running the command it prescribes is what showed it could not fail.
+
+Typecheck clean, 271 tests passing (245 + 26), prettier clean, `next build` clean, eval
+unchanged at hybrid recall@1 100% / MRR 1.000 / 12·12 answer checks.

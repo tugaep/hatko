@@ -216,13 +216,28 @@ curl -s https://hatko.tugrap.dev/health
 curl -s https://hatko.tugrap.dev/.well-known/oauth-protected-resource
 # resource must be https://hatko.tugrap.dev/mcp
 
-# Unauthenticated MCP call: expect 401 with a WWW-Authenticate header, NOT a 403.
-# A 403 here means MCP_ALLOWED_HOSTS is missing the hostname.
+# Unauthenticated MCP call: expect 401 with a WWW-Authenticate header, which is what
+# starts a client's OAuth flow. Anything else — 403, 404, a Caddy error page — means the
+# request is not reaching the MCP process.
 curl -si -X POST https://hatko.tugrap.dev/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | head -1
 ```
+
+**This probe cannot tell you whether `MCP_ALLOWED_HOSTS` is right, and no unauthenticated
+probe can.** The rebinding guard sits behind the bearer check, so a request with no token
+is a 401 under every `Host` — including the one you forgot to configure. Read it from the
+startup banner instead, which prints the list the process actually loaded:
+
+```bash
+journalctl -u hatko-mcp -n 20 | grep hosts
+#   hosts      localhost, 127.0.0.1, [::1], localhost:4100, 127.0.0.1:4100, [::1]:4100, hatko.tugrap.dev
+```
+
+If the public hostname is absent there, every authenticated client will get a 403 — all
+of them, at once, after the deployment looked healthy. Fix `MCP_ALLOWED_HOSTS` and
+restart before connecting anything.
 
 Then in a browser: sign in, ask a question on the chat page, confirm the dashboard loads,
 and confirm a non-admin account is bounced away from `/dashboard`.
