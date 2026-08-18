@@ -18,7 +18,10 @@ import { usePathname } from 'next/navigation';
  */
 
 export const DASHBOARD_TABS = [
-  { href: '/dashboard', label: 'Dashboard' },
+  // 'Analytics', not 'Dashboard'. The nav item above already says Dashboard, and a tab
+  // repeating its parent's name says nothing about what is on it — this one is the only
+  // section that reports rather than configures.
+  { href: '/dashboard', label: 'Analytics' },
   { href: '/dashboard/models', label: 'Model configuration' },
   { href: '/dashboard/documents', label: 'Documents' },
   { href: '/dashboard/ingestion', label: 'Ingestion' },

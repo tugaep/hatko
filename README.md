@@ -95,12 +95,18 @@ encrypted with a key derived from `BETTER_AUTH_SECRET`, the panel names which so
 active, and the database value wins when both are set. Either way it is never returned by
 any route.
 
-The **model** is a dropdown of what your provider actually advertises, not a fixed choice
-— answer model and rerank model separately. `gpt-4o-mini` is marked _measured_, because it
-is the one the reported figures and the abstain threshold were calibrated against;
-changing the rerank model shows a warning saying exactly that. Admins get the same answer
--model dropdown in the chat header, so two models can be compared without leaving the page
-the answers are on. It changes the setting for everyone, and says so.
+The **model** is a choice of three — `gpt-4o-mini`, `gpt-5-nano`, `gpt-3.5-turbo` — with
+answer model and rerank model set separately, intersected with what your account actually
+advertises so a model you cannot use is never offered. Three rather than the ~124 ids
+OpenAI lists, because a dropdown entry is an endorsement and sixty dated snapshots invite a
+choice nobody has a basis for making; anything else stays settable through `.env`.
+
+`gpt-4o-mini` is marked _measured_ — it is the one the reported figures and the abstain
+threshold were calibrated against — and changing the **rerank** model warns you, because
+that is the model abstention depends on. Admins get the same dropdown in the chat header,
+so two models can be compared without leaving the page the answers are on; it changes the
+setting for everyone and says so. The self-hosted option appears there too, disabled with
+its reason when the index was built at a width it cannot serve.
 
 ## Demo credentials
 

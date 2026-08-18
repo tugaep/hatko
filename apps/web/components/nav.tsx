@@ -185,7 +185,9 @@ function Footer({ padForBottomBar }: { padForBottomBar: boolean }) {
   return (
     <footer
       className={cx(
-        'mt-16 border-t border-rule',
+        // lowercase as a transform, not in the strings: the copy stays readable in source
+        // and a proper noun does not get spelled wrong on the way past a reviewer.
+        'mt-16 border-t border-rule bg-bg-sunken lowercase',
         // Clears the fixed bottom bar on phones; the bar is md:hidden, so is this padding.
         padForBottomBar && 'pb-[var(--nav-h)] md:pb-0',
       )}

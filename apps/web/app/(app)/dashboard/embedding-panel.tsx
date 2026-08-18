@@ -172,11 +172,17 @@ function Plot({ map }: { map: EmbeddingMap }) {
 
       <div
         ref={frameRef}
-        // Capped and centred rather than full-bleed. The projection is scaled by the
-        // smaller of the two sides, so on a wide dashboard the extra width is empty
-        // paper either side of the box — it made a corpus that fills its bounds look
-        // like a speck in the middle of a sheet.
-        className="relative mx-auto mt-4 h-[320px] w-full max-w-[640px] border border-rule bg-bg-raised sm:h-[440px]"
+        /*
+         * Square, and as large as the viewport allows. The plot has its own page now, so
+         * the old 640×440 cap — sized for a card competing with eight other panels on one
+         * scrolling dashboard — was leaving most of the screen empty for the one view where
+         * space is the feature: this is a cloud you inspect by turning it.
+         *
+         * Square because the fit scales per axis and a wide box is spent on whichever axis
+         * the rotation is currently narrow along. Bounded by height as well as width so the
+         * whole cube stays on screen without scrolling the page to follow it.
+         */
+        className="relative mx-auto mt-4 aspect-square w-full max-w-[min(100%,78vh)] border border-rule bg-bg-raised"
       >
         <canvas
           ref={canvasRef}
@@ -350,19 +356,41 @@ function draw(
   context.fillStyle = options.background;
   context.fillRect(0, 0, width, height);
 
-  const scale = (Math.min(width, height) / 2) * 0.82;
-  const project = (x: number, y: number, z: number) => {
-    const cosYaw = Math.cos(rotation.yaw);
-    const sinYaw = Math.sin(rotation.yaw);
-    const cosPitch = Math.cos(rotation.pitch);
-    const sinPitch = Math.sin(rotation.pitch);
+  const cosYaw = Math.cos(rotation.yaw);
+  const sinYaw = Math.sin(rotation.yaw);
+  const cosPitch = Math.cos(rotation.pitch);
+  const sinPitch = Math.sin(rotation.pitch);
 
+  /** Rotate into view space. Unscaled, so the fit below can measure the result. */
+  const rotate = (x: number, y: number, z: number) => {
     const x1 = x * cosYaw - z * sinYaw;
     const z1 = x * sinYaw + z * cosYaw;
-    const y2 = y * cosPitch - z1 * sinPitch;
-    const z2 = y * sinPitch + z1 * cosPitch;
+    return { x: x1, y: y * cosPitch - z1 * sinPitch, depth: y * sinPitch + z1 * cosPitch };
+  };
 
-    return { x: width / 2 + x1 * scale, y: height / 2 - y2 * scale, depth: z2 };
+  /**
+   * Fit the box to the frame at this rotation, rather than scaling by a fixed fraction.
+   *
+   * A constant `min(width, height) / 2 * 0.82` fits the cube face-on and clips it at every
+   * other angle: a corner of the unit cube sits √3 from the centre, so turning the plot
+   * pushed the far corners — and the points near them — outside the canvas. The cube was
+   * only ever whole in the orientation it happened to load in, which is the one orientation
+   * nobody needs to rotate to see.
+   *
+   * Measuring the eight corners each frame is exact and costs eight multiplies. It also
+   * uses the frame better: the projection is widest along one axis at a time, so fitting
+   * per axis draws the cloud larger than a single conservative constant ever could.
+   */
+  const rotatedCorners = BOX_CORNERS.map(([x, y, z]) => rotate(x, y, z));
+  const halfX = Math.max(...rotatedCorners.map((corner) => Math.abs(corner.x)));
+  const halfY = Math.max(...rotatedCorners.map((corner) => Math.abs(corner.y)));
+  // 0.94 leaves room for the dot radius and the hover ring, which are drawn in pixels
+  // around a point and would otherwise clip against the edge even when its centre fits.
+  const scale = 0.94 * Math.min(width / 2 / halfX, height / 2 / halfY);
+
+  const project = (x: number, y: number, z: number) => {
+    const { x: x1, y: y2, depth } = rotate(x, y, z);
+    return { x: width / 2 + x1 * scale, y: height / 2 - y2 * scale, depth };
   };
 
   // The unit box. Without it a rotation reads as the cloud deforming rather than turning,
@@ -412,10 +440,16 @@ function draw(
 }
 
 /** The twelve edges of the unit box, as pairs of corners. */
-const BOX_EDGES: [[number, number, number], [number, number, number]][] = (() => {
+/** The eight corners of the unit box, shared by the wireframe and the fit-to-frame scale. */
+const BOX_CORNERS: [number, number, number][] = (() => {
   const corners: [number, number, number][] = [];
   for (const x of [-1, 1])
     for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([x, y, z]);
+  return corners;
+})();
+
+const BOX_EDGES: [[number, number, number], [number, number, number]][] = (() => {
+  const corners = BOX_CORNERS;
   const edges: [[number, number, number], [number, number, number]][] = [];
   for (let i = 0; i < corners.length; i++) {
     for (let k = i + 1; k < corners.length; k++) {

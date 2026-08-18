@@ -2656,3 +2656,55 @@ rendering with its dense cluster visible, two accounts listed with no errors, an
 
 Typecheck clean, 280 tests passing, `next build` clean with all five routes emitted,
 prettier clean.
+
+---
+
+## Step 17 — three models instead of every model, and a cube that fits its frame
+
+**The dropdown was 69 entries.** Filtering `/v1/models` down to chat-capable ids solved the
+wrong half of the problem: it removed what would fail, and left sixty near-identical dated
+snapshots that nobody has a basis for choosing between. Narrowed to three, spanning the
+axis an operator actually cares about — `gpt-4o-mini` (measured), `gpt-5-nano` (newer,
+cheaper, untested here), `gpt-3.5-turbo` (the cheap floor). Intersected with what the
+account advertises, so a curated list cannot promise a model the key cannot use; that check
+is what stops the failure moving from the dropdown to the first question. The heuristic
+filter it replaces is deleted rather than left beside it.
+
+**The self-hosted option now appears in the chat header** — and this is where the
+interesting constraint is. Selecting it would save a configuration under which search
+returns _nothing_, with no error, because nothing fails: the local preset embeds at 768d,
+this index holds 1536d vectors, and the embedding model is env-only precisely because
+changing it means rebuilding the index. So it is offered, visibly, and disabled with the
+reason and the number — the difference between an option that is unavailable and one that
+is hidden. Switching provider also takes the new preset's rerank model, since one base URL
+serves both calls and an OpenAI grader against a local server is a 404; staying on one
+provider keeps whatever grader the dashboard chose.
+
+**The first sub-tab is `Analytics`, not `Dashboard`.** The nav item above it already says
+Dashboard, and a tab repeating its parent's name says nothing about what is on it. It is
+also the only section that reports rather than configures, which is what the word should
+carry.
+
+**The embedding plot was clipping its own subject.** The complaint was that the cube was
+too compact to inspect; the cause was two things. It was capped at 640×440 — sized for a
+card competing with eight panels on one scrolling page, which it no longer is — and the
+projection scaled by a fixed `min(width, height) / 2 * 0.82`. A corner of a unit cube sits
+√3 from its centre, so that constant fits the box face-on and clips it at every other
+angle: the cube was whole only in the orientation it happened to load in, which is the one
+orientation nobody rotates to see.
+
+Fixed by measuring rather than guessing. The eight corners are rotated each frame and the
+scale is fitted per axis to what they actually span, which never clips and also draws the
+cloud _larger_ than any single safe constant could, because the projection is widest along
+one axis at a time. The frame is square and bounded by `min(100%, 78vh)`, so the whole cube
+stays on screen without scrolling the page to follow it.
+
+Verified by reading pixels, not by looking: the canvas was rotated through sixteen
+orientations and the drawn bounds checked against the bitmap edges each time — zero
+clipped. At 1280×720 the plot is 560×560 CSS, against 640×440 before.
+
+Also verified end to end: switching to `gpt-5-nano` from the chat header persisted to the
+database as the answer model while leaving `gpt-4o-mini` as the grader, then reset to the
+environment default so the system was not left running on an unmeasured model.
+
+Typecheck clean, 280 tests passing, `next build` clean, prettier clean.

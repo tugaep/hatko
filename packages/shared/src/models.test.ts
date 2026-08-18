@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MEASURED_CHAT_MODEL,
   MODEL_PRESETS,
+  OPENAI_CHAT_MODELS,
   chatModels,
   hasModel,
   presetModels,
@@ -72,6 +73,8 @@ test('every preset names the models its install commands actually pull', () => {
 
 const OPENAI_MODELS = [
   'gpt-4o-mini',
+  'gpt-5-nano',
+  'gpt-3.5-turbo',
   'gpt-4o',
   'gpt-4.1',
   'o3-mini',
@@ -88,42 +91,49 @@ const OPENAI_MODELS = [
   'gpt-4o-search-preview',
 ];
 
-test('the OpenAI list keeps only models that can answer a question', () => {
-  const offered = chatModels(OPENAI_MODELS, true);
+test('OpenAI is narrowed to the three offered models, in that order', () => {
+  assert.deepEqual(chatModels(OPENAI_MODELS, true), ['gpt-4o-mini', 'gpt-5-nano', 'gpt-3.5-turbo']);
+});
 
-  assert.deepEqual(offered, ['gpt-4o-mini', 'gpt-4.1', 'gpt-4o', 'o3-mini']);
-  for (const rejected of ['text-embedding-3-small', 'tts-1', 'whisper-1', 'dall-e-3']) {
+test('nothing that cannot answer a question survives, whatever the provider lists', () => {
+  const offered = chatModels(OPENAI_MODELS, true);
+  for (const rejected of [
+    'text-embedding-3-small',
+    'tts-1',
+    'whisper-1',
+    'dall-e-3',
+    'gpt-3.5-turbo-instruct',
+    'gpt-4o-realtime-preview',
+  ]) {
     assert.ok(!offered.includes(rejected), `${rejected} cannot answer a question`);
   }
 });
 
-test('the embedding model is never offered as a chat model', () => {
-  // It is the one wrong answer that would look plausible in the list, and picking it
-  // would break answers while the panel still showed a saved, healthy setting.
-  assert.ok(!chatModels(OPENAI_MODELS, true).some((id) => id.includes('embedding')));
-});
-
-test('an instruct model is excluded, because /chat/completions is the only endpoint called', () => {
-  assert.ok(!chatModels(OPENAI_MODELS, true).includes('gpt-3.5-turbo-instruct'));
-});
-
 /**
- * The half that matters more. A self-hosted server advertises exactly what was pulled,
- * with names no OpenAI-shaped rule recognises — filtering there empties the dropdown on
- * a correctly installed machine.
+ * The half that keeps a dropdown entry honest. An account without `gpt-5-nano` must not be
+ * offered it — a curated list that ignores what the provider actually has just moves the
+ * failure from the dropdown to the first question.
  */
-test('a self-hosted list is passed through rather than filtered by OpenAI naming', () => {
-  const ollama = ['qwen2.5:7b', 'nomic-embed-text:latest', 'llama3.2:3b'];
-  assert.deepEqual(chatModels(ollama, false).sort(), [...ollama].sort());
+test('a model the account does not advertise is not offered', () => {
+  const withoutNano = OPENAI_MODELS.filter((id) => id !== 'gpt-5-nano');
+  assert.deepEqual(chatModels(withoutNano, true), ['gpt-4o-mini', 'gpt-3.5-turbo']);
+  assert.deepEqual(chatModels([], true), []);
 });
 
-test('the measured model sorts first so it is the visible default', () => {
-  assert.equal(chatModels(['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'], true)[0], MEASURED_CHAT_MODEL);
+test('the measured model is first, so it is the visible default', () => {
+  assert.equal(chatModels(OPENAI_MODELS, true)[0], MEASURED_CHAT_MODEL);
+  assert.equal(OPENAI_CHAT_MODELS[0], MEASURED_CHAT_MODEL, 'display order is the list order');
 });
 
 test('an unreachable provider yields an empty list rather than throwing', () => {
   assert.deepEqual(chatModels([], true), []);
   assert.deepEqual(chatModels([], false), []);
+});
+
+test('every offered model is one a preset or the measured default already names', () => {
+  // Guards the list against drifting into ids nobody checked against this corpus.
+  assert.ok(OPENAI_CHAT_MODELS.includes(MEASURED_CHAT_MODEL));
+  assert.equal(new Set(OPENAI_CHAT_MODELS).size, OPENAI_CHAT_MODELS.length);
 });
 
 /**

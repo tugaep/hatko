@@ -180,57 +180,42 @@ export function presetModels(preset: ModelPreset): string[] {
 export const MEASURED_CHAT_MODEL = 'gpt-4o-mini';
 
 /**
- * Ids from a provider's model list that can actually answer a question.
+ * The OpenAI models this system offers, and nothing else.
  *
- * A dropdown built straight from `/v1/models` is unusable: OpenAI advertises about 124
- * ids, most of which are embeddings, speech, or image models that would fail on the
- * first request with an error naming a modality rather than the mistake. So the list is
- * filtered — but only for OpenAI, and that exception is the important half.
+ * A curated three rather than the ~124 ids `/v1/models` advertises, for the reason the
+ * preset list already states: a dropdown entry is an endorsement. Most of those ids are
+ * embeddings, speech or image models that fail on the first request; of the rest, offering
+ * sixty near-identical dated snapshots invites a choice nobody has a basis for making.
  *
- * A self-hosted server advertises exactly what was pulled onto it, usually three or four
- * models with names this filter knows nothing about (`qwen2.5:7b`, `nomic-embed-text`).
- * Applying a `gpt-`-shaped rule there would empty the dropdown on a correctly installed
- * machine, which is the same class of bug the `hasModel` tag-matching exists to prevent.
- * So a self-hosted list is passed through whole and the operator picks; they installed
- * it, they know what it is.
+ * Three, spanning the axis an operator actually cares about — cost against capability —
+ * with the measured one first and named as measured:
  *
- * The filter is a heuristic and is allowed to be, because being wrong is cheap in both
- * directions: a chat model wrongly excluded is still settable through `.env`, and a
- * non-chat model wrongly included fails loudly on the next question rather than
- * silently. What it must not do is offer an obviously wrong modality by default.
+ * - `gpt-4o-mini`   the default, and the only one behind the reported figures
+ * - `gpt-5-nano`    newer and cheaper, untested here
+ * - `gpt-3.5-turbo` the cheap floor, and old enough that its grading is the least like
+ *                   the model the abstain threshold was calibrated against
+ *
+ * Order is significance, not alphabet, and it is the display order — this list is not
+ * sorted anywhere. Anything else remains settable through `.env` for whoever has a reason.
  */
-const NON_CHAT = [
-  'embedding',
-  'audio',
-  'realtime',
-  'transcribe',
-  'tts',
-  'whisper',
-  'image',
-  'dall-e',
-  'sora',
-  'moderation',
-  'search',
-  // Completions-only, so it 404s on /chat/completions — the one endpoint this calls.
-  'instruct',
-];
+export const OPENAI_CHAT_MODELS = ['gpt-4o-mini', 'gpt-5-nano', 'gpt-3.5-turbo'] as const;
 
+/**
+ * The models to offer for a provider, given what that provider says it has.
+ *
+ * Two different rules, and the difference is the important half. For OpenAI the curated
+ * list is intersected with what the account actually advertises, so an account without
+ * `gpt-5-nano` is never offered it — the alternative is a dropdown entry that fails on
+ * first use, which is the failure this function exists to prevent.
+ *
+ * A self-hosted server is passed through whole. It advertises exactly what was pulled onto
+ * it, under names (`qwen2.5:7b`) no OpenAI-shaped rule recognises, so filtering there would
+ * empty the dropdown on a correctly installed machine — the same class of bug the
+ * `hasModel` tag-matching already exists to prevent. They installed it; they know what it is.
+ */
 export function chatModels(available: readonly string[], isOpenAI: boolean): string[] {
-  const usable = isOpenAI
-    ? available.filter((id) => {
-        const lower = id.toLowerCase();
-        if (NON_CHAT.some((term) => lower.includes(term))) return false;
-        return lower.startsWith('gpt-') || /^o\d/.test(lower);
-      })
-    : [...available];
-
-  return usable.sort((a, b) => {
-    // The measured model first, because a list sorted purely alphabetically buries the
-    // one option whose behaviour this system has actually verified.
-    if (a === MEASURED_CHAT_MODEL) return -1;
-    if (b === MEASURED_CHAT_MODEL) return 1;
-    return a.localeCompare(b);
-  });
+  if (!isOpenAI) return [...available];
+  return OPENAI_CHAT_MODELS.filter((model) => available.includes(model));
 }
 
 /**
