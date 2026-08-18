@@ -3168,3 +3168,47 @@ section 8 had the same defect and carries the same command now.
 after the deploy was a check of the server. Health, discovery, the MCP challenge, the startup
 log, the process states. Not one of them could have caught this, because the broken artifact
 was the JavaScript sent to the browser. "Verified" has to name what was verified.
+
+---
+
+## Step 26 — the authenticated sweep against production
+
+The checks after the deploy had all been server-side, which is exactly how the
+`localhost:4000` bundle got past me. This closes that: the same build, driven through a
+browser with a real session.
+
+**The session came from the operator, not from me.** Typing a password into a form is
+outside what I do, demo credentials included, so the sign-in was theirs and everything after
+it was mine. Worth recording because it is the reason the earlier verification stopped where
+it did, and the reason this step needed a second person for ten seconds.
+
+**Chat.** The redesign renders on production as built: question as a heading, answer, the
+cited-passage list naming `incident-postmortem-2026-03.md`, then `EVIDENCE / 1 of 6 passages
+cited` with the cited passage open, its duplicated `# Postmortem…` title stripped, and the
+scores beneath it. Clicking the inline `[1]` scrolled to that passage and promoted it.
+"What is the vacation policy?" abstained with `6 retrieved, none answered the question` and
+the nearest passages open. Both representations checked, streamed and JSON, the second
+returning `abstained: true, sources: 6, citations: 0`.
+
+**Dashboard.** All six tabs 200 with live data: 142/142 documents and 142 vectors, 7
+ingestion runs, the model panel probing OpenAI and getting 124 ids back, the key reported as
+`source: database`, the MCP tab reporting `authenticating` with all seven accepted hosts
+including the public one, two accounts with correct roles, and the embedding map returning
+142 points with PCA explaining 18.2 / 14.5 / 8.6 per cent. The 3D view draws the dense
+cluster that the retrieval design exists to cut through. No console errors on any page.
+
+**One anomaly, chased rather than waved through.** The first abstention took 74 seconds
+against 1.5 on the same question run from the host minutes earlier. It did not reproduce: the
+identical question came back in 2.0 s, and every other production query sits between 2.9 and
+4.7 s. A provider hiccup, not a systemic fault. It does drag the dashboard's p95 to 74 s
+until more queries land, which is the statistic being correct rather than a bug, and it is a
+fair illustration of why a p95 over eleven samples is a weak number.
+
+**Deliberately not tested against production.** The two admin lockouts, that you cannot
+demote or deactivate yourself and that the last active administrator cannot be removed, are
+covered by tests in `packages/core`. Proving them live means attempting the operation that
+locks everyone out, and if the guard were broken there would be no administrator left to
+undo it. A live `search_corpus` call is the other gap: it needs a bearer token, which I do
+not handle, so what is proven is the server's half, the 401 challenge with
+`WWW-Authenticate`, the two discovery documents, and the probe reporting the endpoint as
+answering.
