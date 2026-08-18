@@ -46,6 +46,10 @@ Then migrate the database, create the demo accounts, and index the sample corpus
 npm run setup
 ```
 
+`setup` is migrate, seed and ingest. Ingestion embeds every document, so it needs a
+provider — if you left `OPENAI_API_KEY` blank it will stop there, and the rest of this
+still worked. Finish from the dashboard instead, below.
+
 Run the three servers in separate terminals:
 
 ```bash
@@ -62,14 +66,45 @@ npm run dev:mcp
 
 The app is at http://localhost:3000. The API is on 4000 and the MCP server on 4100.
 
+## First run
+
+**Sign in as the admin before anything else.** Nothing is configured on a fresh
+installation, and every route that could configure it is behind `admin` — so the first
+action on a new instance is always an administrator signing in. A regular user landing
+first sees an honest empty state and no way to fix it, which is correct: they should not
+be able to.
+
+The dashboard then shows a **setup checklist** with the three prerequisites, in the order
+they depend on each other. It disappears once they are met.
+
+| #   | Step                | Why it is in this position                                              |
+| --- | ------------------- | ----------------------------------------------------------------------- |
+| 1   | Provider credential | Everything below costs a provider call. A local model server needs none |
+| 2   | Model reachable     | Confirms the credential and the address actually answer                 |
+| 3   | Corpus indexed      | 142 documents, one embedding call each — needs 1 and 2 to be true       |
+
+Each step links to the panel that completes it. After step 3 the chat page works.
+
+The **API key** goes in the dashboard rather than `.env` if you prefer: it is stored
+encrypted with a key derived from `BETTER_AUTH_SECRET`, the panel names which source is
+active, and the database value wins when both are set. Either way it is never returned by
+any route.
+
+The **model** is a dropdown of what your provider actually advertises, not a fixed choice
+— answer model and rerank model separately. `gpt-4o-mini` is marked _measured_, because it
+is the one the reported figures and the abstain threshold were calibrated against;
+changing the rerank model shows a warning saying exactly that. Admins get the same answer
+-model dropdown in the chat header, so two models can be compared without leaving the page
+the answers are on. It changes the setting for everyone, and says so.
+
 ## Demo credentials
 
 Both accounts are created by `npm run setup`, from the `SEED_*` values in `.env`.
 
-| Role  | Email            | Password            | Can reach              |
-| ----- | ---------------- | ------------------- | ---------------------- |
-| Admin | efe@tugrap.dev   | PlayableFactory7766 | Chat and the dashboard |
-| User  | user@hatko.local | hatko-user-demo     | Chat only              |
+| Role  | Email           | Password            | Can reach              |
+| ----- | --------------- | ------------------- | ---------------------- |
+| Admin | efe@tugrap.dev  | PlayableFactory7766 | Chat and the dashboard |
+| User  | user@tugrap.dev | PlayableFactory6677 | Chat only              |
 
 Sign in as the regular user to see the role gating. The dashboard link is absent from the
 nav, and asking for `/dashboard` directly redirects to chat with the reason stated on the

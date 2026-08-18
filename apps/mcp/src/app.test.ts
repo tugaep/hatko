@@ -325,6 +325,30 @@ test('a provider outage is named without leaking the provider response', () => {
   assert.match(text, /provider/i);
 });
 
+/**
+ * The distinction that cost a live deployment an hour. A rejected key and an unreachable
+ * provider are different faults with different fixes, and reporting both as "could not be
+ * reached" sent an operator to check DNS, firewalls and egress on a server whose
+ * connectivity was fine. The recorded ingestion error said "rejected the API key (401)"
+ * while both request surfaces said the opposite.
+ */
+test('a rejected key is reported as a key problem, not as an outage', () => {
+  const text = toToolErrorText(new ProviderError('upstream said no', { status: 401 }));
+  assert.match(text, /rejected the configured API key/);
+  assert.doesNotMatch(
+    text,
+    /could not be reached/,
+    'the fixable failure must not read as a transient one',
+  );
+  assert.doesNotMatch(text, /upstream said no/, 'the provider response never reaches the caller');
+});
+
+test('an unreachable provider still reads as something to retry', () => {
+  const text = toToolErrorText(new ProviderError('socket hang up', { retryable: true }));
+  assert.match(text, /could not be reached/);
+  assert.doesNotMatch(text, /socket hang up/);
+});
+
 test('a configuration error is forwarded, because it is the fix', () => {
   // Written to be actionable and carrying nothing internal — the one class of message
   // worth passing through. A caller who cannot see this reads a broken retriever as

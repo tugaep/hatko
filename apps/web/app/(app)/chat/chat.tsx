@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   answerStreamEventSchema,
+  healthSchema,
   type AnswerResponse,
   type Permission,
   type SearchResult,
@@ -14,6 +15,8 @@ import { Answer, AnswerDraft } from '../../../components/answer.tsx';
 import { FernSpecimen } from '../../../components/marks.tsx';
 import { SourceCard } from '../../../components/source-card.tsx';
 import { Button, ErrorCard, Eyebrow, Input, SkeletonLine, cx } from '../../../components/ui.tsx';
+import { useApi } from '../../../lib/use-api.ts';
+import { AnswerModelPicker } from './model-picker.tsx';
 
 /**
  * Ask a question, read the answer, check its sources.
@@ -58,7 +61,23 @@ const DENIED_COPY: Partial<Record<Permission, string>> = {
   'ingestion:trigger': 'Running ingestion is for administrators.',
 };
 
-export function Chat({ denied }: { denied?: Permission }) {
+export function Chat({
+  denied,
+  canManageModels = false,
+}: {
+  denied?: Permission;
+  canManageModels?: boolean;
+}) {
+  /**
+   * Whether anything is indexed at all, read from the public `/health`.
+   *
+   * Public rather than `/api/admin/stats` deliberately: a regular user cannot read the
+   * admin stats, and the person most likely to meet an unindexed corpus is exactly the
+   * person with no permission to diagnose it. `/health` discloses a count and nothing
+   * else, which is all this needs.
+   */
+  const health = useApi('/health', healthSchema);
+
   const [turns, setTurns] = useState<Turn[]>([]);
   const [pending, setPending] = useState(false);
   const [flashed, setFlashed] = useState<string | null>(null);
@@ -160,12 +179,15 @@ export function Chat({ denied }: { denied?: Permission }) {
   return (
     <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col pb-[calc(var(--nav-h)+0.75rem)]">
       <div className="flex-1 py-6 sm:py-8">
-        <header>
-          <h1 className="font-display text-h1 text-text">Ask the corpus</h1>
-          <p className="mt-2 max-w-[60ch] text-body-sm text-text-muted">
-            Every answer comes from indexed passages, and each claim carries the passage it came
-            from.
-          </p>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="font-display text-h1 text-text">Ask the corpus</h1>
+            <p className="mt-2 max-w-[60ch] text-body-sm text-text-muted">
+              Every answer comes from indexed passages, and each claim carries the passage it came
+              from.
+            </p>
+          </div>
+          {canManageModels && <AnswerModelPicker />}
         </header>
 
         {/*
@@ -173,6 +195,30 @@ export function Chat({ denied }: { denied?: Permission }) {
          * your role does not hold, so it is stated as a fact in the neutral informational
          * tone rather than dressed in clay.
          */}
+        {/*
+         * An empty index is a setup state, not a fault, so it is stated in the neutral
+         * informational tone rather than as an error. Before this, asking a question here
+         * produced "the model provider could not be reached" — an accurate description of
+         * a symptom and a useless description of the cause, which was that nobody had run
+         * ingestion yet. Admins get the step; everyone else gets the honest status and
+         * nobody to blame.
+         */}
+        {health.data?.indexedChunks === 0 && (
+          <p className="fade mt-4 border border-rule-strong bg-bg-sunken p-3 text-body-sm text-text">
+            {canManageModels ? (
+              <>
+                Nothing is indexed yet, so there is nothing to answer from. Finish setup on the{' '}
+                <a href="/dashboard" className="underline underline-offset-2">
+                  dashboard
+                </a>
+                : add a provider key, choose a model, then run ingestion.
+              </>
+            ) : (
+              'Nothing is indexed yet, so there is nothing to answer from. An administrator has to run ingestion before this page can be used.'
+            )}
+          </p>
+        )}
+
         {denied && (
           <p className="fade mt-4 border border-rule-strong bg-bg-sunken p-3 text-body-sm text-text">
             {DENIED_COPY[denied] ?? 'That page is for administrators.'}

@@ -1,4 +1,4 @@
-import { PERMISSIONS, type Permission } from '@hatko/shared';
+import { PERMISSIONS, can, type Permission } from '@hatko/shared';
 import { requirePermission } from '../../../lib/session.ts';
 import { Chat } from './chat.tsx';
 
@@ -12,7 +12,7 @@ export default async function ChatPage({
 }: {
   searchParams: Promise<{ denied?: string }>;
 }) {
-  await requirePermission('search:run', '/chat');
+  const user = await requirePermission('search:run', '/chat');
 
   // `?denied=` is set by `requirePermission` when it bounces someone off a page their
   // role cannot open. Validated against the permission map rather than rendered raw:
@@ -20,5 +20,13 @@ export default async function ChatPage({
   const { denied } = await searchParams;
   const deniedPermission = denied && denied in PERMISSIONS ? (denied as Permission) : undefined;
 
-  return <Chat {...(deniedPermission ? { denied: deniedPermission } : {})} />;
+  // Whether to offer the model switcher, decided from the verified session rather than
+  // in the browser. The routes behind it are gated on the same permission server-side, so
+  // this only decides what is rendered, never what is allowed.
+  return (
+    <Chat
+      canManageModels={can(user.role, 'documents:manage')}
+      {...(deniedPermission ? { denied: deniedPermission } : {})}
+    />
+  );
 }

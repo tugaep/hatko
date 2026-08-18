@@ -89,3 +89,21 @@ export const embeddingMapSchema = z.object({
   dimensions: z.number().int().min(0),
 });
 export type EmbeddingMap = z.infer<typeof embeddingMapSchema>;
+
+/**
+ * The public liveness response.
+ *
+ * Public on purpose, and therefore deliberately thin: a load balancer needs to know the
+ * process is up, and `indexedChunks` is the one number that distinguishes "running" from
+ * "running and actually able to answer anything". Nothing here is worth authenticating,
+ * and nothing about the corpus's contents is disclosed by its size.
+ *
+ * Shared rather than inline in the route, because the chat page now reads it to decide
+ * whether to tell someone the system is not set up yet — so two sides depend on the shape
+ * and the repository's rule is that those live here.
+ */
+export const healthSchema = z.object({
+  status: z.literal('ok'),
+  indexedChunks: z.number().int().min(0),
+});
+export type Health = z.infer<typeof healthSchema>;

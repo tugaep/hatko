@@ -34,6 +34,31 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Whether a provider failure is the operator's configuration rather than the weather.
+ *
+ * These two are not the same failure and must not read as the same message. A 401 means
+ * the key is wrong and will be wrong on every retry; a refused connection or a 503 means
+ * try again. Reported identically — as "the model provider could not be reached" — the
+ * one failure a person can actually fix is described as the one they cannot, which is
+ * exactly what happened on the first deployment: a rejected key sent an operator to check
+ * DNS, firewall rules and egress on a server whose connectivity was perfect.
+ *
+ * Naming a rejected credential leaks nothing. It is a fact about this system's own
+ * configuration, not about the provider's response, and only an authenticated caller ever
+ * sees it.
+ */
+export function isCredentialFailure(error: ProviderError): boolean {
+  return error.status === 401 || error.status === 403;
+}
+
+/** What to tell a caller when a provider call failed. Never carries the provider's body. */
+export function providerFailureText(error: ProviderError): string {
+  return isCredentialFailure(error)
+    ? 'The model provider rejected the configured API key. An administrator can set a working key on the dashboard.'
+    : 'The model provider could not be reached. Try again in a moment.';
+}
+
 const embeddingResponseSchema = z.object({
   data: z.array(z.object({ index: z.number().int(), embedding: z.array(z.number()) })),
   usage: z.object({ total_tokens: z.number().int() }).optional(),

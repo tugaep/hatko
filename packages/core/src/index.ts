@@ -27,6 +27,7 @@ export {
   chatText,
   listModels,
   ProviderError,
+  providerFailureText,
 } from './providers/openai.ts';
 export { hybridSearch, type HybridOptions, type RetrievalArm } from './retrieval/search.ts';
 export { extractTerms, toFtsQuery } from './retrieval/query.ts';

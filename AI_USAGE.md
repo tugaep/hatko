@@ -2494,3 +2494,84 @@ steps. Running the command it prescribes is what showed it could not fail.
 
 Typecheck clean, 271 tests passing (245 + 26), prettier clean, `next build` clean, eval
 unchanged at hybrid recall@1 100% / MRR 1.000 / 12·12 answer checks.
+
+---
+
+## Step 15 — first-run onboarding, model selection, and a message that lied
+
+Driven by a real deployment failing, not by a feature list. `hatko.tugrap.dev` went up
+with nothing configured, and the first admin to sign in met three panels, no stated order
+between them, ingestion refusing to start, and every question answering _"The model
+provider could not be reached."_ Every one of those is a design defect and one of them is
+a false statement.
+
+**The message was wrong, and it cost an hour.** The provider was reachable — measured from
+the server: DNS resolved, TLS completed in 19 ms, `/v1/models` returned 401. The recorded
+ingestion error said so exactly — `OpenAI rejected the API key (401)` — while both request
+surfaces reported an outage. So the diagnosis went to DNS, firewall rules and egress on a
+box whose connectivity was perfect, while the actual fault was a credential a person could
+have fixed in ten seconds.
+
+The cause was one `instanceof ProviderError` branch flattening every provider failure into
+one sentence, in two places that had each written their own copy. `ProviderError` already
+carried `status`, so the information was present and discarded. `providerFailureText` in
+core now splits it — a 401/403 names the rejected key and points at the dashboard,
+everything else keeps the retry wording — and both the API and the MCP server call it, so
+the two surfaces cannot drift into describing one failure two ways. Naming a rejected
+credential leaks nothing: it is a fact about this system's own configuration, and only an
+authenticated caller sees it. Tests assert both branches and that neither forwards the
+provider's own body.
+
+**The setup checklist.** Three prerequisites — credential, reachable model, indexed corpus
+— which are strictly ordered because ingestion costs one provider call per document and
+cannot run before the credential works. Nothing said so. The dashboard now leads with a
+checklist that names the next unfinished step and scrolls to the panel that completes it,
+and renders nothing once all three are met; its job is the first ten minutes, and a
+permanently ticked list is decoration on a page whose panels already report the same state
+in more detail. Every signal comes from an endpoint that already existed.
+
+The chat page got the other half. An empty index used to surface as that same provider
+error; it now says so plainly, reading `/health` rather than the admin stats — because the
+person most likely to meet an unindexed corpus is exactly the person with no permission to
+diagnose it. Admins get the setup step, everyone else gets the status and nobody to blame.
+`/health` had been an untyped inline object in the route; it crosses the boundary now, so
+it is a shared schema like everything else.
+
+**Model selection.** The panel offered two presets, so OpenAI meant `gpt-4o-mini` and
+nothing else, though `PUT /settings/models` had always accepted any model name — the
+restriction was in the UI alone. Now the provider's own `/v1/models` response populates
+two dropdowns, answer and rerank, in the dashboard, plus an answer-model dropdown in the
+chat header for admins, because comparing two models means asking the same question of
+each and a round trip to the dashboard between attempts is enough friction that nobody
+does it twice.
+
+Three constraints kept, each of which had an easier and worse alternative. The list is
+filtered rather than hard-coded — OpenAI advertises 124 ids and 55 of them are embeddings,
+speech or image models that would fail on the first request; a hard-coded list is a list
+that is wrong by the time anyone notices. The filter is skipped entirely for a self-hosted
+server, whose model names (`qwen2.5:7b`) no OpenAI-shaped rule recognises — filtering there
+would empty the dropdown on a correctly installed machine, the same class of bug the
+`hasModel` tag-matching already exists to prevent. And changing the rerank model warns:
+abstention compares its grade against a threshold placed between measured values, so a
+more generous grader starts answering questions the corpus does not cover — the one
+behaviour §4 calls non-negotiable, failing silently. `gpt-4o-mini` is labelled _measured_
+rather than merely sorted first, because a name alone does not say which of 69 options the
+threshold was calibrated against.
+
+Verified in a browser against the live account, not asserted: 69 options in each dropdown,
+`gpt-4o-mini — measured` first and selected, and zero embedding, tts, whisper, dall-e,
+audio, realtime, transcribe, moderation, instruct or image ids leaking through the filter.
+
+**Where AI was wrong, caught by opening the page.** The rerank hint shipped as
+`Grades each passage 0–3.` — an escape sequence written into a JSX _attribute_, which
+is not a JavaScript string literal, so the eight characters rendered literally on screen.
+Typecheck passed, the build passed, all 280 tests passed, and the page was visibly wrong.
+The identical escape two lines away was fine because it sits inside a JS expression, which
+is exactly why it was easy to miss. Reading the rendered DOM is what found it.
+
+Demo user credentials changed to `user@tugrap.dev` / `PlayableFactory6677` at the user's
+request, and the fallback defaults in `accounts.ts` aligned with `.env.example` and the
+README so a clone with no `.env` seeds exactly the documented accounts — they had drifted
+to `admin@hatko.local`, which no document mentioned.
+
+Typecheck clean, 280 tests passing, `next build` clean, prettier clean.

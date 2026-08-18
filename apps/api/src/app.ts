@@ -8,7 +8,7 @@ import {
   oauthAuthorizationServerMetadata,
   oauthProtectedResourceMetadata,
 } from '@hatko/core';
-import { oauthClientSchema, sessionResponseSchema } from '@hatko/shared';
+import { healthSchema, oauthClientSchema, sessionResponseSchema } from '@hatko/shared';
 import { HttpError, toErrorResponse, notFound } from './errors.ts';
 import { searchRoutes } from './routes/search.ts';
 import { adminRoutes } from './routes/admin.ts';
@@ -47,7 +47,7 @@ export function createApp() {
   /** Unauthenticated on purpose: a health check that needs credentials is useless. */
   app.get('/health', (c) => {
     const chunks = getDb().prepare('SELECT count(*) n FROM chunks').get() as { n: number };
-    return c.json({ status: 'ok', indexedChunks: Number(chunks.n) });
+    return c.json(healthSchema.parse({ status: 'ok', indexedChunks: Number(chunks.n) }));
   });
 
   /**

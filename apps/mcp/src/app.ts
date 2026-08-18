@@ -8,6 +8,7 @@ import {
   ProviderError,
   RateLimitError,
   config,
+  providerFailureText,
   requireMcpPermission,
   type SessionUser,
 } from '@hatko/core';
@@ -61,7 +62,9 @@ export function toToolErrorText(error: unknown): string {
     // person who triggered it; this server is headless, so its log is the only place
     // an operator can find out the provider has been failing all afternoon.
     console.error('[mcp] provider failure:', error.message);
-    return 'The model provider could not be reached, so this search could not run. Try again in a moment.';
+    // Shared with the HTTP API, so a rejected key does not read as an outage on one
+    // surface and as a configuration problem on the other.
+    return `${providerFailureText(error)} This search did not run.`;
   }
 
   if (error instanceof ConfigurationError) return error.message;

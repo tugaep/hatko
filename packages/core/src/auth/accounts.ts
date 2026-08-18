@@ -70,8 +70,8 @@ export function demoAccounts(): DemoAccount[] {
       role: 'admin',
     },
     {
-      email: process.env.SEED_USER_EMAIL ?? 'user@hatko.local',
-      password: process.env.SEED_USER_PASSWORD ?? 'hatko-user-demo',
+      email: process.env.SEED_USER_EMAIL ?? 'user@tugrap.dev',
+      password: process.env.SEED_USER_PASSWORD ?? 'PlayableFactory6677',
       name: 'Demo User',
       role: 'user',
     },

@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import {
+  MEASURED_CHAT_MODEL,
   MODEL_PRESETS,
+  chatModels,
   hasModel,
   modelSettingsSchema,
   presetModels,
+  rerankWarning,
   type ModelPreset,
   type ModelSettings,
 } from '@hatko/shared';
@@ -48,8 +51,21 @@ function presetFor(settings: ModelSettings): ModelPreset | undefined {
   );
 }
 
+/** The hosted preset's address, used to decide whether a model list needs filtering. */
+const OPENAI_BASE_URL = MODEL_PRESETS.find((preset) => preset.id === 'openai')!.baseUrl;
+
 export function ModelsPanel() {
   const [choice, setChoice] = useState<string | null>(null);
+  /**
+   * The two chat models, or null meaning "whatever the selected configuration says".
+   *
+   * Null rather than seeding them from the preset, so switching provider does not carry
+   * a model name across to a server that has never heard of it — picking the local
+   * preset while `gpt-4o` was selected would otherwise save a configuration that 404s on
+   * the first question.
+   */
+  const [answerModel, setAnswerModel] = useState<string | null>(null);
+  const [rerankModel, setRerankModel] = useState<string | null>(null);
   /**
    * The selection is part of the request, so changing it re-probes the server that
    * selection actually names. With a fixed path the panel showed the active provider's
@@ -65,15 +81,17 @@ export function ModelsPanel() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
-  async function apply(preset: ModelPreset) {
+  async function apply(preset: ModelPreset, models: { answer: string; rerank: string }) {
     setBusy(true);
     setFailure(null);
     try {
       await apiSend('PUT', '/api/admin/settings/models', modelSettingsSchema, {
         baseUrl: preset.baseUrl,
-        answerModel: preset.answerModel,
-        rerankModel: preset.rerankModel,
+        answerModel: models.answer,
+        rerankModel: models.rerank,
       });
+      setAnswerModel(null);
+      setRerankModel(null);
       settings.reload();
     } catch (error) {
       setFailure(messageOf(error));
@@ -88,6 +106,8 @@ export function ModelsPanel() {
     try {
       await apiSend('DELETE', '/api/admin/settings/models', modelSettingsSchema);
       setChoice(null);
+      setAnswerModel(null);
+      setRerankModel(null);
       settings.reload();
     } catch (error) {
       setFailure(messageOf(error));
@@ -153,6 +173,39 @@ export function ModelsPanel() {
    */
   const embeddingMismatch = selected && selected.embeddingModel !== active.embeddingModel;
 
+  /**
+   * The models this configuration would actually run with.
+   *
+   * The preset supplies the default and the selects override it, so an admin who touches
+   * nothing still saves the measured pair.
+   */
+  const effective = {
+    answer: answerModel ?? selected?.answerModel ?? active.answerModel,
+    rerank: rerankModel ?? selected?.rerankModel ?? active.rerankModel,
+  };
+
+  /**
+   * What the selected provider says it can serve, narrowed to models that can answer.
+   *
+   * Read from the probe rather than a list kept here: OpenAI adds and retires models on
+   * its own schedule, and a hard-coded dropdown is a list that is wrong by the time
+   * anyone notices. Only rendered when the probe describes the selected server, for the
+   * same staleness reason `probeMatches` exists.
+   */
+  const offered =
+    probeMatches && availability.reachable
+      ? chatModels(availability.models, selected?.baseUrl === OPENAI_BASE_URL)
+      : [];
+
+  /** Abstention is calibrated against one grader; say so when it is being changed. */
+  const rerankNote = rerankWarning(effective.rerank);
+
+  const unchanged =
+    selected &&
+    selected.baseUrl === active.baseUrl &&
+    effective.answer === active.answerModel &&
+    effective.rerank === active.rerankModel;
+
   return (
     <LabelFrame title={<Eyebrow as="h3">Models</Eyebrow>}>
       <div className="flex flex-wrap items-center gap-2">
@@ -209,7 +262,12 @@ export function ModelsPanel() {
             id="model-preset"
             value={selectedId}
             disabled={busy}
-            onChange={(event) => setChoice(event.target.value)}
+            onChange={(event) => {
+              setChoice(event.target.value);
+              // Back to the new configuration's own models: see the state declaration.
+              setAnswerModel(null);
+              setRerankModel(null);
+            }}
             className="h-10 w-full rounded-none border border-border-interactive bg-bg-raised px-3 text-body-sm text-text outline-none focus-visible:border-brand disabled:cursor-not-allowed disabled:opacity-40"
           >
             {!current && <option value="">Custom (set in .env)</option>}
@@ -220,6 +278,45 @@ export function ModelsPanel() {
             ))}
           </select>
         </Field>
+
+        {offered.length > 0 && selected && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Answer model"
+              htmlFor="model-answer"
+              hint="Writes the answer. A different one writes differently; the citations are validated either way."
+            >
+              <ModelSelect
+                id="model-answer"
+                value={effective.answer}
+                options={offered}
+                disabled={busy}
+                onChange={setAnswerModel}
+              />
+            </Field>
+
+            <Field
+              label="Rerank model"
+              htmlFor="model-rerank"
+              hint="Grades each passage 0–3. This is the one abstention depends on."
+            >
+              <ModelSelect
+                id="model-rerank"
+                value={effective.rerank}
+                options={offered}
+                disabled={busy}
+                onChange={setRerankModel}
+              />
+            </Field>
+          </div>
+        )}
+
+        {rerankNote && (
+          <p className="flex items-start gap-1.5 text-body-sm text-text-muted">
+            <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
+            <span>{rerankNote}</span>
+          </p>
+        )}
 
         {selected?.install && probeMatches && !availability.reachable && (
           <InstallNotice
@@ -275,8 +372,8 @@ export function ModelsPanel() {
 
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={() => selected && apply(selected)}
-            disabled={busy || !selected || selected.id === current?.id}
+            onClick={() => selected && apply(selected, effective)}
+            disabled={busy || !selected || unchanged}
             loading={busy}
           >
             Use this configuration
@@ -289,6 +386,48 @@ export function ModelsPanel() {
         </div>
       </div>
     </LabelFrame>
+  );
+}
+
+/**
+ * One chat model, chosen from what the provider advertises.
+ *
+ * A native select for the reason the configuration select gives: keyboard accessible,
+ * works before hydration, and a phone renders its own picker. The measured model is
+ * labelled rather than merely sorted first, because a name alone does not tell an admin
+ * which of eleven options the abstain threshold was calibrated against.
+ */
+function ModelSelect({
+  id,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  options: string[];
+  disabled: boolean;
+  onChange: (model: string) => void;
+}) {
+  return (
+    <select
+      id={id}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-10 w-full rounded-none border border-border-interactive bg-bg-raised px-3 font-mono text-body-sm text-text outline-none focus-visible:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {/* A model set in .env that the provider no longer lists still has to be selectable,
+          or the select would silently show a different model than the one in force. */}
+      {!options.includes(value) && <option value={value}>{value} (not advertised)</option>}
+      {options.map((model) => (
+        <option key={model} value={model}>
+          {model}
+          {model === MEASURED_CHAT_MODEL ? ' — measured' : ''}
+        </option>
+      ))}
+    </select>
   );
 }
 

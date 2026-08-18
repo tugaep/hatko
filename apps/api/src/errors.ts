@@ -7,6 +7,7 @@ import {
   RateLimitError,
   UserManagementError,
   UserNotFoundError,
+  providerFailureText,
 } from '@hatko/core';
 import type { ApiError } from '@hatko/shared';
 import type { Context } from 'hono';
@@ -105,14 +106,11 @@ export function toErrorResponse(error: unknown, c: Context): Response {
 
   if (error instanceof ProviderError) {
     // The model provider failed. Distinct from an internal fault, because the fix
-    // is different: wait and retry, or check the API key.
-    return c.json(
-      envelope(
-        'upstream_failed',
-        'The model provider could not be reached. Try again in a moment.',
-      ),
-      502,
-    );
+    // is different — and distinct *within itself* for the same reason: a rejected key
+    // is fixed on the dashboard, an unreachable provider is fixed by waiting. See
+    // `providerFailureText`, which is shared with the MCP server so both surfaces
+    // describe one failure one way.
+    return c.json(envelope('upstream_failed', providerFailureText(error)), 502);
   }
 
   if (error instanceof IngestionInProgressError) {

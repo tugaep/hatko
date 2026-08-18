@@ -18,6 +18,7 @@ import { DocumentsPanel } from './documents-panel.tsx';
 import { EmbeddingPanel } from './embedding-panel.tsx';
 import { IngestionPanel } from './ingestion-panel.tsx';
 import { UsersPanel } from './users-panel.tsx';
+import { SetupChecklist } from './setup-checklist.tsx';
 
 /**
  * The admin surface: what is indexed, whether the last ingest was clean, and what people
@@ -41,6 +42,10 @@ export function Dashboard() {
         </Button>
       </header>
 
+      {/* First, because on a fresh installation it is the only thing on this page worth
+          reading. It renders nothing once the three prerequisites are met. */}
+      <SetupChecklist stats={stats.data ?? null} onJump={stats.reload} />
+
       {stats.error ? (
         <ErrorCard title="Could not load statistics." detail={stats.error} onRetry={stats.reload} />
       ) : (
@@ -61,17 +66,24 @@ export function Dashboard() {
                 space at the bottom reads as a rendering bug. */}
             <div className="grid items-start gap-6 lg:grid-cols-2">
               <IndexHealthPanel health={stats.data?.index ?? null} />
-              <ApiKeyPanel />
+              {/* `scroll-mt` so the sticky header does not cover the heading it lands on. */}
+              <div id="setup-key" className="scroll-mt-20">
+                <ApiKeyPanel />
+              </div>
             </div>
             {/* Beside the key, because the provider and the credential are one decision. */}
-            <ModelsPanel />
+            <div id="setup-models" className="scroll-mt-20">
+              <ModelsPanel />
+            </div>
             <CategoryPanel byCategory={stats.data?.byCategory ?? null} />
             {/* Last in the section, because it is the only panel that explains *why* the
                 retriever is built the way it is rather than reporting its state. */}
             <EmbeddingPanel />
           </Group>
 
-          <IngestionPanel onIngested={stats.reload} />
+          <div id="setup-ingestion" className="scroll-mt-20">
+            <IngestionPanel onIngested={stats.reload} />
+          </div>
           <DocumentsPanel />
 
           <Group
