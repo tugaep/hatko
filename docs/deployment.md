@@ -255,12 +255,30 @@ approve it.
 
 ## 8. Operating it
 
-**Backups.** One SQLite file. Copy it with the WAL checkpointed rather than while it is
-being written:
+**Backups.** One SQLite file, copied through the database rather than off the filesystem,
+so a write in flight cannot land half of itself in the copy.
+
+Node does this without a second package, which matters here: this command has to work on
+the machine the guide just finished setting up, and that machine has Node and nothing else.
+The version below replaced a `sqlite3 … ".backup …"` one-liner that was in this guide
+through the first deployment and never ran on it, because the `sqlite3` CLI was not
+installed. It failed silently inside an `&&` chain, which is the worst way for a backup
+command to be wrong.
 
 ```bash
-sqlite3 /var/lib/hatko/hatko.db ".backup '/var/backups/hatko-$(date +%F).db'"
+node -e '
+  const { DatabaseSync } = require("node:sqlite");
+  const out = "/var/backups/hatko-" + new Date().toISOString().slice(0, 10) + ".db";
+  const db = new DatabaseSync("/var/lib/hatko/hatko.db", { readOnly: true });
+  db.exec("VACUUM INTO \x27" + out + "\x27");
+  db.close();
+  console.log("backup written: " + out);
+'
 ```
+
+Check the size afterwards. A backup materially smaller than the live database is a failed
+one, and `VACUUM INTO` refuses to overwrite, so a same-day rerun errors rather than
+truncating yesterday's copy.
 
 It contains accounts, sessions, OAuth clients and tokens, the encrypted API key and the
 whole index. Everything except the accounts and the key can be rebuilt from the corpus

@@ -3095,3 +3095,48 @@ uncited group opening, no horizontal overflow on a phone, and the abstain state 
 `judged not relevant` on each.
 
 Typecheck clean, 286 tests passing, prettier clean, `next build` clean with all eleven routes.
+
+---
+
+## Step 25 — the deploy, and a backup command that never ran
+
+Deployed the four commits sitting between `b9304d3` and `49e452e` to `hatko.tugrap.dev`,
+following `docs/deployment.md` §8. The server was four commits behind, which was visible from
+outside without signing in: the sign-in page still linked an Inter stylesheet, and Inter was
+replaced by Geist in the first of those commits.
+
+**The find is in the guide, not the code.** Its backup step is
+`sqlite3 /var/lib/hatko/hatko.db ".backup …"`, and the `sqlite3` CLI is not installed on the
+host. Worse than a missing tool, it failed silently: the command sat in an `&&` chain, so the
+step reported nothing and the deploy carried on to `git pull` with no backup taken. A backup
+command that quietly does nothing is the one kind of bug that is invisible until the moment it
+matters. Replaced with a `node:sqlite` `VACUUM INTO`, which needs no package on a machine that
+by definition has Node, and the guide now says to check the resulting size.
+
+The backup was then taken properly before any migration touched the file: 6,823,936 bytes
+against a live database of 6,844,416, the difference being the WAL that `VACUUM INTO` folds
+in rather than data missing from the copy.
+
+**Verified after the restart**, all from outside the machine:
+
+- `/health` returns `{"status":"ok","indexedChunks":142}`.
+- `/.well-known/oauth-protected-resource` names `https://hatko.tugrap.dev/mcp` as the resource
+  and the same origin as its authorization server.
+- An unauthenticated `POST /mcp` answers `401` with
+  `WWW-Authenticate: Bearer realm="hatko", resource_metadata=…`, which is the healthy response
+  and what starts a client's OAuth flow.
+- The startup log shows all three services active, 142 passages, the rate limit at 30 per 60s,
+  and the host allowlist including `hatko.tugrap.dev`, which is the one setting no probe can
+  confirm from outside.
+
+**How the new UI was verified without signing in.** Entering a password into a form is
+something I do not do, demo credentials included, so the check was made against the artifact
+instead: the deployed `.next` build contains the strings the redesigned components emit
+("Cited one passage", "more retrieved, none cited"), and `source-card.tsx` is gone from the
+deployed tree. One string from the old design, "Show full passage", did appear in a search of
+the build, which was worth chasing rather than dismissing: it is in a source map, and in the
+source it is a line of the module's own doc comment describing what the redesign removed. The
+component renders no clamp and no expand control.
+
+Migrations were already at 9 of 9, so `db:migrate` did nothing, which is what forward-only
+migrations are supposed to do on an up-to-date database.
