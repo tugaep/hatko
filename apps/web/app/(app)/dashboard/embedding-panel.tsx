@@ -53,8 +53,15 @@ export function EmbeddingPanel() {
     );
   }
 
+  /**
+   * `h2`, not `h3`. Panels are normally cards inside a titled section — see §the heading
+   * ranks note in dashboard/overview.tsx — but this one *is* its section: it has a tab of
+   * its own and nothing else shares the space. Wrapped in a `Group` as well, the words
+   * "Embedding space" appeared twice, once at each rank, which is the same duplication the
+   * "Corpus" title had over the document list below.
+   */
   return (
-    <LabelFrame title={<Eyebrow as="h3">Embedding space</Eyebrow>}>
+    <LabelFrame title={<Eyebrow as="h2">Embedding space</Eyebrow>}>
       {map.data ? <Plot map={map.data} /> : <Loading />}
     </LabelFrame>
   );

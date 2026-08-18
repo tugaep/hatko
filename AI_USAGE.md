@@ -2750,3 +2750,38 @@ Typecheck and all 280 tests passed with it wrong; a `diff` against the pre-split
 what found it. Recovered verbatim from git.
 
 Typecheck clean, 280 tests passing, `next build` clean, prettier clean.
+
+---
+
+## Step 19 — two section titles that said what their contents already said
+
+The Documents tab wrapped each panel in a titled `Group`, and both titles were
+restatements. "Corpus / Every indexed document, with its category and status" sat above a
+panel that is already a labelled `<section>` whose own `h2` says **Documents** and whose own
+line says how many are showing — so the wrapper put a section inside a section and an `h2`
+above an `h2`, and its description promised a category column the plot above states better,
+in colour, for all 142 passages at once.
+
+Removing it exposed the same fault one panel up, which the heading outline made obvious:
+`h1 Admin → h2 Embedding space → h3 Embedding space → h2 Documents`. The words appeared
+twice at two ranks. Panels here are normally cards inside a titled section, which is the
+right convention when several share a page — but this one _is_ its section now: it has a tab
+to itself and nothing else shares the space. So it labels itself at section rank and the
+wrapper is gone, leaving `h1 → h2 → h2`, which is also what its sibling already did.
+
+That left `Group` with one caller, so it went back beside it and `panels.tsx` is deleted —
+the third time this split has produced a shared module with a single consumer, and the third
+time the answer was to stop sharing. `Figure`, `CategoryPanel`, now `Group`.
+
+**A process note worth recording.** The `Group` move half-failed: the anchor comment the
+patch matched on had been reflowed by prettier, so the insertion did not happen while the
+`git rm` of `panels.tsx` did — leaving the tree importing a deleted file. Typecheck caught
+it immediately, which is the argument for running it after every mechanical move rather
+than at the end of a batch. The retry copied `Group` out of git and diffed the result
+against the committed version to prove it was verbatim, because the last move of this kind
+silently dropped a `tabular` class that no test could see.
+
+Verified in the browser: outline is `h1 Admin → h2 Embedding space → h2 Documents`, one
+"Embedding space" rather than two, and the Corpus description gone.
+
+Typecheck clean, 280 tests passing, `next build` clean, prettier clean.

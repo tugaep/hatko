@@ -13,7 +13,6 @@ import {
   cx,
 } from '../../../components/ui.tsx';
 import { SetupChecklist } from './setup-checklist.tsx';
-import { Group } from './panels.tsx';
 
 /**
  * The Dashboard tab: what is indexed, whether the index is sound, and what people ask.
@@ -72,6 +71,34 @@ export function Overview() {
     </div>
   );
 }
+/**
+ * A titled section. Lived in `panels.tsx` while the Documents tab drew one too; that tab's
+ * two panels label themselves now, so this is back beside its only caller — the same move
+ * `Figure` and `CategoryPanel` made, for the same reason.
+ */
+function Group({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  const id = `group-${title.toLowerCase()}`;
+  return (
+    <section aria-labelledby={id} className="grid gap-4">
+      <div>
+        <h2 id={id} className="font-display text-h2 text-text">
+          {title}
+        </h2>
+        {description && <p className="mt-1 text-body-sm text-text-muted">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function StatTiles({ stats }: { stats: DashboardStats | null }) {
   const tiles = stats
     ? [
