@@ -26,13 +26,13 @@ curl -s https://hatko.tugrap.dev/health
   absolute relevance. That grade is what makes honest abstention possible.
 - Answers cite their sources, and the citations are verified. Markers get checked against the
   passages actually supplied, and an answer that cites nothing is withheld.
-- The chat page streams the answer next to an evidence rail of the passages behind it, with
-  citations you can click.
+- The chat page streams the answer, lists the passages it cited underneath it, and then
+  prints those passages in full so any claim can be checked against its source.
 - The dashboard covers index health, search analytics, documents, ingestion runs, model
   configuration, MCP status, user management, and a 3D view of the embedding space.
 - An MCP server exposes `search_corpus`, authenticated by OIDC or a bearer session token.
 - Auth has two roles, `user` and `admin`, and the check is route middleware on the server.
-- Measured: recall@1 100%, MRR 1.000, 12 of 12 answer checks on the sample set. 282 tests.
+- Measured: recall@1 100%, MRR 1.000, 12 of 12 answer checks on the sample set. 286 tests.
 
 ---
 
@@ -50,7 +50,7 @@ curl -s https://hatko.tugrap.dev/health
 | MCP        | `@modelcontextprotocol/sdk`, Streamable HTTP transport                                                                    |
 | Auth       | **Better Auth** 1.6 with its `mcp` and `oidcProvider` plugins; Kysely as its query builder                                |
 | Validation | **Zod 4**, one schema per shape, with types inferred from it and shared across the boundary                               |
-| Tests      | `node --test` (282 tests), Prettier for formatting                                                                        |
+| Tests      | `node --test` (286 tests), Prettier for formatting                                                                        |
 
 There is no ORM, no vector-database service, no container runtime and no native toolchain, so
 `npm install` is the whole setup.
@@ -507,7 +507,7 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 | Live deployment          | <https://hatko.tugrap.dev>, behind the same sign-in, three processes behind Caddy                                                                                                                                                                                                                           |
 | Retrieval quality        | Hybrid vector and BM25 search, RRF tuned by sweep, LLM rerank with absolute grading                                                                                                                                                                                                                         |
 | Evaluation               | `npm run eval` reports recall@k, MRR, a per-arm comparison and answer-content checks                                                                                                                                                                                                                        |
-| Search-experience polish | Streamed answers, citation markers that jump to and flash their passage, an evidence rail with cited passages already open, a score legend, keyboard shortcuts                                                                                                                                              |
+| Search-experience polish | Streamed answers, citation markers that jump to and promote the passage they point at, a cited-passage list under every answer, term highlighting inside the passages, a score legend, keyboard shortcuts                                                                                                   |
 | User management          | An admin surface to list, search, add, change role, deactivate and restore, with two lockouts refused on the server: you cannot change your own account, and the last active admin cannot be demoted or disabled.                                                                                           |
 
 ### Added beyond the brief
@@ -674,7 +674,7 @@ to take the deployment down after review.
 ## Checks
 
 ```bash
-npm run typecheck && npm test     # tsc --noEmit, then 282 tests under node --test in about 10s
+npm run typecheck && npm test     # tsc --noEmit, then 286 tests under node --test in about 10s
 npm run eval                      # retrieval quality per arm
 npm run format:check
 ```
