@@ -41,14 +41,14 @@ type stripping).
 ```bash
 git clone <this repository> hatko && cd hatko
 npm install
-npm run build:web
 ```
 
 `npm install` needs no native toolchain — `sqlite-vec` ships prebuilt binaries and
 everything else is JavaScript.
 
 The web app is the only thing that builds. The API and MCP server run their sources
-directly.
+directly. **The build is deliberately not in this step**, because it cannot be done until
+section 3 has set `NEXT_PUBLIC_API_URL`. It is the last step of that section.
 
 ---
 
@@ -101,6 +101,30 @@ Four of these are load-bearing, and each fails in its own way:
 
 **Change the seeded passwords.** The defaults are published in this repository's README
 as demo credentials.
+
+### Then build the web app, with that configuration loaded
+
+`NEXT_PUBLIC_API_URL` is not read at runtime. Next inlines every `NEXT_PUBLIC_*` value
+into the client bundle **at build time**, so a build that cannot see it bakes in the
+fallback from `apps/web/lib/api.ts`, which is `http://localhost:4000`. The result is a
+site that serves, signs nobody in, and reports "Could not reach the API at
+http://localhost:4000" in the browser of every visitor, while `curl https://…/health`
+answers perfectly from the server side. That exact failure was shipped to production from
+this guide, because the build used to sit in section 2, above the section that writes the
+value.
+
+The variable is passed explicitly rather than by sourcing `.env`, which keeps the
+secrets in that file out of the build environment:
+
+```bash
+NEXT_PUBLIC_API_URL="$(grep '^NEXT_PUBLIC_API_URL=' .env | cut -d= -f2-)" npm run build:web
+```
+
+Then check the artifact rather than trusting the command, because this failure is silent:
+
+```bash
+grep -rl "localhost:4000" apps/web/.next/static | wc -l   # must be 0
+```
 
 ---
 
@@ -299,7 +323,9 @@ logged with detail server-side; clients only ever receive a generalised message.
 **Updating.**
 
 ```bash
-git pull && npm install && npm run build:web
+git pull && npm install
+NEXT_PUBLIC_API_URL="$(grep '^NEXT_PUBLIC_API_URL=' .env | cut -d= -f2-)" npm run build:web
+grep -rl "localhost:4000" apps/web/.next/static | wc -l   # must be 0
 npm run db:migrate
 sudo systemctl restart hatko-api hatko-web hatko-mcp
 ```

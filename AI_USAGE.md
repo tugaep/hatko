@@ -3140,3 +3140,31 @@ component renders no clamp and no expand control.
 
 Migrations were already at 9 of 9, so `db:migrate` did nothing, which is what forward-only
 migrations are supposed to do on an up-to-date database.
+
+**And then I broke production with it.** The deploy above served a site whose every visitor
+saw "Could not reach the API at http://localhost:4000", while `curl https://…/health` kept
+answering perfectly from the server. Both facts are consistent, and the gap between them is
+the whole lesson: `NEXT_PUBLIC_API_URL` is not read at runtime. Next inlines it into the
+client bundle at build time, so `npm run build:web` run without that variable in the
+environment baked in the fallback from `apps/web/lib/api.ts`, which is `http://localhost:4000`.
+Every server-side check I ran passed, because the server was never the thing that was wrong.
+
+The guide told me to do it. Section 2 said `npm install && npm run build:web`, and section 3,
+below it, is where `NEXT_PUBLIC_API_URL` gets written. Following the steps in order builds the
+browser bundle before the value it needs exists. That ordering had survived one deployment,
+presumably because whoever ran it had the variable exported in their shell.
+
+Fixed by rebuilding with the value passed explicitly and restarting `hatko-web`, then
+verifying against the artifact rather than the command: zero occurrences of `localhost:4000`
+in `apps/web/.next/static`, one of `hatko.tugrap.dev`, and `/api/session` answering 200 from
+the production origin in a browser.
+
+The guide now builds at the end of section 3 rather than in section 2, passes the variable
+explicitly instead of sourcing `.env` (which would put every secret in that file into the
+build environment), and prints the `grep` that proves it worked. The update procedure in
+section 8 had the same defect and carries the same command now.
+
+**Worth stating plainly, because it is the second time in this session:** every check I ran
+after the deploy was a check of the server. Health, discovery, the MCP challenge, the startup
+log, the process states. Not one of them could have caught this, because the broken artifact
+was the JavaScript sent to the browser. "Verified" has to name what was verified.
