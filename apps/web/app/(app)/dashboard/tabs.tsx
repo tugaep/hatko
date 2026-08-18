@@ -25,6 +25,7 @@ export const DASHBOARD_TABS = [
   { href: '/dashboard/models', label: 'Model configuration' },
   { href: '/dashboard/documents', label: 'Documents' },
   { href: '/dashboard/ingestion', label: 'Ingestion' },
+  { href: '/dashboard/mcp', label: 'MCP' },
   { href: '/dashboard/users', label: 'Users' },
 ] as const;
 

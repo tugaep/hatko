@@ -1,4 +1,4 @@
-export { config, REPO_ROOT, type Config } from './config.ts';
+export { config, mcpHostAllowlist, REPO_ROOT, type Config } from './config.ts';
 export * from './settings.ts';
 export {
   createRateLimiter,

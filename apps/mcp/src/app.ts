@@ -1,3 +1,4 @@
+import { MCP_TOOL_NAME } from '@hatko/shared';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { Hono } from 'hono';
@@ -8,6 +9,7 @@ import {
   ProviderError,
   RateLimitError,
   config,
+  mcpHostAllowlist,
   providerFailureText,
   requireMcpPermission,
   type SessionUser,
@@ -112,7 +114,7 @@ function buildServer(user: SessionUser): McpServer {
   );
 
   server.registerTool(
-    'search_corpus',
+    MCP_TOOL_NAME,
     {
       title: 'Search the internal corpus',
       description:
@@ -155,36 +157,19 @@ const RPC_UNAUTHORIZED = -32002;
 const RPC_INTERNAL = -32603;
 
 /**
- * Host headers accepted by the DNS-rebinding check.
+ * Host headers accepted by the DNS-rebinding check, from core.
  *
- * Every loopback spelling, with and without the port, because the `Host` header is
- * whatever the client typed and all of these name this machine: a client
- * configured with `127.0.0.1` sends one, a client on `localhost` sends another, and
- * a request whose port is implicit sends no port at all. Listing only
- * `localhost:${port}` would have turned a security control into an outage for
- * anyone who wrote the address differently — a control that blocks legitimate
- * callers gets switched off, which is worse than a narrower control that stays on.
+ * Derived there rather than here because the dashboard reports this same list — the guard
+ * runs after the bearer check, so no unauthenticated probe can reveal a missing hostname
+ * and reading the list is the only way to check it. Two derivations would drift, and the
+ * one that drifts is the one on the page saying everything is fine.
  *
- * `evil.example.com` is still rejected, which is the entire point: a page in the
- * user's browser cannot make this server answer under an attacker-controlled name.
- *
- * Deployed behind a reverse proxy, the `Host` arriving here is the public hostname, so
- * `MCP_ALLOWED_HOSTS` has to name it or every request becomes a 403. That is the failure
- * mode this control dies of in practice — an operator meets a blanket 403 on a fresh
- * deployment and turns the protection off rather than adding one hostname.
+ * Deployed behind a reverse proxy the arriving `Host` is the public hostname, so
+ * `MCP_ALLOWED_HOSTS` has to name it or every authenticated request becomes a 403. That is
+ * the failure mode this control dies of in practice: an operator meets a blanket 403 on a
+ * fresh deployment and switches the protection off rather than adding one hostname.
  */
-const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
-/**
- * Exported so the startup banner can print it. An operator has no other way to confirm
- * `MCP_ALLOWED_HOSTS` reached the process: the guard sits behind the bearer check, so an
- * unauthenticated probe is refused with a 401 whether the hostname is configured or not,
- * and the misconfiguration only appears later as a 403 for every real client.
- */
-export const allowedHosts = [
-  ...LOOPBACK_HOSTS,
-  ...LOOPBACK_HOSTS.map((host) => `${host}:${config.mcpPort}`),
-  ...config.mcpAllowedHosts,
-];
+export const allowedHosts = mcpHostAllowlist();
 
 /**
  * A JSON-RPC error envelope, with the HTTP status to send it under.

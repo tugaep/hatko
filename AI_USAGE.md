@@ -2785,3 +2785,51 @@ Verified in the browser: outline is `h1 Admin → h2 Embedding space → h2 Docu
 "Embedding space" rather than two, and the Corpus description gone.
 
 Typecheck clean, 280 tests passing, `next build` clean, prettier clean.
+
+---
+
+## Step 20 — an MCP tab, and the one setting that cannot be probed
+
+The MCP server is a separate process on its own port, so nothing else in the app knew
+anything about it: not the endpoint it advertises, not whether it was running, and not the
+hostnames it will answer to. All of that lived in a startup banner readable only over SSH,
+which is exactly where a misconfiguration hid through an entire deployment.
+
+**The host list is why this tab earns its place.** The rebinding guard runs after the
+bearer check, so an unauthenticated probe is refused with 401 whether or not the public
+hostname is configured — the mistake surfaces later, as a 403 for every real client at
+once. `docs/deployment.md` had to tell operators to `journalctl | grep hosts`. It is a page
+now.
+
+Which raised the obvious hazard: a _reported_ allowlist that has drifted from the
+_enforced_ one is worse than none, because it tells an operator their configuration is fine
+while every client is refused. So the derivation moved into `@hatko/core` as
+`mcpHostAllowlist`, called by the MCP server that enforces it and the API route that
+reports it — one decision in one place, which is the same argument `requireMcpPermission`
+makes about authorization. A test asserts the route returns exactly that function's output.
+The tool name made the same trip: it was a literal in `apps/mcp/src/app.ts` and again in
+its tests, and the dashboard would have been a third copy of a string that is a contract
+with every client already configured against it.
+
+The status probe is deliberately unauthenticated, because a 401 with `WWW-Authenticate`
+_is_ the healthy answer — it is what starts a client's OAuth flow. Three states rather than
+a boolean: `authenticating` (healthy), `unexpected` (something answered, but not the MCP
+server — check the proxy route), `unreachable`. "Reachable" as a boolean would have
+collapsed "refused me correctly" and "answered with somebody else's error page" into one
+green tick.
+
+**Where AI was wrong, and it was not subtle.** Adding `mcpHostAllowlist` to the API tests, I
+put the import at the top of the file. `app.test.ts` sets `process.env.DATABASE_PATH` at
+line 33 and defers every `@hatko/core` import until after it, precisely so `config.ts`
+snapshots the temporary database — and an ESM import is hoisted above that. Three unrelated
+tests began failing with `142 !== 2`: the whole suite had quietly switched to the real
+corpus. The failure named a document count, not an import, so the cause was two steps from
+the symptom. Fixed by joining the existing deferred import. Worth recording because the
+mistake is invisible in review — a correctly-spelled import of a module already used in the
+file, on the wrong line.
+
+Verified in the browser: the tab renders between Ingestion and Users, reports the local
+server as answering, lists all six accepted hosts, and prints the two discovery URLs and the
+`claude mcp add` command with the configured endpoint substituted in.
+
+Typecheck clean, 282 tests passing, `next build` clean with `/dashboard/mcp` emitted.

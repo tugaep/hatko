@@ -218,6 +218,30 @@ export const config = {
 
 export type Config = typeof config;
 
+/**
+ * Every `Host` value the MCP server will answer to.
+ *
+ * In core because two processes need the same answer: the MCP server enforces it, and the
+ * API reports it to the dashboard so an operator can read the list without SSH. Derived
+ * twice, it would drift, and the copy nobody looks at would be the one on the page telling
+ * someone their configuration is fine.
+ *
+ * Every loopback spelling, with and without the port, because the `Host` header is whatever
+ * the client typed and all of these name this machine. Listing only `localhost:${port}`
+ * turned a security control into an outage for anyone who wrote the address differently —
+ * and a control that blocks legitimate callers gets switched off, which is worse than a
+ * narrower control that stays on.
+ */
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+
+export function mcpHostAllowlist(): string[] {
+  return [
+    ...LOOPBACK_HOSTS,
+    ...LOOPBACK_HOSTS.map((host) => `${host}:${config.mcpPort}`),
+    ...config.mcpAllowedHosts,
+  ];
+}
+
 /** The value `.env.example` ships, so copying it unchanged is caught rather than accepted. */
 const PLACEHOLDER_SECRET = 'replace-me-with-a-random-32-byte-secret';
 

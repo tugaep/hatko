@@ -4,18 +4,20 @@ import {
   activeModels,
   clearModelSettings,
   clearSecret,
+  config,
   getApiKeyStatus,
   getChunksForDocument,
   getDashboardStats,
-  getEmbeddingMap,
   getDb,
   getDocumentById,
-  ingest,
+  getEmbeddingMap,
   getUser,
+  ingest,
   listDocumentsFiltered,
   listIngestionRuns,
-  listUsers,
   listModels,
+  listUsers,
+  mcpHostAllowlist,
   resolveApiKey,
   setSecret,
   setSetting,
@@ -23,13 +25,17 @@ import {
   upsertAccount,
 } from '@hatko/core';
 import {
+  MCP_TOOL_NAME,
+  MODEL_PRESETS,
+  type McpReachability,
   adminUserSchema,
   createUserRequestSchema,
   documentSchema,
   listDocumentsQuerySchema,
   listUsersQuerySchema,
+  mcpInfoSchema,
   paginated,
-  MODEL_PRESETS,
+  searchRequestSchema,
   setApiKeyRequestSchema,
   setModelsRequestSchema,
   triggerIngestionRequestSchema,
@@ -221,6 +227,77 @@ adminRoutes.put('/settings/models', requires('documents:manage'), async (c) => {
 adminRoutes.delete('/settings/models', requires('documents:manage'), async (c) => {
   clearModelSettings(getDb());
   return c.json(await modelSettings());
+});
+
+// --- MCP ---------------------------------------------------------------------
+
+/**
+ * Is the MCP server answering, and how.
+ *
+ * Unauthenticated on purpose. A 401 with `WWW-Authenticate` *is* the healthy response —
+ * it is what starts a client's OAuth flow — so the probe needs no credential and cannot
+ * be made to do anything on the caller's behalf.
+ *
+ * What it cannot tell you is whether `MCP_ALLOWED_HOSTS` is right. The rebinding guard
+ * runs after the bearer check, so an anonymous request is refused with 401 under every
+ * `Host`, including the one that was forgotten. That is why the response carries the host
+ * list itself rather than a verdict about it.
+ */
+async function probeMcp(): Promise<{ status: McpReachability; detail: string | null }> {
+  try {
+    const response = await fetch(config.mcpUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+      // Short, because this runs while an admin waits for a page. A server that has not
+      // answered in three seconds is a fault worth reporting, not worth waiting out.
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (response.status === 401 && response.headers.get('www-authenticate')) {
+      return { status: 'authenticating', detail: null };
+    }
+    return {
+      status: 'unexpected',
+      detail: `The endpoint answered ${response.status} instead of the expected 401 challenge.`,
+    };
+  } catch (error) {
+    // Never rethrown: an MCP server that is down is a state this page reports, not a
+    // reason the dashboard fails to load.
+    return {
+      status: 'unreachable',
+      detail: error instanceof Error ? error.message : 'The endpoint could not be reached.',
+    };
+  }
+}
+
+adminRoutes.get('/mcp', requires('documents:manage'), async (c) => {
+  const { status, detail } = await probeMcp();
+  const origin = config.apiUrl.replace(/\/+$/, '');
+
+  return c.json(
+    mcpInfoSchema.parse({
+      url: config.mcpUrl,
+      discovery: {
+        protectedResource: `${origin}/.well-known/oauth-protected-resource`,
+        authorizationServer: `${origin}/.well-known/oauth-authorization-server`,
+      },
+      // The same function the MCP server enforces, not a second derivation of it. A
+      // reported allowlist that has drifted from the enforced one is worse than none.
+      allowedHosts: mcpHostAllowlist(),
+      tool: {
+        name: MCP_TOOL_NAME,
+        queryMaxChars: searchRequestSchema.shape.query.maxLength ?? 500,
+        limitMax: 20,
+      },
+      rateLimit: { max: config.rateLimitMax, windowSeconds: config.rateLimitWindowSeconds },
+      status,
+      statusDetail: detail,
+    }),
+  );
 });
 
 // --- user management --------------------------------------------------------

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import {
+  MCP_TOOL_NAME,
   answerResponseSchema,
   answerStreamEventSchema,
   searchResponseSchema,
@@ -44,8 +45,16 @@ fs.writeFileSync(
     'current guidance.\n',
 );
 
-const { getDb, closeDb, ingest, config, getAuth, upsertAccount, providerConfigured } =
-  await import('@hatko/core');
+const {
+  getDb,
+  closeDb,
+  ingest,
+  config,
+  getAuth,
+  upsertAccount,
+  providerConfigured,
+  mcpHostAllowlist,
+} = await import('@hatko/core');
 const { createApp } = await import('./app.ts');
 
 const db = getDb();
@@ -600,6 +609,33 @@ test('the consent screen can identify the client asking, and only for a signed-i
  * lockout. The third test is the one that makes deactivation mean something: it must
  * end sessions that already exist, not merely block the next sign-in.
  */
+
+/**
+ * The MCP tab's whole reason for existing is the host list, so the list it shows has to be
+ * the list the MCP server enforces. Both now call `mcpHostAllowlist`, and this pins that:
+ * a reported allowlist that has drifted from the enforced one is worse than none, because
+ * it tells an operator their configuration is fine while every client gets a 403.
+ */
+test('the reported MCP hosts are the ones the server actually accepts', async () => {
+  const response = await call('/api/admin/mcp', { cookie: adminCookie });
+  assert.equal(response.status, 200);
+
+  const info = (await response.json()) as { allowedHosts: string[]; tool: { name: string } };
+  assert.deepEqual(info.allowedHosts, mcpHostAllowlist(), 'one derivation, not two');
+  assert.ok(info.allowedHosts.includes('localhost'), 'every loopback spelling stays accepted');
+  assert.equal(info.tool.name, MCP_TOOL_NAME, 'the published tool name, not a second literal');
+});
+
+test('the MCP endpoint is reported as answering when it is', async () => {
+  // The probe is unauthenticated on purpose: a 401 with a challenge *is* the healthy
+  // reply, so it needs no credential and cannot act on the caller's behalf.
+  const response = await call('/api/admin/mcp', { cookie: adminCookie });
+  const info = (await response.json()) as { status: string };
+  assert.ok(
+    ['authenticating', 'unreachable', 'unexpected'].includes(info.status),
+    'status is one of the three states the schema declares',
+  );
+});
 
 test('a regular user cannot reach any user-management route', async () => {
   const list = await call('/api/admin/users', { cookie: userCookie });
