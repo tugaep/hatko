@@ -2600,3 +2600,59 @@ Verified on the live domain after deployment: search returning the right documen
 judged 1.00, a grounded answer citing `sdk-notes-v3.md` with the v2 deprecation notice,
 `"No documents cover this."` with zero citations on the salary question, the MCP tool over
 a bearer token, and the new demo user reaching search with 200 and the admin stats with 403.
+
+---
+
+## Step 16 — the admin area split into sections
+
+The dashboard had become the place every admin control ended up: index statistics, the
+provider key, model selection, the embedding projection, the category breakdown, the
+document list, ingestion history and user management, on one scrolling page. Each panel
+was individually reasonable and the page had no stated subject.
+
+Split into five routes under `/dashboard` — overview, model configuration, documents,
+ingestion, users — with a shared layout carrying the gate and the tab strip.
+
+**Routes rather than client-side tab state**, and not for purity: every one of these is
+somewhere a person needs to send someone else. "The ingestion history" is a link, the back
+button works, and a failed run can be reopened where it was left. `useState` gives none of
+that and costs the same to write. It also splits the fetching — opening Users no longer
+pulls the embedding projection — which was already the intent behind loading each panel
+independently, carried one level up.
+
+**The gate moved to the layout**, one `requirePermission` for all five, so a page added
+under that directory inherits the check rather than having to remember it. That is the
+failure mode of a per-page gate and it costs nothing to avoid here.
+
+**Documents leads with the embedding projection**, as asked, and the ordering is the
+argument the retriever rests on: 78 near-identical delivery reports collapse into one
+indistinguishable cluster, which is why the lexical arm exists and why fusion is not
+over-engineering. Read the document table first and the corpus looks like 142 unrelated
+files; see the cluster first and every later decision has a reason attached.
+
+Two things the split broke, both caught by opening the pages rather than by the compiler:
+
+The setup checklist pointed at scroll anchors — `#setup-key`, `#setup-models`,
+`#setup-ingestion` — which no longer existed anywhere, since the panels they named had
+moved to other routes. Its steps are routes now, so the button navigates. The first
+attempt at that used `<Button as={Link}>`, which the shared `Button` does not support; it
+renders a `<button>` and has no polymorphic prop. Rather than add one for a single caller,
+the handler uses the router.
+
+And the top nav highlights by exact path, so `Dashboard` went dark the moment any tab but
+the first was open — the surface you were looking at claimed you were somewhere else. A
+prefix match fixes it, and the two `aria-current` markers now mean different things
+correctly: the nav marks the area, the tab strip marks the section within it.
+
+`IngestionPanel`'s `onIngested` callback would have become a silent no-op. It reloaded the
+overview's statistics because both lived on one page; across tabs there was nothing left
+to reload, so a run would have changed the index while the panel kept reporting the counts
+it read on mount. The ingestion tab fetches its own statistics and passes its own reload.
+
+Verified in a browser, all five tabs: the correct section marked active in the strip while
+the nav keeps the area lit, 69-option model selects still populated, the embedding plot
+rendering with its dense cluster visible, two accounts listed with no errors, and on a
+375px viewport the tab strip scrolling horizontally rather than reflowing to two rows.
+
+Typecheck clean, 280 tests passing, `next build` clean with all five routes emitted,
+prettier clean.

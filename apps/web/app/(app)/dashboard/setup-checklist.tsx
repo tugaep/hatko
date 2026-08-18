@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { modelSettingsSchema, secretStatusSchema, type DashboardStats } from '@hatko/shared';
 import { useApi } from '../../../lib/use-api.ts';
 import { Button, Eyebrow, LabelFrame } from '../../../components/ui.tsx';
@@ -31,6 +32,7 @@ interface Step {
   done: boolean;
   /** What to do, when it is not done yet. */
   todo: string;
+  /** The tab that completes it. A route, since each step now owns a page of its own. */
   href: string;
 }
 
@@ -45,6 +47,7 @@ export function SetupChecklist({
   // down through the dashboard, because the alternative is lifting two pieces of state
   // into a parent that has no other use for them, purely to serve a component that
   // deletes itself once setup is finished.
+  const router = useRouter();
   const key = useApi('/api/admin/settings/api-key', secretStatusSchema);
   const models = useApi('/api/admin/settings/models', modelSettingsSchema);
 
@@ -57,7 +60,7 @@ export function SetupChecklist({
       title: 'Provider credential',
       done: key.data.configured,
       todo: 'Add an OpenAI API key, or point the system at a local model server that needs none.',
-      href: '#setup-key',
+      href: '/dashboard/models',
     },
     {
       title: 'Model reachable',
@@ -65,13 +68,13 @@ export function SetupChecklist({
       todo:
         models.data.availability.error ??
         'Choose a configuration and confirm the provider answers.',
-      href: '#setup-models',
+      href: '/dashboard/models',
     },
     {
       title: 'Corpus indexed',
       done: stats.index.chunksTotal > 0,
       todo: `Run ingestion. ${stats.index.documentsTotal || 142} documents, one embedding call each.`,
-      href: '#setup-ingestion',
+      href: '/dashboard/ingestion',
     },
   ];
 

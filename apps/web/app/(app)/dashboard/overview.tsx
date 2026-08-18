@@ -12,31 +12,27 @@ import {
   SkeletonLine,
   cx,
 } from '../../../components/ui.tsx';
-import { ApiKeyPanel } from './api-key-panel.tsx';
-import { ModelsPanel } from './models-panel.tsx';
-import { DocumentsPanel } from './documents-panel.tsx';
-import { EmbeddingPanel } from './embedding-panel.tsx';
-import { IngestionPanel } from './ingestion-panel.tsx';
-import { UsersPanel } from './users-panel.tsx';
 import { SetupChecklist } from './setup-checklist.tsx';
+import { Figure, Group } from './panels.tsx';
 
 /**
- * The admin surface: what is indexed, whether the last ingest was clean, and what people
- * are asking. Each panel loads independently, so one failing endpoint leaves the rest of
- * the page usable rather than blanking it.
+ * The Dashboard tab: what is indexed, whether the index is sound, and what people ask.
+ *
+ * Reporting only. Everything that *changes* the system moved to its own tab — models,
+ * documents, ingestion, users — which is what lets this page state its purpose in one
+ * line instead of being the place every admin control ended up. Each panel still loads
+ * independently, so one failing endpoint leaves the rest usable.
  */
-export function Dashboard() {
+export function Overview() {
   const stats = useApi('/api/admin/stats', dashboardStatsSchema);
 
   return (
-    <div className="grid gap-12 py-6 pb-[calc(var(--nav-h)+3rem)] sm:py-8">
+    <div className="grid gap-12">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-h1 text-text">Dashboard</h1>
-          <p className="mt-2 max-w-[60ch] text-body-sm text-text-muted">
-            Corpus, index health, ingestion history and search behaviour.
-          </p>
-        </div>
+        <p className="max-w-[60ch] text-body-sm text-text-muted">
+          What is indexed, whether the index is sound, and what people are asking. The other tabs
+          change things; this one reports.
+        </p>
         <Button variant="secondary" size="sm" onClick={stats.reload} loading={stats.loading}>
           Refresh
         </Button>
@@ -62,29 +58,8 @@ export function Dashboard() {
            */}
           <Group title="Index">
             <StatTiles stats={stats.data} />
-            {/* `items-start` so each card keeps its own height — a stretched card with dead
-                space at the bottom reads as a rendering bug. */}
-            <div className="grid items-start gap-6 lg:grid-cols-2">
-              <IndexHealthPanel health={stats.data?.index ?? null} />
-              {/* `scroll-mt` so the sticky header does not cover the heading it lands on. */}
-              <div id="setup-key" className="scroll-mt-20">
-                <ApiKeyPanel />
-              </div>
-            </div>
-            {/* Beside the key, because the provider and the credential are one decision. */}
-            <div id="setup-models" className="scroll-mt-20">
-              <ModelsPanel />
-            </div>
-            <CategoryPanel byCategory={stats.data?.byCategory ?? null} />
-            {/* Last in the section, because it is the only panel that explains *why* the
-                retriever is built the way it is rather than reporting its state. */}
-            <EmbeddingPanel />
+            <IndexHealthPanel health={stats.data?.index ?? null} />
           </Group>
-
-          <div id="setup-ingestion" className="scroll-mt-20">
-            <IngestionPanel onIngested={stats.reload} />
-          </div>
-          <DocumentsPanel />
 
           <Group
             title="Search"
@@ -92,40 +67,11 @@ export function Dashboard() {
           >
             <SearchStatsPanel search={stats.data?.search ?? null} />
           </Group>
-
-          <UsersPanel />
         </>
       )}
     </div>
   );
 }
-
-/** A titled section. The heading is the same Fraunces h2 the other sections use. */
-function Group({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  const id = `group-${title.toLowerCase()}`;
-  return (
-    <section aria-labelledby={id} className="grid gap-4">
-      <div>
-        <h2 id={id} className="font-display text-h2 text-text">
-          {title}
-        </h2>
-        {description && <p className="mt-1 text-body-sm text-text-muted">{description}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-// --- stat tiles -------------------------------------------------------------
-
 function StatTiles({ stats }: { stats: DashboardStats | null }) {
   const tiles = stats
     ? [
@@ -256,21 +202,6 @@ function IndexHealthPanel({ health }: { health: IndexHealth | null }) {
     </LabelFrame>
   );
 }
-
-/**
- * One labelled figure. A `<dl>` of these replaces the dot-delimited metadata strings the
- * dashboard was full of: `14 days · peak 3 · 8 in the last 7` reads as one opaque token,
- * three labelled pairs read as three measurements.
- */
-function Figure({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-1.5">
-      <dt>{label}</dt>
-      <dd className="tabular text-text">{children}</dd>
-    </div>
-  );
-}
-
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
@@ -402,39 +333,5 @@ function SearchStatsPanel({ search }: { search: DashboardStats['search'] | null 
         )}
       </div>
     </div>
-  );
-}
-
-function CategoryPanel({ byCategory }: { byCategory: DashboardStats['byCategory'] | null }) {
-  if (!byCategory || byCategory.length === 0) return null;
-  const most = Math.max(...byCategory.map((row) => row.documents));
-
-  return (
-    <LabelFrame title={<Eyebrow as="h3">Documents by category</Eyebrow>}>
-      <ul className="grid gap-3">
-        {byCategory.map((row) => (
-          <li key={row.category} className="grid gap-1">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="text-body-sm text-text">{row.category}</span>
-              <dl className="text-mono-label tabular flex shrink-0 gap-x-4 font-mono text-text-muted">
-                <Figure label="docs">{row.documents}</Figure>
-                <Figure label="passages">{row.chunks}</Figure>
-              </dl>
-            </div>
-            {/*
-             * 6px, not 3px. At 3px in a system whose primary structural device is the 1px
-             * rule, a bar at or near 100% is indistinguishable from a divider — the
-             * largest category read as a horizontal line under its own label.
-             */}
-            <span aria-hidden="true" className="block h-1.5 bg-bg-sunken">
-              <span
-                className="block h-full bg-brand"
-                style={{ width: `${Math.round((row.documents / most) * 100)}%` }}
-              />
-            </span>
-          </li>
-        ))}
-      </ul>
-    </LabelFrame>
   );
 }

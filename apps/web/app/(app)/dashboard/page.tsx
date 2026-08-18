@@ -1,12 +1,6 @@
-import { requirePermission } from '../../../lib/session.ts';
-import { Dashboard } from './dashboard.tsx';
+import { Overview } from './overview.tsx';
 
-/**
- * Admin-only. The gate runs on the server, so a regular user never receives this page's
- * markup — and every endpoint it calls is independently gated on the API, so bypassing
- * the redirect would still get 403s rather than data.
- */
-export default async function DashboardPage() {
-  await requirePermission('dashboard:view', '/dashboard');
-  return <Dashboard />;
+/** The Dashboard tab. Gated by the layout, which every section here shares. */
+export default function DashboardPage() {
+  return <Overview />;
 }

@@ -24,6 +24,13 @@ const ITEMS = [
 
 export function Shell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   const pathname = usePathname();
+
+  /**
+   * Prefix match, not equality. The admin area is five routes under /dashboard now, and
+   * an exact comparison unlit the nav item as soon as any tab but the first was open —
+   * so the surface you were looking at claimed you were somewhere else.
+   */
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const items = ITEMS.filter((item) => can(user.role, item.permission));
   // A single nav entry does not earn a bottom bar; one link belongs in the top bar alone.
   const bottomBar = items.length > 1;
@@ -47,7 +54,7 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
           {/* Top bar from tablet up; phones get the bottom bar instead. */}
           <nav aria-label="Main" className="hidden md:flex md:items-center md:gap-1">
             {items.map((item) => (
-              <TopLink key={item.href} href={item.href} active={pathname === item.href}>
+              <TopLink key={item.href} href={item.href} active={isActive(item.href)}>
                 {item.label}
               </TopLink>
             ))}
@@ -76,7 +83,7 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
           <ul className="flex">
             {items.map((item) => (
               <li key={item.href} className="flex-1">
-                <BottomLink href={item.href} active={pathname === item.href}>
+                <BottomLink href={item.href} active={isActive(item.href)}>
                   {item.label}
                 </BottomLink>
               </li>
