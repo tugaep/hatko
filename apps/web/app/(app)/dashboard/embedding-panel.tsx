@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { embeddingMapSchema, type EmbeddingMap, type EmbeddingPoint } from '@hatko/shared';
 import { useApi } from '../../../lib/use-api.ts';
 import { ErrorCard, Eyebrow, LabelFrame, SkeletonLine } from '../../../components/ui.tsx';
+import { DocumentDialog } from './document-dialog.tsx';
 
 /**
  * The corpus as its vectors see it.
@@ -100,6 +101,17 @@ function Plot({ map }: { map: EmbeddingMap }) {
    * there permanently telling someone something they now know.
    */
   const [turned, setTurned] = useState(false);
+  /** The document a click opened, or null. */
+  const [opened, setOpened] = useState<{ id: number; title: string } | null>(null);
+  /**
+   * How far the pointer travelled since it went down.
+   *
+   * A rotation and a selection are the same gesture until the pointer moves, so the two
+   * are told apart at pointer-up by distance rather than by mode. Without it, every drag
+   * that happened to start on a point would also open that document — and on a cloud
+   * where 78 points sit in one cluster, that is most drags.
+   */
+  const pressRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
 
   /**
@@ -165,6 +177,10 @@ function Plot({ map }: { map: EmbeddingMap }) {
     const x = event.clientX - box.left;
     const y = event.clientY - box.top;
 
+    const press = pressRef.current;
+    // 4px, so a click with an unsteady hand still selects rather than rotating by a pixel.
+    if (press && Math.hypot(x - press.x, y - press.y) > 4) press.moved = true;
+
     const drag = dragRef.current;
     if (drag) {
       rotate(x - drag.x, y - drag.y);
@@ -211,13 +227,30 @@ function Plot({ map }: { map: EmbeddingMap }) {
           className="cursor-grab touch-none outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-focus"
           onPointerDown={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
-            dragRef.current = { x: event.clientX - box.left, y: event.clientY - box.top };
+            const at = { x: event.clientX - box.left, y: event.clientY - box.top };
+            dragRef.current = at;
+            pressRef.current = { ...at, moved: false };
             setTurned(true);
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerUp={(event) => {
             dragRef.current = null;
             event.currentTarget.releasePointerCapture(event.pointerId);
+
+            const press = pressRef.current;
+            pressRef.current = null;
+            if (!press || press.moved) return;
+
+            // The point under the release, not the one under the last hover: on a touch
+            // screen there is no hover, so `hovered` is null on the first tap.
+            const box = event.currentTarget.getBoundingClientRect();
+            const index = nearest(
+              projectedRef.current,
+              event.clientX - box.left,
+              event.clientY - box.top,
+            );
+            const hit = index === null ? null : map.points[index];
+            if (hit) setOpened({ id: hit.documentId, title: hit.title });
           }}
           onPointerLeave={() => {
             dragRef.current = null;
@@ -234,6 +267,17 @@ function Plot({ map }: { map: EmbeddingMap }) {
               ArrowUp: [0, -step],
               ArrowDown: [0, step],
             };
+            if (event.key === 'Enter' || event.key === ' ') {
+              // Keyboard parity: rotation already had arrow keys, so selection needs a key
+              // too or the document behind a passage is reachable by pointer only.
+              const focused = hovered === null ? null : map.points[hovered];
+              if (focused) {
+                event.preventDefault();
+                setOpened({ id: focused.documentId, title: focused.title });
+              }
+              return;
+            }
+
             const move = moves[event.key];
             if (!move) return;
             event.preventDefault();
@@ -282,6 +326,14 @@ function Plot({ map }: { map: EmbeddingMap }) {
           </p>
         )}
       </div>
+
+      {opened && (
+        <DocumentDialog
+          documentId={opened.id}
+          title={opened.title}
+          onClose={() => setOpened(null)}
+        />
+      )}
 
       {/*
        * Stated once, under the plot, and permanently — the badge above retires after the

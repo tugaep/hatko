@@ -30,6 +30,7 @@ import {
   type McpReachability,
   adminUserSchema,
   createUserRequestSchema,
+  documentDetailSchema,
   documentSchema,
   listDocumentsQuerySchema,
   listUsersQuerySchema,
@@ -90,7 +91,7 @@ adminRoutes.get('/documents/:id', requires('documents:manage'), (c) => {
   const document = getDocumentById(db, id);
   if (!document) throw new HttpError('not_found', `No document with id ${id}.`);
 
-  return c.json({ document, chunks: getChunksForDocument(db, id) });
+  return c.json(documentDetailSchema.parse({ document, chunks: getChunksForDocument(db, id) }));
 });
 
 adminRoutes.get('/ingestion/runs', requires('documents:manage'), (c) =>

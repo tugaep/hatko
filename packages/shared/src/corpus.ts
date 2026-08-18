@@ -52,6 +52,21 @@ export const chunkSchema = z.object({
 export type Chunk = z.infer<typeof chunkSchema>;
 
 /**
+ * One document with every passage that was indexed from it.
+ *
+ * The shape `GET /api/admin/documents/:id` has always returned, declared here because it
+ * now has a second reader: clicking a point in the embedding plot opens the document that
+ * passage came from. It was the one admin route answering with an unvalidated object
+ * literal — fine while a single component consumed it by inspection, not fine as a
+ * contract two surfaces parse.
+ */
+export const documentDetailSchema = z.object({
+  document: documentSchema,
+  chunks: z.array(chunkSchema),
+});
+export type DocumentDetail = z.infer<typeof documentDetailSchema>;
+
+/**
  * One execution of the ingestion pipeline. The brief requires ingestion to be
  * "repeatable and observable"; this table is the observable part, and the
  * per-outcome counts are what the dashboard renders.

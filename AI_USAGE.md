@@ -2833,3 +2833,49 @@ server as answering, lists all six accepted hosts, and prints the two discovery 
 `claude mcp add` command with the configured endpoint substituted in.
 
 Typecheck clean, 282 tests passing, `next build` clean with `/dashboard/mcp` emitted.
+
+---
+
+## Step 21 — clicking a point opens the passage it stands for
+
+The plot's claim is that distance in it is distance in the space retrieval actually
+searches. Until now the only way to test that claim was to hover two neighbours and read
+their titles, which is not enough to judge whether they belong together. Clicking a point
+now opens the document it came from, with the indexed passage text.
+
+**Click and rotate are the same gesture** until the pointer moves, so they are told apart
+at pointer-up by distance — 4px, which forgives an unsteady hand — rather than by a mode
+switch. Without that, every drag beginning on a point would also open it, and on a cloud
+where 78 of 142 points sit in one cluster that is most drags. The point is taken from where
+the pointer was released rather than from the last hover, because a touch screen has no
+hover and `hovered` is null on a first tap. Enter and Space open the hovered point, so
+selection has the keyboard route rotation already had.
+
+**A native `<dialog>` with `showModal()`**, which is why there is no focus-trap code, no
+Escape handler, no `aria-modal`, and no scroll lock: the platform does all of it, including
+returning focus to the canvas on close. The close button is a `<form method="dialog">`, so
+it works even if the effect that opened it never ran.
+
+`GET /api/admin/documents/:id` was the one admin route answering with an unvalidated object
+literal — fine while a single component consumed it by inspection, not fine as a contract a
+second surface parses. It now returns `documentDetailSchema`, declared in shared beside the
+`document` and `chunk` schemas it composes.
+
+**Two failures worth recording, neither of them in the feature.**
+
+Adding the schema import, a regex meant to extend one import block matched across two and
+merged them, producing `import {,` inside the list. Repaired by taking both blocks verbatim
+from `git show HEAD` and re-applying the single name, then diffing the file to confirm the
+change was exactly two lines. Mechanical edits to import lists have now broken this file
+twice; reading the diff afterwards is what caught both.
+
+Then the dev server showed the plot at 2×2 pixels and Turbopack reported `projected is
+defined multiple times` — an error from a state the file had been in an hour earlier. The
+production build compiled clean, `tsc` passed, and the source had one `projected`. The dev
+server had been left inconsistent by this session's churn, including a module deleted out
+from under it. Worth recording because the honest reading of a stale HMR error is "restart
+and re-check", not "start editing to satisfy it".
+
+Verification of the interaction itself was done against the deployment rather than locally:
+a production build served on another port is cross-origin to the API, whose allowed origin
+is the dev port, so the CORS policy that protects the session also blocks that shortcut.
