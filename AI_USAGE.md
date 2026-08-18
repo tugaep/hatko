@@ -2958,3 +2958,47 @@ floor the page scrolls, which is the right trade for a picture you inspect.
 
 Verified at commit time: typecheck clean, 282 tests passing, prettier clean, and
 `next build` clean with all eleven routes emitted.
+
+---
+
+## Step 23 — the README rewritten for the evaluation, and one fabricated example
+
+Written by reading the code of every step rather than the notes about it: the API routes for
+the endpoint tables, the shared schemas for the request and response shapes, the retrieval
+and answer modules for the design-decision section, and the migrations for the storage
+description.
+
+**The mistake worth recording is a fabricated example, and it is exactly the failure this
+system exists to prevent.** The first draft illustrated `POST /api/answer` with a plausible
+response to "How do I call the analytics tracking API?", including an answer sentence,
+citation ids and a deprecation notice. None of it came from a run. Running the question
+through `npm run ask` showed the corpus abstains on it, so the example was not merely
+inaccurate in its details: it documented an answer where the product correctly refuses to
+give one. A README asserting confident output from a question the system declines is the
+paper version of the hallucination the abstain path is built to stop.
+
+Every example in the file is now real output. The answer example is verbatim from sample
+question 2, with `chunkId` and `documentId` read out of the database rather than guessed.
+The abstention is a question that actually abstains. The ingestion run is row 8 from
+`ingestion_runs`. The search figures come from a run whose numbers happen to demonstrate the
+argument the surrounding paragraph makes, since `guides/asset-naming.md` scored highest on
+fusion at 0.1742 and was graded 0.33, while `build-pipeline.md` at 0.1678 was graded 1.00.
+
+**Numbers were re-measured rather than copied.** `npm run typecheck && npm test` for the 282
+tests, `npm run eval -- --rerank --answers` for recall and the 12 of 12 answer checks, and
+`curl` against the deployment for the live health response. The eval run also printed
+`[overlapping — no usable threshold]` for every arm's fused scores, which is the measurement
+behind the claim that abstention has to be decided on the judged grade.
+
+**Two rounds of cutting.** The first draft ran to 998 lines and was reorganised to the eight
+sections the brief's documentation note asks for after the operator pointed out that it asks
+for a README that is simple and to the point. Then a pass for AI writing tells removed 51 em
+dashes and 3 en dashes, unpacked a bullet list where every item opened with a bolded noun
+phrase, and thinned fifteen "X rather than Y" constructions down to nine. The construction
+is genuinely this repository's voice, so it was reduced where it carried only rhythm and kept
+where it carries an argument.
+
+One process note: a lead-in line above the `.env` excerpt went missing between edits, leaving
+two code fences adjacent with nothing between them. Caught by a script that looks for exactly
+that shape, along with unbalanced fences and links that do not resolve, which is cheaper than
+re-reading 700 lines.
