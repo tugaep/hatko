@@ -163,8 +163,8 @@ export function Chat({ denied }: { denied?: Permission }) {
         <header>
           <h1 className="font-display text-h1 text-text">Ask the corpus</h1>
           <p className="mt-2 max-w-[60ch] text-body-sm text-text-muted">
-            Answers are written only from indexed passages, and every claim carries the source it
-            came from.
+            Every answer comes from indexed passages, and each claim carries the passage it came
+            from.
           </p>
         </header>
 

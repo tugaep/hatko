@@ -1,10 +1,9 @@
 import {
   getDb,
   hasGroundedSupport,
-  hybridSearch,
   recordSearchQuery,
-  rerank,
   retrievalRateLimiter,
+  retrieveAndRerank,
   type SessionUser,
 } from '@hatko/core';
 import { searchRequestSchema, type SearchResult } from '@hatko/shared';
@@ -150,11 +149,12 @@ export async function runSearchTool(
   const db = getDb();
   const started = performance.now();
 
-  const retrieved = await hybridSearch(db, query, {
+  // Same ordering as the HTTP route, through the same function: judged first, cut second.
+  // A client asking for one passage gets the best-judged one, not the best-fused one.
+  const results = await retrieveAndRerank(db, query, {
     limit,
     ...(category ? { category } : {}),
   });
-  const results = await rerank(query, retrieved);
   const latencyMs = Math.round(performance.now() - started);
 
   const abstained = hasGroundedSupport(results) === false;

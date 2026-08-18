@@ -56,7 +56,6 @@ export const providerAvailabilitySchema = z.object({
   /** Why the probe failed, safe to show an admin. Null when it succeeded. */
   error: z.string().nullable(),
 });
-export type ProviderAvailability = z.infer<typeof providerAvailabilitySchema>;
 
 export const modelSettingsSchema = z.object({
   active: activeModelsSchema,
@@ -69,7 +68,6 @@ export const setModelsRequestSchema = z.object({
   answerModel: z.string().trim().min(1).max(120),
   rerankModel: z.string().trim().min(1).max(120),
 });
-export type SetModelsRequest = z.infer<typeof setModelsRequestSchema>;
 
 /**
  * How to obtain a preset's models when the server does not have them.

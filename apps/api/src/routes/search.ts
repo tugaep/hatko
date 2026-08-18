@@ -4,9 +4,8 @@ import {
   answerQuestion,
   getDb,
   hasGroundedSupport,
-  hybridSearch,
   recordSearchQuery,
-  rerank,
+  retrieveAndRerank,
 } from '@hatko/core';
 import {
   answerRequestSchema,
@@ -48,11 +47,12 @@ searchRoutes.post('/search', requires('search:run'), throttle(), async (c) => {
   const db = getDb();
   const started = performance.now();
 
-  const retrieved = await hybridSearch(db, body.query, {
+  // Graded before it is truncated: `limit` decides how many passages come back, never how
+  // many the reranker was allowed to read. See retrieveAndRerank.
+  const results = await retrieveAndRerank(db, body.query, {
     limit: body.limit,
     ...(body.category ? { category: body.category } : {}),
   });
-  const results = await rerank(body.query, retrieved);
   const latencyMs = Math.round(performance.now() - started);
 
   // Search analytics feed the dashboard. `abstained` here means the reranker found

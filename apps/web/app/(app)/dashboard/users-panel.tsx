@@ -76,7 +76,7 @@ export function UsersPanel() {
         title={
           <Eyebrow as="h3">
             Accounts
-            {users.data ? ` — ${users.data.total}` : ''}
+            {users.data ? `, ${users.data.total}` : ''}
           </Eyebrow>
         }
       >
@@ -284,7 +284,7 @@ function AddUserForm({ onAdded }: { onAdded: () => void }) {
         <Field
           label="Initial password"
           htmlFor="new-user-password"
-          hint="At least 8 characters. Pass it on yourself — Hatko sends no email."
+          hint="At least 8 characters. Pass it on yourself, because hatko sends no email."
         >
           {/*
            * `type="text"`, deliberately. The administrator has to read this value in
@@ -315,8 +315,8 @@ function AddUserForm({ onAdded }: { onAdded: () => void }) {
             onChange={(event) => setRole(roleSchema.parse(event.target.value))}
             className="h-10 w-full rounded-sm border border-border-interactive bg-bg px-3 text-body-sm text-text"
           >
-            <option value="user">User — can search and ask questions</option>
-            <option value="admin">Admin — can also manage the corpus and accounts</option>
+            <option value="user">User: can search and ask questions</option>
+            <option value="admin">Admin: can also manage the corpus and accounts</option>
           </select>
         </Field>
 

@@ -36,6 +36,10 @@ documentation.md
 CLAUDE.md
 !/CLAUDE.md
 
+# Agent tooling. `.claude/launch.json` describes how to start the dev servers, which
+# `package.json` and the README already state for a person; the rest is session state.
+.claude/
+
 # Design-review tool output. The findings that mattered are in AI_USAGE.md; the
 # snapshot itself is a local backlog, not a deliverable.
 .impeccable/

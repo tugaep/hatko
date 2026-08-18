@@ -1,8 +1,5 @@
-import type { Metadata } from 'next';
 import { requirePermission } from '../../../lib/session.ts';
 import { Dashboard } from './dashboard.tsx';
-
-export const metadata: Metadata = { title: 'Dashboard' };
 
 /**
  * Admin-only. The gate runs on the server, so a regular user never receives this page's

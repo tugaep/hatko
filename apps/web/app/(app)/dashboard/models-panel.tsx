@@ -188,10 +188,10 @@ export function ModelsPanel() {
        * abstain on phrasings the eval set does not contain.
        */}
       <p className="mt-4 border-t border-rule pt-4 text-body-sm text-text-muted">
-        Self-hosted models are supported at a basic level: one validated configuration, matching the
-        hosted provider on this corpus&rsquo;s eval set. It is slower, it needs about 5 GB of local
-        models, and smaller models than the one listed were measured and rejected for failing to
-        abstain. OpenAI remains the default and the recommended configuration.
+        Self-hosted models work at a basic level. One configuration is validated, and it matches the
+        hosted provider on this corpus&rsquo;s eval set. It runs slower and wants about 5 GB of
+        local models on disk. Smaller models were measured too, and dropped because they would not
+        abstain. OpenAI stays the default.
       </p>
 
       <div className="mt-4 grid gap-4 border-t border-rule pt-4">
@@ -252,8 +252,8 @@ export function ModelsPanel() {
               </span>
             </p>
             <p className="mt-2 text-body-sm text-text-muted">
-              Vectors from two embedding models cannot be compared, so this cannot be changed from
-              here. Set it in <span className="font-mono">.env</span> and rebuild the index — search
+              Vectors from two embedding models cannot be compared, so this page will not change it.
+              Set it in <span className="font-mono">.env</span> and rebuild the index. Search
               returns nothing until you do.
             </p>
             <Commands

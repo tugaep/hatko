@@ -7,7 +7,6 @@ export const searchRequestSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(8),
   category: documentCategorySchema.optional(),
 });
-export type SearchRequest = z.infer<typeof searchRequestSchema>;
 
 /**
  * A retrieved passage with its provenance and the scores that produced it.
@@ -46,7 +45,6 @@ export const searchResponseSchema = z.object({
   results: z.array(searchResultSchema),
   latencyMs: z.number().int().min(0),
 });
-export type SearchResponse = z.infer<typeof searchResponseSchema>;
 
 /** A numbered reference from the answer text back to the passage that supports it. */
 export const citationSchema = z.object({
@@ -63,7 +61,6 @@ export type Citation = z.infer<typeof citationSchema>;
 export const answerRequestSchema = z.object({
   query: z.string().trim().min(2).max(500),
 });
-export type AnswerRequest = z.infer<typeof answerRequestSchema>;
 
 /**
  * A superseded document among the passages behind an answer.

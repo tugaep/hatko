@@ -31,6 +31,11 @@ export {
 export { hybridSearch, type HybridOptions, type RetrievalArm } from './retrieval/search.ts';
 export { extractTerms, toFtsQuery } from './retrieval/query.ts';
 export {
+  retrieveAndRerank,
+  MIN_RERANK_CANDIDATES,
+  type RetrieveOptions,
+} from './retrieval/retrieve.ts';
+export {
   rerank,
   hasGroundedSupport,
   RELEVANCE,
@@ -65,6 +70,7 @@ export {
   getUser,
   updateUser,
   UserManagementError,
+  UserNotFoundError,
   type ListUsersOptions,
   type ListUsersResult,
   type UpdateUserChanges,

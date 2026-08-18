@@ -90,8 +90,8 @@ function Abstained() {
       <PressedLeafSpecimen />
       <h2 className="font-display text-h2 mt-4 text-text">No documents cover this.</h2>
       <p className="mt-2 max-w-[46ch] text-body-sm text-text-muted">
-        Hatko answers only from the indexed corpus, and nothing in it addresses this question. The
-        nearest passages it found are listed alongside, with their scores.
+        Answers come only from the indexed corpus, and nothing in it addresses this question. The
+        nearest passages it found are alongside, with their scores.
       </p>
       {/*
        * Not a dead end. The question is already recorded in the corpus-gap list an admin
@@ -99,7 +99,7 @@ function Abstained() {
        * loop. Stated rather than linked: a regular user cannot open that page.
        */}
       <p className="mt-4 max-w-[46ch] border-t border-rule pt-4 text-caption text-text-muted">
-        This question is recorded as a corpus gap. An administrator sees it on the dashboard as a
+        hatko records this question as a corpus gap. An administrator sees it on the dashboard as a
         document worth writing.
       </p>
     </div>

@@ -121,6 +121,11 @@ CREATE TRIGGER chunks_after_delete AFTER DELETE ON chunks BEGIN
   DELETE FROM chunks_vec WHERE rowid = old.id;
 END;
 
+-- Keeps chunks_fts correct for an UPDATE, and cannot keep chunks_vec correct, since a new
+-- embedding is a network call. Migration 009 therefore refuses an in-place edit of the text
+-- outright, so this now only ever runs for a same-text write. Left in place because it is
+-- what makes that guarantee cheap to state: FTS is maintained here, and 009 removes the one
+-- case where doing so would have been half the job.
 CREATE TRIGGER chunks_after_update AFTER UPDATE ON chunks BEGIN
   INSERT INTO chunks_fts (chunks_fts, rowid, heading, content)
   VALUES ('delete', old.id, old.heading, old.content);

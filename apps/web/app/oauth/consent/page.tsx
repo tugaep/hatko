@@ -1,12 +1,9 @@
-import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { can, oauthClientSchema, type OauthClient } from '@hatko/shared';
 import { API_URL } from '../../../lib/api.ts';
 import { requireUser } from '../../../lib/session.ts';
 import { Logo, Wordmark } from '../../../components/marks.tsx';
 import { ConsentForm } from './consent-form.tsx';
-
-export const metadata: Metadata = { title: 'Authorize a client' };
 
 /**
  * The OAuth consent screen, shown when an MCP client asks for access to the corpus.
@@ -30,7 +27,7 @@ export const metadata: Metadata = { title: 'Authorize a client' };
  * unexplained scope is a reason to hesitate, so hiding it would be the wrong way round.
  */
 const SCOPE_MEANINGS: Record<string, string> = {
-  openid: 'Confirm which Hatko account you are',
+  openid: 'Confirm which hatko account you are',
   profile: 'Read your name',
   email: 'Read your email address',
   offline_access: 'Stay connected without asking you again each time',
@@ -100,9 +97,8 @@ export default async function ConsentPage({
       <Shell>
         <h1 className="font-display text-h2 text-text">Nothing to authorize</h1>
         <p className="mt-3 text-body-sm text-text-muted">
-          This page is shown when an application asks for access to the corpus. It was opened
-          directly, so there is no pending request. Start from your MCP client and it will send you
-          back here.
+          An application asking for access to the corpus opens this page. You reached it directly,
+          so there is no pending request. Start from your MCP client and it will send you back here.
         </p>
       </Shell>
     );
@@ -145,7 +141,7 @@ export default async function ConsentPage({
     <Shell>
       <h1 className="font-display text-h2 text-text">Authorize access to the corpus</h1>
       <p className="mt-3 text-body-sm text-text-muted">
-        An application is asking to search Hatko as <span className="text-text">{user.email}</span>.
+        An application is asking to search hatko as <span className="text-text">{user.email}</span>.
         It will be able to read any passage you could read yourself.
       </p>
 
@@ -214,9 +210,9 @@ export default async function ConsentPage({
        * that admits its limits — it is the sentence someone would rely on.
        */}
       <p className="text-caption text-text-muted mt-6">
-        Approving does not share your password. Access lasts until the token expires — an hour, or
-        up to seven days if the application renews it. To cut a client off sooner, ask an
-        administrator to deactivate the account.
+        Approving does not share your password. Access lasts until the token expires: an hour, or up
+        to seven days if the application renews it. To cut a client off sooner, ask an administrator
+        to deactivate the account.
       </p>
     </Shell>
   );

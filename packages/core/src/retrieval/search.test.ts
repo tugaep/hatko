@@ -9,6 +9,7 @@ import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { ingest } from '../ingest/pipeline.ts';
 import { hybridSearch } from './search.ts';
+import { MIN_RERANK_CANDIDATES, retrieveAndRerank } from './retrieve.ts';
 import { RELEVANCE, hasGroundedSupport, rerank } from './rerank.ts';
 
 /**
@@ -325,4 +326,58 @@ test('RRF damping keeps a confident single-arm hit ahead of a mediocre both-arm 
   // Agreement between arms still counts when ranks are comparable, which is the
   // property that makes fusion worth doing at all.
   assert.ok(rrf(10, [2, 2]) > rrf(10, [1]), 'both arms agreeing still outranks one arm alone');
+});
+
+/**
+ * `limit` says how many passages come back, never how many the grader may read.
+ *
+ * The bug this pins: both search surfaces used to call `hybridSearch({ limit })` and then
+ * rerank, so a caller asking for one passage got the top passage by *fused* score — the
+ * grader had a single candidate and nothing to reorder. Measured against the live system on
+ * sample question 3, `limit=1` returned `guides/asset-naming.md` (judged 0.67) while
+ * `build-pipeline.md` (judged 1.00) was absent from the response entirely.
+ *
+ * It fails silently, which is why it gets a test: the answer is worse, never an error. The
+ * grader below marks a passage that fusion ranks *last* as the only relevant one, so the
+ * assertion can only pass if grading happened across the whole floor before truncation.
+ */
+test('a small limit truncates after grading, not before it', async () => {
+  const query = 'playable build pipeline';
+
+  const fused = await hybridSearch(db, query, {
+    embedder: stubEmbedder,
+    limit: MIN_RERANK_CANDIDATES,
+  });
+  assert.ok(
+    fused.length === MIN_RERANK_CANDIDATES,
+    'the corpus yields at least a full floor of candidates for this query',
+  );
+
+  // The one passage fusion likes least, which a pre-truncation rerank could never see.
+  const buried = fused.at(-1)!;
+
+  const single = await retrieveAndRerank(db, query, {
+    limit: 1,
+    embedder: stubEmbedder,
+    grader: gradeBy({ [buried.sourcePath]: RELEVANCE.DIRECT }),
+  });
+
+  assert.equal(single.length, 1, 'the caller still gets exactly the limit it asked for');
+  assert.equal(
+    single[0]?.sourcePath,
+    buried.sourcePath,
+    'the best-judged passage is returned, not the best-fused one',
+  );
+  assert.equal(single[0]?.rerankScore, 1);
+
+  // And a limit above the floor widens the pool rather than capping it.
+  const wide = await retrieveAndRerank(db, query, {
+    limit: MIN_RERANK_CANDIDATES + 4,
+    embedder: stubEmbedder,
+    grader: gradeBy({}),
+  });
+  assert.ok(
+    wide.length > MIN_RERANK_CANDIDATES,
+    'asking for more than the floor returns more than the floor',
+  );
 });

@@ -1,9 +1,6 @@
-import type { Metadata } from 'next';
 import { PERMISSIONS, type Permission } from '@hatko/shared';
 import { requirePermission } from '../../../lib/session.ts';
 import { Chat } from './chat.tsx';
-
-export const metadata: Metadata = { title: 'Ask' };
 
 /**
  * The end-user surface. Gated on `search:run`, which both roles hold — the gate is here

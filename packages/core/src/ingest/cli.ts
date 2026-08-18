@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { IngestionTrigger } from '@hatko/shared';
-import { config } from '../config.ts';
+import { config, displayPath } from '../config.ts';
 import { getDb, closeDb } from '../db/client.ts';
 import { ingest, IngestionInProgressError } from './pipeline.ts';
 import { createReindexScheduler } from './watch.ts';
@@ -29,8 +29,8 @@ if (values.help) {
   --quiet   Print only the final summary
   --watch   Stay running and re-index when the corpus changes on disk
 
-Reads CORPUS_PATH (${path.relative(config.repoRoot, config.corpusPath)})
-and writes to DATABASE_PATH (${path.relative(config.repoRoot, config.databasePath)}).
+Reads CORPUS_PATH (${displayPath(config.corpusPath)})
+and writes to DATABASE_PATH (${displayPath(config.databasePath)}).
 
 With --watch, --force applies to the initial pass only. "Rebuild the index" is a
 one-time intent, and re-embedding all documents every time one file is saved is
@@ -152,7 +152,7 @@ if (!values.watch) {
     },
   });
 
-  console.log(`Watching ${path.relative(config.repoRoot, config.corpusPath)} for changes.`);
+  console.log(`Watching ${displayPath(config.corpusPath)} for changes.`);
 
   // The initial pass is what makes the watcher trustworthy on start: the corpus may
   // have changed while nothing was watching, and a watcher that only reacts to

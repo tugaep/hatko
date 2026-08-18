@@ -64,8 +64,8 @@ export async function upsertAccount(db: Db, account: DemoAccount): Promise<Upser
 export function demoAccounts(): DemoAccount[] {
   return [
     {
-      email: process.env.SEED_ADMIN_EMAIL ?? 'admin@hatko.local',
-      password: process.env.SEED_ADMIN_PASSWORD ?? 'hatko-admin-demo',
+      email: process.env.SEED_ADMIN_EMAIL ?? 'efe@tugrap.dev',
+      password: process.env.SEED_ADMIN_PASSWORD ?? 'PlayableFactory7766',
       name: 'Demo Admin',
       role: 'admin',
     },

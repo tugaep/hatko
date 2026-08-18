@@ -30,7 +30,6 @@ export type SessionUser = z.infer<typeof sessionUserSchema>;
 export const sessionResponseSchema = z.object({
   user: sessionUserSchema.nullable(),
 });
-export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
 /**
  * An OAuth client, as shown on the consent screen.
@@ -81,7 +80,6 @@ export const listUsersQuerySchema = paginationSchema.extend({
   /** Substring match against name and email. */
   q: z.string().trim().max(200).optional(),
 });
-export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 
 /**
  * Creating an account.
@@ -100,7 +98,6 @@ export const createUserRequestSchema = z.object({
   password: z.string().min(8).max(200),
   role: roleSchema,
 });
-export type CreateUserRequest = z.infer<typeof createUserRequestSchema>;
 
 /**
  * Changing an account. Both fields optional, at least one required.
@@ -116,7 +113,6 @@ export const updateUserRequestSchema = z
   .refine((body) => body.role !== undefined || body.disabled !== undefined, {
     message: 'Provide role, disabled, or both.',
   });
-export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
 
 /** Permissions are derived from the role in one place so the API and the UI cannot disagree. */
 export const PERMISSIONS = {

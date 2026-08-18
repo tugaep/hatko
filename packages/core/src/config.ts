@@ -98,7 +98,31 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
-const parsed = envSchema.safeParse(process.env);
+/**
+ * Drop variables that are present but empty, so `KEY=` means "not set".
+ *
+ * This is not a nicety, it was a fresh-install failure. `.env.example` ships
+ * `OPENAI_API_KEY=` with a comment inviting you to leave it blank and enter the key in
+ * the admin UI instead — and `process.loadEnvFile` reads that as the empty string, which
+ * `z.string().min(1).optional()` rejects, because `.optional()` accepts `undefined` and
+ * not `''`. So `cp .env.example .env` made every backend process throw "OPENAI_API_KEY:
+ * Too small" at import: migrate, seed, ingest, eval, the API and the MCP server. Measured,
+ * not theorised — `npm run setup` died on its first command.
+ *
+ * Applied to the whole object rather than to that one field, because every `.default()`
+ * has the same hole for the same reason: a default fills in for `undefined`, never for
+ * `''`, so blanking `EMBEDDING_MODEL=` or `API_PORT=` to "use the default" would fail
+ * validation too. One strip fixes the class.
+ *
+ * Nothing here legitimately means the empty string. `MCP_ALLOWED_HOSTS` comes closest and
+ * its default is `''` anyway, so stripping it lands on the same value.
+ */
+const withoutBlanks = (env: NodeJS.ProcessEnv): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).filter(([, value]) => value !== undefined && value !== ''),
+  ) as Record<string, string>;
+
+const parsed = envSchema.safeParse(withoutBlanks(process.env));
 
 if (!parsed.success) {
   const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
@@ -109,6 +133,20 @@ const env = parsed.data;
 
 /** Absolute path, resolved against the repository root if relative. */
 const absolute = (p: string) => (path.isAbsolute(p) ? p : path.resolve(REPO_ROOT, p));
+
+/**
+ * A path as a reader would want to see it: relative to the repository when it is inside it,
+ * absolute when it is not.
+ *
+ * Plain `path.relative` was printing a corpus outside the repository as
+ * `../../../../../private/tmp/…/corpus` — longer and harder to read than the absolute path
+ * it was shortening, in the exact case the brief cares about, which is pointing CORPUS_PATH
+ * at the real corpus somewhere else on disk.
+ */
+export function displayPath(absolutePath: string): string {
+  const relative = path.relative(REPO_ROOT, absolutePath);
+  return relative.startsWith('..') ? absolutePath : relative;
+}
 
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 

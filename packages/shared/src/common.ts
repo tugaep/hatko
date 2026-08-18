@@ -34,7 +34,6 @@ export const CATEGORY_MAX_CHARS = 64;
  * Files at the corpus root fall back to CATEGORY_UNCATEGORISED.
  */
 export const documentCategorySchema = z.string().min(1).max(CATEGORY_MAX_CHARS);
-export type DocumentCategory = z.infer<typeof documentCategorySchema>;
 
 export const CATEGORY_UNCATEGORISED = 'uncategorised';
 
@@ -42,7 +41,6 @@ export const documentStatusSchema = z.enum(['pending', 'indexed', 'failed']);
 export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 
 export const ingestionStatusSchema = z.enum(['running', 'succeeded', 'failed']);
-export type IngestionStatus = z.infer<typeof ingestionStatusSchema>;
 
 /**
  * Why a run happened, which is the question the dashboard's run list exists to

@@ -38,7 +38,7 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
           <Link
             href="/chat"
             className="flex items-center gap-2 rounded-sm"
-            aria-label="Hatko: ask a question"
+            aria-label="hatko: ask a question"
           >
             <Logo className="size-5 text-brand" />
             <Wordmark />
@@ -64,6 +64,8 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
       {/* Vertical rhythm is the page's business — chat ends in a sticky composer, the
           dashboard in ordinary content, and they need different room at the bottom. */}
       <main className="mx-auto w-full max-w-7xl px-4 sm:px-6">{children}</main>
+
+      <Footer padForBottomBar={bottomBar} />
 
       {bottomBar && (
         <nav
@@ -164,5 +166,70 @@ function SignOutButton() {
     <Button variant="ghost" size="sm" onClick={signOut} loading={busy}>
       Sign out
     </Button>
+  );
+}
+
+/**
+ * Site footer. Product first: what hatko is, then who built it. The links are the two
+ * that belong to the author of this build, and they open in a new tab so a half-written
+ * question in the composer survives the trip.
+ */
+function Footer({ padForBottomBar }: { padForBottomBar: boolean }) {
+  return (
+    <footer
+      className={cx(
+        'mt-16 border-t border-rule',
+        // Clears the fixed bottom bar on phones; the bar is md:hidden, so is this padding.
+        padForBottomBar && 'pb-[var(--nav-h)] md:pb-0',
+      )}
+    >
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-md">
+          <p className="text-body-sm font-medium text-text">hatko</p>
+          <p className="mt-1 text-caption text-text-muted">
+            Semantic search over an internal corpus. Answers are written from the passages it
+            retrieves, and it says so when the corpus has no answer.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
+          <span className="text-caption text-text-muted">Made by Tuğrap Efe Dikpınar</span>
+          <FooterLink href="https://tugrap.dev">tugrap.dev</FooterLink>
+          <FooterLink href="https://github.com/tugaep">GitHub</FooterLink>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex items-center gap-1.5 rounded-sm text-body-sm text-text-muted transition-colors duration-120 ease-brand hover:text-text"
+    >
+      {children}
+      <ArrowUpRight className="size-3.5 transition-transform duration-120 ease-brand group-hover:-translate-y-px group-hover:translate-x-px" />
+    </a>
+  );
+}
+
+function ArrowUpRight({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M7 7h10v10" />
+      <path d="M7 17 17 7" />
+    </svg>
   );
 }

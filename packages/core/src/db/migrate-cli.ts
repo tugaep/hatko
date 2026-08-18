@@ -1,6 +1,5 @@
 import fs from 'node:fs';
-import path from 'node:path';
-import { config } from '../config.ts';
+import { config, displayPath } from '../config.ts';
 import { openDb } from './client.ts';
 
 /**
@@ -12,13 +11,13 @@ import { openDb } from './client.ts';
  */
 
 const reset = process.argv.includes('--reset');
-const relative = path.relative(config.repoRoot, config.databasePath);
+const shown = displayPath(config.databasePath);
 
 if (reset) {
   for (const suffix of ['', '-wal', '-shm']) {
     fs.rmSync(`${config.databasePath}${suffix}`, { force: true });
   }
-  console.log(`Removed ${relative}`);
+  console.log(`Removed ${shown}`);
 }
 
 // openDb applies any pending migrations as part of opening the connection.
@@ -30,7 +29,7 @@ const applied = db
   applied_at: string;
 }>;
 
-console.log(`Database: ${relative}`);
+console.log(`Database: ${shown}`);
 for (const m of applied) console.log(`  ${m.name}  (applied ${m.applied_at})`);
 console.log(`${applied.length} migration(s) in place.`);
 

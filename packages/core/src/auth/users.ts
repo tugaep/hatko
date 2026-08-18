@@ -21,6 +21,26 @@ export class UserManagementError extends Error {
   }
 }
 
+/**
+ * Thrown when the account being changed does not exist.
+ *
+ * Its own type because the two failures are not the same kind of thing and the API has to
+ * answer them differently. The lockout guards above refuse a well-formed request that
+ * conflicts with the state of the system — 409, and the fix is to promote someone else.
+ * A missing id is 404, and the fix is to look again. Both were `UserManagementError`, so
+ * `PUT /api/admin/users/nope` answered `409 conflict: No such account.` — a status that
+ * tells a client the resource exists and is in the wrong state.
+ *
+ * A subclass, so a caller that only cares that the update was refused still catches one
+ * type. `errors.ts` tests for this one first, which the ordering there notes.
+ */
+export class UserNotFoundError extends UserManagementError {
+  constructor() {
+    super('No such account.');
+    this.name = 'UserNotFoundError';
+  }
+}
+
 interface UserRow {
   id: string;
   email: string;
@@ -194,7 +214,7 @@ export function updateUser(
   const updated = transaction(db, () => {
     const existing = db.prepare(`SELECT "id" FROM "user" WHERE "id" = ?`).get(id) as
       { id: string } | undefined;
-    if (!existing) throw new UserManagementError('No such account.');
+    if (!existing) throw new UserNotFoundError();
 
     // Only when the change actually removes an administrator. Promoting someone to admin,
     // or disabling a regular user, cannot reduce the count.
@@ -224,6 +244,6 @@ export function updateUser(
     return getUser(db, id, currentUserId);
   });
 
-  if (!updated) throw new UserManagementError('No such account.');
+  if (!updated) throw new UserNotFoundError();
   return updated;
 }

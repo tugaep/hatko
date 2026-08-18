@@ -95,7 +95,6 @@ class NodeSqliteConnection implements DatabaseConnection {
     };
   }
 
-  // eslint-disable-next-line require-yield
   async *streamQuery<R>(): AsyncIterableIterator<QueryResult<R>> {
     // node:sqlite is synchronous and Better Auth never streams. Throwing beats a
     // silent partial implementation that would appear to work on small tables.

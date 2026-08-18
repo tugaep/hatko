@@ -30,7 +30,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'Hatko', template: '%s · Hatko' },
+  title: 'hatko',
   description:
     'Semantic search and grounded answers over an internal document corpus. Every claim carries its source.',
   robots: { index: false, follow: false },

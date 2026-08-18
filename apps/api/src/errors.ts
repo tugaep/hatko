@@ -6,6 +6,7 @@ import {
   ProviderError,
   RateLimitError,
   UserManagementError,
+  UserNotFoundError,
 } from '@hatko/core';
 import type { ApiError } from '@hatko/shared';
 import type { Context } from 'hono';
@@ -128,6 +129,14 @@ export function toErrorResponse(error: unknown, c: Context): Response {
   if (error instanceof RateLimitError) {
     c.header('Retry-After', String(error.retryAfterSeconds));
     return c.json(envelope('rate_limited', error.message), 429);
+  }
+
+  /**
+   * An id that names no account. Tested before `UserManagementError`, which it extends —
+   * reversing these two would make this branch unreachable and put the 409 back.
+   */
+  if (error instanceof UserNotFoundError) {
+    return c.json(envelope('not_found', error.message), 404);
   }
 
   /**

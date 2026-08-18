@@ -206,24 +206,94 @@ test('deleting a document unwinds chunks, FTS rows and vectors together', () => 
   );
 });
 
-test('updating a chunk re-indexes it rather than leaving both versions', () => {
+/**
+ * The two arms of the retriever must never disagree about what a passage says.
+ *
+ * This test used to assert the opposite of what it now asserts, and that is the point. It
+ * updated a chunk's text and checked that FTS had re-indexed — which it had, because
+ * `chunks_after_update` maintains it. What no assertion covered is that the *vector* could
+ * not be re-derived from SQL, so the same chunk was left keyword-searchable by its new text
+ * and vector-ranked by the embedding of its old. Nothing reported a fault; the only symptom
+ * would have been a passage that ranked inexplicably badly for the words it contains.
+ *
+ * Nothing in the pipeline updates a chunk — `replaceChunks` deletes and reinserts — so
+ * migration 009 refuses the operation instead of half-performing it, and this pins the
+ * refusal. A test asserting a path that silently corrupts the index was worse than no test.
+ */
+test('a chunk cannot have its text edited in place, because the vector cannot follow', () => {
   using ctx = tempDb();
   seedDocument(ctx.db, 'guides/sdk.md', ['Initialize with lumen.start(config).']);
 
-  ctx.db
-    .prepare('UPDATE chunks SET content = ? WHERE ordinal = 0')
-    .run('Initialize with LumenSDK.init(config).');
+  assert.throws(
+    () =>
+      ctx.db
+        .prepare('UPDATE chunks SET content = ? WHERE ordinal = 0')
+        .run('Initialize with LumenSDK.init(config).'),
+    /cannot be updated in place/,
+    'an in-place text edit is refused rather than leaving a stale embedding',
+  );
+
+  assert.throws(
+    () => ctx.db.prepare('UPDATE chunks SET heading = ? WHERE ordinal = 0').run('Initialisation'),
+    /cannot be updated in place/,
+    'the heading is embedded too, so it is covered by the same refusal',
+  );
+
+  // Quoted: an unquoted dot is an FTS5 syntax error, not a literal.
+  assert.equal(
+    count(ctx.db, `SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH '"lumen.start"'`),
+    1,
+    'the refusal aborted the statement, so the original text is intact',
+  );
+
+  // Columns that carry no embedding stay writable — the trigger is scoped, not a blanket
+  // ban on touching the table.
+  ctx.db.prepare('UPDATE chunks SET token_count = 99 WHERE ordinal = 0').run();
+  assert.equal(count(ctx.db, 'SELECT token_count n FROM chunks WHERE ordinal = 0'), 99);
+
+  // And rewriting identical text is not an error, so an idempotent write still works.
+  ctx.db.prepare('UPDATE chunks SET content = content, heading = heading WHERE ordinal = 0').run();
+});
+
+/**
+ * Replacing a document's passages is the supported mutation, and it has to leave all three
+ * stores consistent — which is the guarantee migration 009 protects by forbidding the
+ * shortcut.
+ */
+test('replacing a document’s chunks re-indexes text and vectors together', () => {
+  using ctx = tempDb();
+  const docId = seedDocument(ctx.db, 'guides/sdk.md', ['Initialize with lumen.start(config).']);
+
+  // Delete-and-reinsert, which is what `replaceChunks` does.
+  transaction(ctx.db, () => {
+    ctx.db.prepare('DELETE FROM chunks WHERE document_id = ?').run(docId);
+    const chunkId = Number(
+      ctx.db
+        .prepare(
+          `INSERT INTO chunks (document_id, ordinal, heading, content, token_count)
+           VALUES (?, 0, 'Section 0', ?, 4) RETURNING id`,
+        )
+        .get(docId, 'Initialize with LumenSDK.init(config).')!.id,
+    );
+    ctx.db
+      .prepare('INSERT INTO chunks_vec (rowid, embedding) VALUES (?, ?)')
+      .run(BigInt(chunkId), vector(chunkId));
+  });
 
   assert.equal(
     count(ctx.db, "SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH 'lumensdk'"),
     1,
     'new text is searchable',
   );
-  // Quoted: an unquoted dot is an FTS5 syntax error, not a literal.
   assert.equal(
     count(ctx.db, `SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH '"lumen.start"'`),
     0,
     'stale text is gone',
+  );
+  assert.equal(
+    count(ctx.db, 'SELECT count(*) n FROM chunks_vec'),
+    count(ctx.db, 'SELECT count(*) n FROM chunks'),
+    'one vector per chunk, so the two arms cannot disagree',
   );
 });
 

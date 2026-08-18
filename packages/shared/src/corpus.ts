@@ -110,10 +110,8 @@ export const listDocumentsQuerySchema = paginationSchema.extend({
   sort: documentSortSchema.default('sourcePath'),
   direction: sortDirectionSchema.default('asc'),
 });
-export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 
 export const triggerIngestionRequestSchema = z.object({
   /** Re-embed every document even if its content hash is unchanged. */
   force: z.boolean().default(false),
 });
-export type TriggerIngestionRequest = z.infer<typeof triggerIngestionRequestSchema>;

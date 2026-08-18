@@ -384,10 +384,65 @@ export async function requireMcpPermission(
  * dependency of `@hatko/core` alone, and importing it from a workspace that does not
  * declare it would work only by hoisting.
  */
-export const oauthProtectedResourceMetadata = (request: Request): Promise<Response> =>
-  oAuthProtectedResourceMetadata(getAuth())(request);
+/**
+ * Correct the two claims Better Auth's metadata makes on our behalf that are not true here.
+ *
+ * Both documents are generated assuming the asymmetric setup its JWT plugin provides:
+ * they advertise `jwks_uri` and `RS256`. This system deliberately runs neither — migration
+ * 007 records why, and it is the right call: access tokens are opaque and validated by a
+ * database read this process already performs, which means a token can be revoked by
+ * deleting a row where a self-contained JWT cannot. But the metadata was never brought in
+ * line, so it pointed clients at `/api/auth/mcp/jwks`, which answers 404, and promised
+ * RS256 while the issued `id_token` is in fact signed HS256. Verified against the running
+ * server, not inferred.
+ *
+ * Discovery is a contract. A client that fetches the JWKS to validate an ID token — which
+ * a strict OIDC client does — fails on a document we published. So `jwks_uri` is removed
+ * rather than pointed somewhere: HS256 is symmetric, there is no public key to publish,
+ * and omitting the field is how a provider says so. `id_token_signing_alg_values_supported`
+ * becomes the algorithm actually in use. `resource_signing_alg_values_supported` describes
+ * signed resource *responses*, which this server does not produce at all, so it goes too.
+ *
+ * The alternative was installing the JWT plugin to make the original claims true. That
+ * would trade revocable tokens for a `jwks` table and a signing key to rotate, in order to
+ * satisfy a document nothing in the MCP flow reads — the wrong direction.
+ */
+async function withCorrectedSigningMetadata(
+  response: Response,
+  corrections: Record<string, unknown>,
+): Promise<Response> {
+  // A non-JSON or failed response is the library reporting a problem; forward it untouched
+  // rather than trying to edit it.
+  if (!response.ok) return response;
 
-export const oauthAuthorizationServerMetadata = (request: Request): Promise<Response> =>
-  oAuthDiscoveryMetadata(getAuth())(request);
+  let document: Record<string, unknown>;
+  try {
+    document = (await response.clone().json()) as Record<string, unknown>;
+  } catch {
+    return response;
+  }
+
+  for (const [key, value] of Object.entries(corrections)) {
+    if (value === undefined) delete document[key];
+    else document[key] = value;
+  }
+
+  // Headers are carried over so CORS and cache directives the plugin sets survive.
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  return new Response(JSON.stringify(document), { status: response.status, headers });
+}
+
+export const oauthProtectedResourceMetadata = async (request: Request): Promise<Response> =>
+  withCorrectedSigningMetadata(await oAuthProtectedResourceMetadata(getAuth())(request), {
+    jwks_uri: undefined,
+    resource_signing_alg_values_supported: undefined,
+  });
+
+export const oauthAuthorizationServerMetadata = async (request: Request): Promise<Response> =>
+  withCorrectedSigningMetadata(await oAuthDiscoveryMetadata(getAuth())(request), {
+    jwks_uri: undefined,
+    id_token_signing_alg_values_supported: ['HS256'],
+  });
 
 export type { Permission, Role, SessionUser };

@@ -48,4 +48,3 @@ export const setApiKeyRequestSchema = z.object({
   // changes it, and the real test is whether the provider accepts the key.
   apiKey: z.string().trim().min(20).max(400),
 });
-export type SetApiKeyRequest = z.infer<typeof setApiKeyRequestSchema>;

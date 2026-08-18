@@ -2270,3 +2270,134 @@ re-photographed, so that specific change is verified by typecheck and by reading
 second screenshot.
 
 Typecheck clean, 242 tests passing, format:check clean.
+
+## Full audit of steps 1–12, and the five defects it found (18 Aug 2026)
+
+Every step in §9 of the working agreement was re-verified against a running system rather
+than against its own commit message, on the user's instruction to "check every single step
+and verify it implemented without any bug and keeps the promise". The exercise was worth it:
+the numbers all held, and five defects came out of it that no test in the repository covered.
+
+**What was confirmed by measurement, not by reading.** The eval was re-run
+(`--rerank --answers`) and reproduces the claimed keyword/hybrid recall@1 100%, MRR 1.000,
+12/12 answer checks. The self-hosted claim in `MODEL_PRESETS` was re-measured independently
+on a separate 768-dimension index — qwen2.5:7b with nomic-embed-text, recall@1 100%,
+MRR 1.000, 12/12 — so that string is a measurement and not a memory. The 3D view's premise
+was checked arithmetically off the endpoint: mean intra-cluster distance 0.136 among the
+delivery reports against 0.954 for everything else, a sevenfold difference, which is the
+claim the whole hybrid design rests on. Deactivation was confirmed to be a real revocation:
+an already-issued cookie stops resolving immediately, not at expiry. Ingestion was driven
+through change, deletion, an empty file, a symlink and a `node_modules` directory on a
+scratch corpus, and the run log matched the disk every time. `hatko.tugrap.dev` was checked
+and is still a parking page, which is what §9 says.
+
+**Defect 1 — `cp .env.example .env` broke every backend process.** The worst of the five and
+the one a grader would have hit first. `.env.example` ships `OPENAI_API_KEY=` with a comment
+inviting you to leave it blank and set the key from the admin UI. `process.loadEnvFile` reads
+that as `''`, and `z.string().min(1).optional()` rejects `''`, because `.optional()` admits
+`undefined` and not the empty string. So the documented first command of a fresh install
+threw `OPENAI_API_KEY: Too small` at import, in migrate, seed, ingest, eval, the API and the
+MCP server — `npm run setup` died on `db:migrate`.
+
+Three separate promises depended on this working: `.env.example`'s own comment, the
+admin-managed-key feature in §3 (which exists so an operator can stand the system up
+_without_ a key and enter one in the browser), and `docs/self-hosted.md`'s "No API key is
+required". All three were false as shipped.
+
+Why nothing caught it: the machine it was written on has a real key in `.env`, and every
+test that touches key resolution injects `envFallback` explicitly — `resolveApiKey`'s own
+comment explains that config.ts snapshots `process.env` at import, so tests deliberately
+avoid that path. The single configuration no developer is ever in is the one every new
+reader starts in. The fix strips blank values from the whole env object rather than patching
+that one field, because every `.default()` has the same hole for the same reason: blanking
+`API_PORT=` to "use the default" would have failed too. The test spawns a child process with
+`.env.example`'s contents and asserts config loads — asserted against the file itself, since
+the bug was a disagreement between that file and the schema and a test restating the file
+could not see it. Verified to fail when the fix is reverted.
+
+**Defect 2 — `?next=` was inert for every route but one.** `app/(app)/layout.tsx` called
+`requireUser('/chat')` with a hardcoded destination, and a layout resolves before the page
+inside it, so `dashboard/page.tsx` passing the correct `/dashboard` never ran. An anonymous
+request for `/dashboard` redirected to `/sign-in?next=%2Fchat`, and an admin who followed a
+link to the dashboard signed in and landed on the chat page. The whole round trip existed
+and was carefully built — `safeNext` correctly refuses absolute, protocol-relative and
+`javascript:` destinations, all three verified — and one literal made it pointless.
+
+A layout is not given the pathname, so the fix publishes it in a request header from
+`proxy.ts`. Worth recording that the file convention was checked rather than assumed:
+`middleware.ts` is **deprecated in Next 16** and renamed to `proxy.ts` with the export
+renamed to match, which the local `node_modules/next/dist/docs` says plainly and training
+data would not. The header constant lives in its own import-free module because the same
+docs warn that a proxy may be deployed to a CDN and should not rely on shared modules — and
+`lib/session.ts`, the natural home, imports `next/headers`.
+
+**Defect 3 — the OIDC discovery documents described a system that does not exist.** Both
+advertised `jwks_uri`, which answers 404, and `RS256`, while the issued `id_token` is in fact
+HS256 — verified by decoding one from a completed authorization-code flow. Migration 007
+deliberately installs no JWT plugin and no `jwks` table, and that decision is right: opaque
+tokens are revocable by deleting a row where a self-contained JWT is not. Better Auth
+generates the metadata assuming its asymmetric setup, and nobody had reconciled the two. A
+strict OIDC client validating the ID token against the advertised JWKS would fail on a
+document we published. Corrected downward — `jwks_uri` removed, since HS256 is symmetric and
+there is no public key to publish — rather than installing the plugin to make the original
+claims true, which would have traded revocation for a signing key to rotate in order to
+satisfy a document nothing in the MCP flow reads.
+
+**Defect 4 — a missing account was a 409.** `PUT /api/admin/users/nope` answered
+`409 conflict: No such account.`, because `updateUser` threw `UserManagementError` for both
+the lockout guards and a bad id, and `errors.ts` maps that type to 409 wholesale. A `404`
+subclass, tested before its parent so the ordering cannot silently reinstate the 409.
+
+**Defect 5 — `limit` truncated before the reranker could read anything.** Found while
+verifying deployment readiness, and the most consequential of the five, because it is on the
+top-graded axis. Both search surfaces called `hybridSearch({ limit })` and then `rerank`, so
+the caller's `limit` — 1 to 20 on `/api/search` and on the MCP tool — decided the candidate
+set _before_ any passage was graded. Measured on sample question 3:
+
+    limit=1  guides/asset-naming.md   fused 0.174   judged 0.67
+    limit=6  build-pipeline.md        fused 0.168   judged 1.00
+
+At `limit=1` the document that answers the question was not in the response at all. It loses
+on fused score and wins on judged relevance, which is the entire reason the rerank pass
+exists — `rerank.ts` says so in its first paragraph, and §5 of the working agreement says no
+lexical or vector tuning can substitute for it. The pass was being neutered by an argument
+the caller controls, and it fails silently: a worse answer, never an error.
+
+`retrieveAndRerank` now owns the ordering for all three surfaces — draw at least
+`MIN_RERANK_CANDIDATES`, grade all of them, then cut to `limit`, so `limit` can only widen
+what gets judged. `DEFAULT_ANSWER_PASSAGES` is defined as that constant rather than its own
+`6`, because two literals meaning "how deep does the grader read" would eventually disagree.
+The answer path was already correct by accident of its fixed depth, which is exactly the
+drift `requireMcpPermission` warns about in a different context: one decision implemented
+twice, and the copy nobody looks at is the one that is wrong. Re-measured after the change:
+recall@1 100%, MRR 1.000, 12/12 — unchanged at the measured depth, fixed at small limits.
+The test marks the passage fusion ranks _last_ as the only relevant one, so it can only pass
+if grading precedes truncation; verified to fail against the old order.
+
+**Six lower-priority items, all fixed.** An in-place `UPDATE` of a chunk's text kept
+`chunks_fts` correct and left `chunks_vec` holding the old embedding, so the two arms of one
+retriever would disagree about what a passage says with nothing reporting a fault. Nothing in
+the pipeline does it — `replaceChunks` deletes and reinserts — but a test asserted the update
+path worked, which read as an endorsement. Migration 009 refuses the operation and that test
+now pins the refusal; asserting a path that silently corrupts the index was worse than having
+no test. `EADDRINUSE` crashed both servers through an unhandled `error` event with twenty
+lines of Node internals and no mention of the port, which is how this audit began; both now
+name the port and the variable to change. Two `eslint-disable` directives were the only
+mentions of eslint in a repository that has never had it. Fourteen inferred type exports in
+`packages/shared` had no consumer in either direction across the boundary. `seed.ts` told
+operators their credentials were "listed in the README", which does not exist yet. And
+`path.relative(repoRoot, …)` printed a corpus outside the repository as
+`../../../../../private/tmp/…`, longer than the absolute path it was shortening, in exactly
+the case the brief cares about — pointing `CORPUS_PATH` at the real corpus somewhere else.
+
+**Deployment readiness.** The production web build had never been run: `next build` succeeds
+and reports `ƒ Proxy (Middleware)`, confirming `proxy.ts` is registered for production and
+not only for dev. A fresh install was then driven end to end in isolation from
+`.env.example` alone — migrate (9 migrations), seed, ingest (142/142), both servers up, demo
+credentials, role gating, a grounded answer with a citation, an abstention, and the MCP tool
+over a bearer token. Under `NODE_ENV=production` the session cookie is issued as
+`__Secure-…; HttpOnly; Secure; SameSite=Lax`, and with `MCP_ALLOWED_HOSTS=hatko.tugrap.dev`
+the host guard accepts the proxied hostname, still answers 403 to `evil.example.com`, and
+discovery advertises the public origin rather than localhost.
+
+Typecheck clean, 245 tests passing, format:check clean, eval unchanged.

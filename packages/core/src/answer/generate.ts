@@ -1,8 +1,9 @@
 import type { AnswerResponse, Citation, DeprecationNotice, SearchResult } from '@hatko/shared';
 import type { Db } from '../db/client.ts';
 import { chatText, ProviderError } from '../providers/openai.ts';
-import { hybridSearch, type RetrievalArm } from '../retrieval/search.ts';
-import { hasGroundedSupport, rerank } from '../retrieval/rerank.ts';
+import type { RetrievalArm } from '../retrieval/search.ts';
+import { hasGroundedSupport } from '../retrieval/rerank.ts';
+import { MIN_RERANK_CANDIDATES, retrieveAndRerank } from '../retrieval/retrieve.ts';
 import { activeModels } from '../settings.ts';
 
 /**
@@ -97,8 +98,12 @@ const MAX_PASSAGE_CHARS = 2000;
  * over ten candidates while the shipped answer path reranks six — a document at
  * fused rank 7 could be promoted to first in the eval and never be seen in
  * production. One constant, so the measurement and the product cannot drift.
+ *
+ * Defined as the rerank floor rather than as its own `6`, for the same reason: two literals
+ * meaning "how deep does the grader read" would eventually disagree, and the search
+ * surfaces would then judge a different number of passages than the answer path.
  */
-export const DEFAULT_ANSWER_PASSAGES = 6;
+export const DEFAULT_ANSWER_PASSAGES = MIN_RERANK_CANDIDATES;
 
 function buildPrompt(query: string, passages: SearchResult[]): string {
   const rendered = passages
@@ -224,9 +229,14 @@ export async function answerQuestion(
   const started = performance.now();
   const limit = options.limit ?? DEFAULT_ANSWER_PASSAGES;
 
-  const retrieved = await hybridSearch(db, query, {
+  // The same retrieve-grade-truncate path both search surfaces take. At the default depth
+  // of 6 this is exactly what it did before — retrieve 6, grade 6 — so the measured recall
+  // and abstain figures still describe this code. What it gains is that a caller passing a
+  // smaller `limit` no longer shrinks what the grader is allowed to read.
+  const passages = await retrieveAndRerank(db, query, {
     limit,
     ...(options.arm ? { arm: options.arm } : {}),
+    ...(options.grader ? { grader: options.grader } : {}),
     ...(options.signal ? { signal: options.signal } : {}),
   });
 
@@ -236,7 +246,7 @@ export async function answerQuestion(
     latencyMs: Math.round(performance.now() - started),
   });
 
-  if (retrieved.length === 0) {
+  if (passages.length === 0) {
     return done({
       answer: ABSTAIN_MESSAGE,
       abstained: true,
@@ -245,11 +255,6 @@ export async function answerQuestion(
       deprecationNotices: [],
     });
   }
-
-  const passages = await rerank(query, retrieved, {
-    ...(options.grader ? { grader: options.grader } : {}),
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
 
   /**
    * Reported before the abstain decision, deliberately.

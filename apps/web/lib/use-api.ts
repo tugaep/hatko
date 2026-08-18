@@ -46,9 +46,10 @@ export function useApi<T extends z.ZodType>(path: string, schema: T) {
     );
 
     return () => controller.abort();
-    // `schema` is a module-level constant at every call site; including it would
-    // re-fire the effect on any parent re-render that rebuilt it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `schema` is deliberately not a dependency: it is a module-level constant at every
+    // call site, and including it would re-fire the effect on any parent re-render that
+    // rebuilt it. There is no linter in this repository to silence, so this is a note to
+    // the next reader rather than a suppression.
   }, [path, attempt]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);

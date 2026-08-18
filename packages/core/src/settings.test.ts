@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 /**
  * The API key is a live credential that an admin types into a browser, so the
@@ -203,6 +205,46 @@ test('the secret shipped in .env.example is refused', () => {
 
   const real = 'x'.repeat(32);
   assert.equal(requireAppSecret(real), real);
+});
+
+/**
+ * The documented first command of a fresh install has to work.
+ *
+ * `.env.example` ships `OPENAI_API_KEY=` and a comment inviting you to leave it blank and
+ * set the key from the admin UI. `process.loadEnvFile` reads that as `''`, and
+ * `z.string().min(1).optional()` rejects `''` because `.optional()` admits only
+ * `undefined` — so `cp .env.example .env` made config.ts throw at import and killed
+ * migrate, seed, ingest, eval, the API and the MCP server. `npm run setup` failed on its
+ * first command, on the one configuration every new reader starts in.
+ *
+ * Asserted in a child process against the example file itself, rather than against a
+ * hand-written copy of what it contains. The bug was a disagreement between that file and
+ * the schema, so a test that restates the file cannot see it: adding a new blank variable
+ * to `.env.example` has to fail here.
+ *
+ * The secret is overridden because the example's placeholder is deliberately refused by
+ * the test above; everything else comes from the file verbatim.
+ */
+test('cp .env.example .env leaves every process able to start', () => {
+  const examplePath = new URL('../../../.env.example', import.meta.url);
+  const example = fs.readFileSync(examplePath, 'utf8');
+
+  assert.match(example, /^OPENAI_API_KEY=\s*$/m, 'the example still ships a blank API key');
+
+  const env: Record<string, string> = { PATH: process.env.PATH ?? '' };
+  for (const line of example.split('\n')) {
+    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
+    if (match) env[match[1]!] = match[2]!;
+  }
+  env.BETTER_AUTH_SECRET = 'x'.repeat(32);
+
+  const result = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', "await import('./packages/core/src/config.ts');"],
+    { cwd: fileURLToPath(new URL('../../..', import.meta.url)), env, encoding: 'utf8' },
+  );
+
+  assert.equal(result.status, 0, `config.ts refused to load:\n${result.stderr}`);
 });
 
 // --- model selection --------------------------------------------------------

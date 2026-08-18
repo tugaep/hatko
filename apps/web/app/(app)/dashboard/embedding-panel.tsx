@@ -247,9 +247,9 @@ function Plot({ map }: { map: EmbeddingMap }) {
         <span className="font-mono">
           {map.explained.map((share) => `${(share * 100).toFixed(1)}%`).join(' · ')}
         </span>{' '}
-        of the corpus&rsquo;s total variance — {(sum(map.explained) * 100).toFixed(0)}% between
-        them. The rest is in the {Math.max(0, map.dimensions - 3)} directions this view cannot show,
-        so read the plot for which passages group together, not for exact distances.
+        of the corpus&rsquo;s total variance, {(sum(map.explained) * 100).toFixed(0)}% between them.
+        The rest is in the {Math.max(0, map.dimensions - 3)} directions this view cannot show, so
+        read the plot for which passages group together, not for exact distances.
       </p>
 
       {categories.length > 0 && <Legend categories={categories} colourOf={colourOf} map={map} />}

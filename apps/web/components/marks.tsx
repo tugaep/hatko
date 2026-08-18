@@ -40,7 +40,7 @@ export function Wordmark({ className }: { className?: string }) {
         className,
       )}
     >
-      Hatko
+      hatko
     </span>
   );
 }

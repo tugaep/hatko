@@ -1,12 +1,9 @@
-import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { API_URL } from '../../lib/api.ts';
 import { getSessionUser } from '../../lib/session.ts';
 import { FernSpecimen, Logo, Wordmark } from '../../components/marks.tsx';
 import { SignInForm } from './sign-in-form.tsx';
-
-export const metadata: Metadata = { title: 'Sign in' };
 
 /**
  * Only a relative path within this app is an acceptable post-sign-in destination.
@@ -78,11 +75,11 @@ export default async function SignInPage({
         <div>
           <FernSpecimen className="size-32" />
           <p className="font-display text-h2 mt-6 max-w-[26ch] text-text">
-            The answer is already in the corpus. The work is knowing where to look.
+            The corpus already holds the answer. Finding it is the slow part.
           </p>
           <p className="mt-4 max-w-[46ch] text-body-sm text-text-muted">
-            Hatko finds the passages that answer your question and writes an answer that cites them.
-            When nothing covers it, it says so.
+            Ask a question and hatko pulls the passages that answer it, then writes an answer that
+            cites them. When nothing in the corpus covers it, it says so.
           </p>
         </div>
 
