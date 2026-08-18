@@ -8,6 +8,11 @@ Three surfaces sit on top of one retrieval pipeline: a chat page, an admin dashb
 an MCP tool for editors and agents. All of them are behind role-based auth enforced on the
 server.
 
+**Live demo:** [hatko.tugrap.dev](https://hatko.tugrap.dev) — sign in with the demo
+credentials below. Deployed as three Node processes behind Caddy on a single VPS; see
+[docs/deployment.md](docs/deployment.md) for exactly how, including the reverse-proxy
+config and the checks that prove it is working.
+
 ## Stack
 
 | Layer     | Choice                                                                    |

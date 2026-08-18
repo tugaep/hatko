@@ -2575,3 +2575,28 @@ README so a clone with no `.env` seeds exactly the documented accounts — they 
 to `admin@hatko.local`, which no document mentioned.
 
 Typecheck clean, 280 tests passing, `next build` clean, prettier clean.
+
+**Deployment, run rather than described.** `hatko.tugrap.dev` is live on a Hostinger VPS:
+Node 24, three systemd services with `Restart=always`, Caddy holding a Let's Encrypt
+certificate, ufw allowing only 22/80/443. Two things worth recording because neither was
+in the guide.
+
+The DNS record was a Hostinger CDN alias, not the four A/AAAA answers `dig` reported —
+the CDN was expanding one record into several with a 60-second TTL and rotating
+addresses. And before the guide's own steps could run, three rounds were lost to commands
+executed on the wrong machine: `apt` on macOS, then an `ifconfig.me` that returned a
+residential Türksat address which was briefly published as the subdomain's A record. Whois
+settled it — `TURKSAT-NET / Turksat Uydu-Net / AS47524`, with no reverse DNS and port 22
+closed — against `srv1911617.hstgr.cloud` answering on 22, which is what a VPS looks like.
+The lesson is small and repeatable: a deploy guide should tell the operator how to prove
+which host they are typing into, before the first command that assumes it.
+
+The app ports were also reachable directly over plain HTTP on first boot, bypassing Caddy
+and TLS entirely — `curl http://<ip>:4000/health` answered. Closed with ufw and verified
+closed afterwards. The guide had said to bind to loopback "or use a firewall"; it does not
+now leave that as an option.
+
+Verified on the live domain after deployment: search returning the right document at
+judged 1.00, a grounded answer citing `sdk-notes-v3.md` with the v2 deprecation notice,
+`"No documents cover this."` with zero citations on the salary question, the MCP tool over
+a bearer token, and the new demo user reaching search with 200 and the admin stats with 403.
