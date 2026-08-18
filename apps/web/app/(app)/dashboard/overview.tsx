@@ -13,7 +13,7 @@ import {
   cx,
 } from '../../../components/ui.tsx';
 import { SetupChecklist } from './setup-checklist.tsx';
-import { Figure, Group } from './panels.tsx';
+import { Group } from './panels.tsx';
 
 /**
  * The Dashboard tab: what is indexed, whether the index is sound, and what people ask.
@@ -202,6 +202,19 @@ function IndexHealthPanel({ health }: { health: IndexHealth | null }) {
     </LabelFrame>
   );
 }
+/**
+ * A small labelled number. Was in `panels.tsx` while the category breakdown also drew one;
+ * that panel is gone, so it sits with its only remaining caller.
+ */
+function Figure({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-1.5">
+      <dt>{label}</dt>
+      <dd className="tabular text-text">{children}</dd>
+    </div>
+  );
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4">

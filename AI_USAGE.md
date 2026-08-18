@@ -2708,3 +2708,45 @@ database as the answer model while leaving `gpt-4o-mini` as the grader, then res
 environment default so the system was not left running on an unmeasured model.
 
 Typecheck clean, 280 tests passing, `next build` clean, prettier clean.
+
+---
+
+## Step 18 — one fewer panel, and a plot that says it can be turned
+
+**The category breakdown left the Documents tab.** Its seven rows — `delivery-reports 78`,
+`meeting-notes 30`, and so on — restate counts the document list beside it already carries
+as a column, so the page answered one question twice and the second answer was the one
+nobody could sort or filter. Removing it left `CategoryPanel` with no caller and `Figure`
+with one, so both moved to where a single consumer belongs instead of staying in
+`panels.tsx` as sharing nobody does. `panels.tsx` is down to `Group`, and the Documents tab
+no longer fetches `/api/admin/stats` at all — that request existed only to feed the panel.
+
+`byCategory` is still returned by the stats endpoint and now has no client. Left in place
+deliberately rather than swept up: it is defensible data on an admin API, an `app.test.ts`
+case asserts it, and removing a response field is a contract change that was not what was
+asked for. Recorded here so it is a decision rather than an oversight.
+
+**The plot did not look interactive, which is the worst way for it to be misread.** Face-on
+the projection is a flat scatter and the entire reason for drawing three dimensions is
+invisible until it moves — so a reader who never turns it sees a worse version of a 2D
+chart. The instruction existed, at the end of a sentence about axes of variation in the
+paragraph above, which is not where anyone looking at a picture reads.
+
+Three changes, and the interesting one is what they are _not_. A `Drag to rotate` badge sits
+on the plot itself and retires the moment it is acted on — permanent help text telling
+someone something they have already done is noise, and this is a control you learn once. Its
+wrapper is `pointer-events-none`, because the first version swallowed the very gesture it
+was asking for. And a permanent caption under the plot carries the two routes a drag cannot
+teach: the arrow keys, which someone may _need_ rather than merely enjoy, and hovering a
+point for its document.
+
+Verified in the browser: badge present on load, `pointer-events: none` on its wrapper, gone
+after a real click-drag, and the caption still there afterwards.
+
+**Caught by checking rather than trusting myself.** Moving `Figure` out of `panels.tsx`, I
+retyped it instead of copying it, and my version dropped the `tabular` class and changed
+`gap-1.5` to `gap-1` — so the index-health figures would have lost their aligned numerals.
+Typecheck and all 280 tests passed with it wrong; a `diff` against the pre-split file is
+what found it. Recovered verbatim from git.
+
+Typecheck clean, 280 tests passing, `next build` clean, prettier clean.

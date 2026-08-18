@@ -1,10 +1,6 @@
-'use client';
-
-import { dashboardStatsSchema } from '@hatko/shared';
-import { useApi } from '../../../../lib/use-api.ts';
 import { EmbeddingPanel } from '../embedding-panel.tsx';
 import { DocumentsPanel } from '../documents-panel.tsx';
-import { CategoryPanel, Group } from '../panels.tsx';
+import { Group } from '../panels.tsx';
 
 /**
  * The corpus, shown as the retriever sees it before it is shown as a list.
@@ -16,11 +12,11 @@ import { CategoryPanel, Group } from '../panels.tsx';
  * see the cluster first and every later decision has a reason attached.
  *
  * The list then answers the questions the picture cannot: which document, what category,
- * indexed when, and did it fail.
+ * indexed when, and did it fail. The category breakdown that sat between them is gone —
+ * the same counts are one column of that list, so it was a second answer to a question
+ * already answered on the page.
  */
 export function DocumentsView() {
-  const stats = useApi('/api/admin/stats', dashboardStatsSchema);
-
   return (
     <div className="grid gap-12">
       <Group
@@ -30,8 +26,7 @@ export function DocumentsView() {
         <EmbeddingPanel />
       </Group>
 
-      <Group title="Corpus" description="What is indexed, by category and document.">
-        <CategoryPanel byCategory={stats.data?.byCategory ?? null} />
+      <Group title="Corpus" description="Every indexed document, with its category and status.">
         <DocumentsPanel />
       </Group>
     </div>

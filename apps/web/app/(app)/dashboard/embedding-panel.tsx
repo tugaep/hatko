@@ -82,6 +82,17 @@ function Plot({ map }: { map: EmbeddingMap }) {
   // drawing it in three dimensions is not visible until it is turned slightly.
   const [rotation, setRotation] = useState<Rotation>({ yaw: 0.6, pitch: 0.35 });
   const [hovered, setHovered] = useState<number | null>(null);
+  /**
+   * Whether this reader has turned it yet.
+   *
+   * The plot read as a static image, which is the worst possible misreading: face-on the
+   * projection is a flat scatter and the reason for drawing three dimensions is invisible
+   * until it moves. The instruction was in the paragraph above, at the end of a sentence
+   * about variance axes — where nobody looking at a picture reads it. So it is on the
+   * picture instead, and it retires the moment it has been acted on rather than sitting
+   * there permanently telling someone something they now know.
+   */
+  const [turned, setTurned] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
 
   /**
@@ -167,7 +178,7 @@ function Plot({ map }: { map: EmbeddingMap }) {
       <p className="max-w-[68ch] text-body-sm text-text-muted">
         Every indexed passage, placed by its {map.dimensions}-dimension embedding and projected onto
         its three strongest axes of variation. Distance here is distance in the space retrieval
-        actually searches. Drag to rotate, or focus the plot and use the arrow keys.
+        actually searches.
       </p>
 
       <div
@@ -194,6 +205,7 @@ function Plot({ map }: { map: EmbeddingMap }) {
           onPointerDown={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
             dragRef.current = { x: event.clientX - box.left, y: event.clientY - box.top };
+            setTurned(true);
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerUp={(event) => {
@@ -218,6 +230,7 @@ function Plot({ map }: { map: EmbeddingMap }) {
             const move = moves[event.key];
             if (!move) return;
             event.preventDefault();
+            setTurned(true);
             rotate(move[0], move[1]);
           }}
         />
@@ -241,12 +254,40 @@ function Plot({ map }: { map: EmbeddingMap }) {
           </div>
         )}
 
+        {/*
+         * The affordance, on the thing it describes.
+         *
+         * `pointer-events-none` so it cannot swallow the very drag it is asking for — the
+         * first version sat over the middle of the plot and ate the gesture. Bottom-centred
+         * rather than centred, so it never covers the cluster it is inviting you to inspect.
+         */}
+        {!turned && map.points.length > 0 && (
+          <p className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+            <span className="border border-rule-strong bg-bg px-2 py-1 text-caption text-text">
+              Drag to rotate
+            </span>
+          </p>
+        )}
+
         {map.points.length === 0 && (
           <p className="absolute inset-0 grid place-items-center p-6 text-center text-body-sm text-text-muted">
             Nothing is indexed yet. Run an ingest and the corpus appears here.
           </p>
         )}
       </div>
+
+      {/*
+       * Stated once, under the plot, and permanently — the badge above retires after the
+       * first drag, but the keyboard route and the hover behaviour are not discoverable by
+       * trying to drag. Keyboard first of the two, because it is the one someone may need
+       * rather than merely enjoy.
+       */}
+      {map.points.length > 0 && (
+        <p className="mx-auto mt-2 max-w-[min(100%,78vh)] text-caption text-text-muted">
+          Drag to rotate, or focus the plot and use the arrow keys. Hover a point for its document
+          and category.
+        </p>
+      )}
 
       <p className="mt-3 text-caption text-text-muted">
         These three axes carry{' '}
