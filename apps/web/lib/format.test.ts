@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { catalogNumber, formatBytes, formatMs, highlightSegments } from './format.ts';
+import {
+  catalogNumber,
+  formatBytes,
+  formatMs,
+  highlightSegments,
+  passageBody,
+} from './format.ts';
 
 /**
  * `highlightSegments` is the one piece of logic here that can fail without anyone
@@ -61,4 +67,36 @@ test('catalog numbers are zero-padded to a fixed width', () => {
   assert.equal(catalogNumber('RUN', 7), 'RUN-0007');
   // Beyond the width the number wins; a truncated catalog number would collide.
   assert.equal(catalogNumber('DOC', 123456), 'DOC-123456');
+});
+
+/**
+ * `passageBody` deletes text from a passage, which is the one operation this file must be
+ * most careful about: the product's promise is that what is shown is what was indexed. It
+ * may only ever remove a heading that says nothing the title has not already said.
+ */
+
+test('a leading heading that repeats the title is dropped, with its blank line', () => {
+  const passage = '# Build Pipeline\n\nLumen builds run through the internal CLI.';
+  assert.equal(passageBody(passage, 'Build Pipeline'), 'Lumen builds run through the internal CLI.');
+});
+
+test('punctuation and case do not stop it matching', () => {
+  const passage = '## Lumen SDK v2 (DEPRECATED)\n\nStatus: deprecated since January.';
+  assert.equal(passageBody(passage, 'Lumen SDK v2 (deprecated)'), 'Status: deprecated since January.');
+});
+
+test('a heading that carries its own words is left alone', () => {
+  for (const [passage, title] of [
+    ['# Build Pipeline: stages\n\nBody.', 'Build Pipeline'],
+    ['# Stages\n\nBody.', 'Build Pipeline'],
+    ['Body with no heading at all.', 'Build Pipeline'],
+    ['#NotAHeading\n\nBody.', 'NotAHeading'],
+  ] as const) {
+    assert.equal(passageBody(passage, title), passage, `dropped content for ${title}`);
+  }
+});
+
+test('nothing but the heading leaves an empty body rather than throwing', () => {
+  assert.equal(passageBody('# Build Pipeline', 'Build Pipeline'), '');
+  assert.equal(passageBody('', 'Build Pipeline'), '');
 });

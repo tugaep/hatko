@@ -3002,3 +3002,96 @@ One process note: a lead-in line above the `.env` excerpt went missing between e
 two code fences adjacent with nothing between them. Caught by a script that looks for exactly
 that shape, along with unbalanced fences and links that do not resolve, which is cheaper than
 re-reading 700 lines.
+
+---
+
+## Step 24 — the answer and the evidence, rebuilt after looking at them
+
+Asked to review the chat page by putting a real question through it and then redesign the two
+displays from scratch. The question was "What caused the March 2026 AppLovin rejections and
+what was fixed?", asked against the running dev servers, and the review is what the redesign
+came out of rather than a justification written afterwards.
+
+**A note on the skill used.** The review ran under the `design-taste-frontend` skill, whose
+own scope section says it is not for dense product UI and points such work at a real design
+system instead. So what was taken from it was the discipline: audit before touching, hunt AI
+tells, check contrast and states, justify every animation, run the pre-flight list. The
+authority on visual language stayed `docs/design.md` and `docs/brand.md`, because CLAUDE.md
+makes those enforceable and the skill's defaults would have thrown out Fraunces and the
+palette the brand names. Recording it because "I ran a skill and ignored half of it" is a
+judgement someone may want to question.
+
+### What the review found, measured in the running page
+
+1. **The evidence had the worst measure on the page.** Passage text rendered in a 340px
+   column inside a 400px rail, against a 631px answer. The passage is the thing a reader is
+   there to check.
+2. **Telemetry outranked the evidence inside every card.** Order was title, path, relevance
+   meter, cited badge, rule, `vector / bm25 / fused`, and only then the passage.
+3. **The citation was the weakest mark on the screen.** An 11px pale chip with no border, in
+   a product whose promise is that every claim carries its source.
+4. **Reaching a passage took three interactions**: scroll a height-capped region, open a
+   `<details>` card, then click "Show full passage" on a clamped paragraph.
+5. **Every passage weighed the same.** With one of six cited, five cards competed with the
+   one that mattered.
+6. **Passages repeated their own title.** Each begins with its own markdown `# Heading`,
+   printed directly under a card heading of the same words, in 142 documents out of 142.
+7. **A screen reader heard `3Postmortem: November 2025 Analytics Leak`.** The rank digit sat
+   inside the heading with no separator.
+8. **The question was a chat bubble on top of a document.** Right-aligned chip, prose with
+   citations and a bibliography beneath it, two metaphors and no commitment to either.
+
+### What replaced it
+
+The structural move is that evidence is no longer a rail. Answer first, then the passages it
+stands on, one column, full width. That is a reversal of a deliberate earlier decision, so
+the reason is worth stating plainly: the side-by-side layout is _what forced_ the rail to
+400px, and a 40-character measure for the passages defeats the purpose of showing them. It
+also deleted the machinery that layout needed, which was a sticky scroll region, a
+`calc(100dvh-14rem)` cap measured against four fixed costs, a phone-only show/hide control
+with its own Escape handler, a `<details>` per card and a clamp per passage. One disclosure
+now, for the group of passages nothing cited.
+
+The answer carries its own short bibliography under the prose, one row per cited passage
+naming the document and its path, and the inline marker became a real target with a border,
+an underline and a 24px vertical hit area. Cited passages come first and are open; the rest
+sit behind a line that says how many there are and that none was used. Scores moved under the
+passage, with the judged grade leading because it is the only absolute figure and the one
+abstention is decided from. The duplicated heading is dropped at render time by a new
+`passageBody` helper, which is display-only on purpose: `chunk.ts` promises the stored chunk
+is the verbatim slice and retrieval depends on that, so a rendering problem is fixed where
+the rendering is. Four tests pin it, including that a heading carrying any word the title
+does not is left alone.
+
+### Three things wrong in my own first version, all found by looking at it
+
+- **The marker left a gap before its punctuation.** `min-w-6` made a 24px box around one
+  digit, so `change [1].` rendered as `change 1 .`. Measured at 24x24 in the DOM, fixed by
+  dropping the minimum width and keeping the padding.
+- **I introduced a triple count.** The new bibliography says "Cited one passage", the new
+  evidence heading says "1 of 6 passages cited", and the old meta row underneath still said
+  `citations 1  passages 6`. Two facts stated three times. The meta row is `took` alone now,
+  and `Stat` went with it rather than becoming a component with one caller.
+- **78ch measured 724px**, about a hundred characters a line, which is past where the eye
+  loses its place returning to the left edge. 58ch, checked at 538px.
+
+**And one thing the accessibility tree caught that I would not have.** Moving the rank digit
+into a `<span aria-hidden="true">` inside the heading did not clean the accessible name: the
+tree still read `Passage 1: 1Postmortem: March 2026 Delivery Incident`. The fix was to stop
+putting it in the heading at all. The heading is the document title, and the rank travels in
+the article's own label, which already says "Cited passage 1: …". Worth recording because the
+first attempt looked correct in the markup and was verified wrong only by reading the tree.
+
+**A trap worth naming.** The browser console kept reporting `Can't resolve source-card.tsx`
+long after the import was updated, because the buffer holds errors from the seconds between
+`git mv` and the import edit and does not clear on reload. Believing it would have meant
+debugging a file that was already right. `next build` is the check that cannot be stale, and
+it is clean.
+
+Verified in the browser at 1280x1500 and at 375x812: the answer with its bibliography, a
+citation click scrolling to and promoting its passage (`source-1-244`, in viewport), the
+uncited group opening, no horizontal overflow on a phone, and the abstain state reporting
+"6 retrieved, none answered the question" with the nearest passages open by default and
+`judged not relevant` on each.
+
+Typecheck clean, 286 tests passing, prettier clean, `next build` clean with all eleven routes.

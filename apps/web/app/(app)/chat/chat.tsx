@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   answerStreamEventSchema,
   healthSchema,
@@ -13,8 +13,8 @@ import { apiStream } from '../../../lib/client.ts';
 import { formatMs } from '../../../lib/format.ts';
 import { Answer, AnswerDraft } from '../../../components/answer.tsx';
 import { FernSpecimen } from '../../../components/marks.tsx';
-import { SourceCard } from '../../../components/source-card.tsx';
-import { Button, ErrorCard, Eyebrow, Input, SkeletonLine, cx } from '../../../components/ui.tsx';
+import { Evidence } from '../../../components/evidence.tsx';
+import { Button, ErrorCard, Input, SkeletonLine, cx } from '../../../components/ui.tsx';
 import { useApi } from '../../../lib/use-api.ts';
 import { AnswerModelPicker } from './model-picker.tsx';
 
@@ -300,10 +300,7 @@ export function Chat({
             <li
               key={turn.id}
               ref={i === turns.length - 1 ? tailRef : null}
-              className={cx(
-                'min-w-0 scroll-mt-20',
-                i > 0 && 'mt-10 border-t border-rule pt-10',
-              )}
+              className={cx('min-w-0 scroll-mt-20', i > 0 && 'mt-10 border-t border-rule pt-10')}
             >
               <TurnView
                 turn={turn}
@@ -328,12 +325,17 @@ function sourceDomId(turnId: number, chunkId: number): string {
 }
 
 /**
- * One question and everything it produced.
+ * One question and everything it produced, read top to bottom.
  *
- * The two-column split is the show-your-work principle in layout form: the answer holds
- * to a readable measure and the evidence sits beside it, not behind a disclosure. Only a
- * phone collapses the evidence to a count the reader opens, because only a phone genuinely
- * cannot show both. A tablet can, and design.md §9 says so.
+ * The two-column split is gone, and that is the structural half of this redesign. Putting
+ * the evidence in a right-hand rail is what forced it to 400px, and a 40-character measure
+ * for the passages is self-defeating in a product whose promise is that you can read them.
+ * Answer first, then the passages it stands on, in one column: reading order matches the
+ * order the reader needs, the passages get the full width, and the sticky scroll region,
+ * its measured height cap, and the phone-only show/hide control all stop being necessary.
+ *
+ * What is kept from the old layout is the part that worked: clicking a citation scrolls to
+ * its passage and promotes it, so the answer and its evidence stay one gesture apart.
  */
 function TurnView({
   turn,
@@ -346,258 +348,83 @@ function TurnView({
   onCitationClick: (chunkId: number) => void;
   onRetry: () => void;
 }) {
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const panelId = useId();
-  const toggleRef = useRef<HTMLButtonElement>(null);
   const response = turn.response;
 
-  // The rail is drawn from whichever is available. The draft's passages are the same rows
-  // the finished response will carry — reported early precisely so they can be read during
-  // the wait — so the cards do not move or change when the answer lands.
+  // Drawn from whichever is available. The draft's passages are the same rows the finished
+  // response will carry — reported early precisely so they can be read during the wait — so
+  // nothing moves or changes when the answer lands.
   const sources = response?.sources ?? turn.draft?.sources ?? [];
-
-  /** Escape closes the disclosure and returns focus to the control that opened it. */
-  function onPanelKeyDown(event: React.KeyboardEvent) {
-    if (event.key !== 'Escape' || !sourcesOpen) return;
-    setSourcesOpen(false);
-    toggleRef.current?.focus();
-  }
-
-  // Which passages the answer actually leaned on. Retrieval returns six; an answer
-  // typically cites one or two, and the reader should not have to work that out.
   const citedChunkIds = new Set(response?.citations.map((citation) => citation.chunkId) ?? []);
-  const citedCount = sources.filter((source) => citedChunkIds.has(source.chunkId)).length;
 
   return (
     <article>
       {/*
-       * The question, as a chip rather than a bubble — this is not a chat with a persona.
-       * Right-aligned to the answer column, not the outer container: aligned to the
-       * container it floated over the *sources* rail while its own answer sat diagonally
-       * opposite.
+       * The question is the title of this turn, not a chat bubble.
+       *
+       * It was a right-aligned chip, which put a chat metaphor on top of a document: the
+       * answer below it is prose with citations and a bibliography, and nothing else on the
+       * page pretends to be a conversation. As a heading it also gives the turn a real
+       * outline entry, which is how a screen-reader user moves between questions.
        */}
-      {/*
-       * `68ch`, matching the answer's own measure, not the width of the column it sits
-       * in. Aligned to the column the chip's right edge landed 119px past the end of
-       * every line of the answer beneath it — aligned to nothing the reader can see.
-       */}
-      <div className="lg:max-w-[68ch]">
-        <div className="flex justify-end">
-          <h2 className="max-w-[560px] rounded-sm bg-bg-sunken px-3 py-2 text-body-sm text-text">
-            {turn.query}
-          </h2>
-        </div>
-      </div>
+      <h2 className="font-display text-h3 max-w-[68ch] border-b border-rule pb-3 text-text">
+        {turn.query}
+      </h2>
 
-      {/*
-       * `1fr` for the answer and a bounded track for the evidence, rather than the fixed
-       * `720px 360px` that left 112px of unexplained space to the right of the rail at
-       * 1280. The answer caps itself at 68ch regardless, so the slack belongs to the
-       * passages, which are the thing that benefits from width.
-       */}
-      <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] lg:items-start lg:gap-10">
-        <div className="min-w-0">
-          {turn.error ? (
-            <ErrorCard
-              title="Could not answer that question."
-              detail={turn.error}
-              onRetry={onRetry}
-            />
-          ) : turn.stopped ? (
-            /*
-             * Stopping is the reader's decision, so it is stated in the neutral
-             * informational tone — not an ErrorCard. The passages that had already
-             * arrived stay in the rail; they were retrieved and are still true.
-             */
-            <div className="fade border border-rule-strong bg-bg-sunken p-4">
-              <p className="text-body-sm text-text">
-                Stopped before the answer was finished. Nothing was validated, so nothing
-                is shown.
-              </p>
-              <Button size="sm" variant="secondary" onClick={onRetry} className="mt-3">
-                Ask again
-              </Button>
-            </div>
-          ) : response ? (
-            <>
-              <Answer response={response} onCitationClick={onCitationClick} />
-              {/*
-               * Three measurements, three columns. As one dot-delimited string
-               * (`3 CITED · 6 PASSAGES · 3.4S`) it read as a single opaque token, and
-               * `uppercase` turned `3.4s` into `3.4S`, mangling the unit in a brand whose
-               * rule is numbers over adjectives.
-               */}
-              <dl className="text-mono-label mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-text-muted">
-                <Stat label="citations">
-                  {response.abstained ? 'abstained' : response.citations.length}
-                </Stat>
-                <Stat label="passages">{response.sources.length}</Stat>
-                <Stat label="took">{formatMs(response.latencyMs)}</Stat>
-              </dl>
-            </>
-          ) : turn.draft && turn.draft.text.length > 0 ? (
-            <AnswerDraft text={turn.draft.text} />
-          ) : (
-            // Passages may already be on screen; the answer column has nothing yet.
-            <AnswerSkeleton />
-          )}
-        </div>
-
-        {sources.length > 0 && (
+      <div className="mt-6 min-w-0">
+        {turn.error ? (
+          <ErrorCard
+            title="Could not answer that question."
+            detail={turn.error}
+            onRetry={onRetry}
+          />
+        ) : turn.stopped ? (
           /*
-           * The rail is its own scroll region from `lg` up. Before this it was an ordinary
-           * 2,271px column beside a 217px answer: reading the fourth passage put the
-           * answer it was evidence for entirely off-screen, which is the one thing a
-           * citation is supposed to make unnecessary. Capped, one question and all six of
-           * its passages fit on one screen and the evidence scrolls under a stationary
-           * answer.
-           *
-           * `14rem` is measured, not chosen. A turn has to clear the 3.5rem header, the
-           * 4rem composer, the 5rem `scroll-mt` the new turn lands at, and the question
-           * chip above the row: 13.1rem of fixed cost, so 14rem leaves about 15px of
-           * slack at any viewport height. At 10rem a turn came to 804px against 779px of
-           * usable height — off by exactly the amount that made it not fit.
-           *
-           * No `overscroll-contain`. It was here first and it was wrong: a pointer resting
-           * over the rail could scroll the rail to its end and then the page would not
-           * move at all. Chaining to the page is the behaviour a reader expects.
+           * Stopping is the reader's decision, so it is stated in the neutral informational
+           * tone rather than as an error. The passages that had already arrived stay below;
+           * they were retrieved and are still true.
            */
-          <aside
-            className={cx(
-              'mt-6 min-w-0 lg:mt-0',
-              'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-14rem)] lg:overflow-y-auto',
-            )}
-            aria-labelledby={`${panelId}-heading`}
-            onKeyDown={onPanelKeyDown}
-          >
-            {/* Sticky within that scroll region, so the count stays legible while the
-                cards move under it. */}
-            <div className="sticky top-0 z-[1] flex items-center justify-between gap-3 border-b border-rule bg-bg pb-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <Eyebrow as="h3" id={`${panelId}-heading`}>
-                  {response?.abstained ? 'Nearest passages' : 'Sources'}
-                </Eyebrow>
-                {/* Which of the six carried a claim, stated rather than counted by the
-                    reader off six border colours. */}
-                {citedCount > 0 && (
-                  <span className="text-caption text-text-muted">
-                    {citedCount} of {sources.length} cited
-                  </span>
-                )}
-              </div>
-              {/*
-               * `lg:hidden`, not `md:hidden`. The two-column grid starts at `lg`, so
-               * between 768 and 1023 the panel was permanently open *and* had no toggle:
-               * a 772px-wide, 2,166px-tall stack of cards under the answer with no way to
-               * put it away. The breakpoint that shows the rail inline is the breakpoint
-               * that may drop the control, and that is `lg`.
-               */}
-              <button
-                type="button"
-                ref={toggleRef}
-                onClick={() => setSourcesOpen((open) => !open)}
-                aria-expanded={sourcesOpen}
-                aria-controls={panelId}
-                className="hit-touch rounded-sm text-caption font-medium text-text lg:hidden"
-              >
-                {sourcesOpen ? 'Hide' : `Show ${sources.length}`}
-              </button>
-            </div>
-
-            <div
-              id={panelId}
-              className={cx(
-                'mt-3 grid grid-cols-[minmax(0,1fr)] gap-3',
-                sourcesOpen ? 'grid' : 'hidden lg:grid',
-              )}
-            >
-              {/* At the head of the rail, where the first score a reader meets is. It
-                  used to sit below all six cards — 2,300px past the numbers it explains. */}
-              <ScoreLegend />
-              {sources.map((source, i) => (
-                <SourceCard
-                  key={source.chunkId}
-                  result={source}
-                  index={i + 1}
-                  query={turn.query}
-                  domId={sourceDomId(turn.id, source.chunkId)}
-                  cited={citedChunkIds.has(source.chunkId)}
-                  flashed={flashed === sourceDomId(turn.id, source.chunkId)}
-                  /*
-                   * Cited passages are open; the rest are a titled row the reader opens.
-                   * When nothing was cited — the abstain case — the top-ranked passage
-                   * opens instead, so "here is the nearest thing we found" still shows
-                   * something to judge rather than six closed rows.
-                   */
-                  startOpen={
-                    citedChunkIds.size > 0 ? citedChunkIds.has(source.chunkId) : i === 0
-                  }
-                />
-              ))}
-            </div>
-          </aside>
+          <div className="fade max-w-[68ch] border border-rule-strong bg-bg-sunken p-4">
+            <p className="text-body-sm text-text">
+              Stopped before the answer was finished. Nothing was validated, so nothing is shown.
+            </p>
+            <Button size="sm" variant="secondary" onClick={onRetry} className="mt-3">
+              Ask again
+            </Button>
+          </div>
+        ) : response ? (
+          <>
+            <Answer response={response} onCitationClick={onCitationClick} />
+            {/*
+             * Latency alone. This printed citations, passages and took, and after the
+             * redesign two of those three are stated twice more on the same screen: the
+             * cited list under the answer names every citation, and the evidence heading
+             * says "1 of 6 passages cited". Three counts of the same two facts is not
+             * thoroughness.
+             *
+             * `uppercase` is deliberately absent: it turned `3.4s` into `3.4S`, mangling the
+             * unit in a brand whose rule is numbers over adjectives.
+             */}
+            <p className="text-mono-label mt-5 flex gap-1.5 font-mono text-text-muted">
+              took <span className="tabular text-text">{formatMs(response.latencyMs)}</span>
+            </p>
+          </>
+        ) : turn.draft && turn.draft.text.length > 0 ? (
+          <AnswerDraft text={turn.draft.text} />
+        ) : (
+          // Passages may already be below; the answer has nothing yet.
+          <AnswerSkeleton />
         )}
       </div>
+
+      <Evidence
+        sources={sources}
+        citedChunkIds={citedChunkIds}
+        query={turn.query}
+        domIdFor={(chunkId) => sourceDomId(turn.id, chunkId)}
+        flashedDomId={flashed}
+        abstained={response?.abstained ?? false}
+      />
     </article>
-  );
-}
-
-function Stat({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-1.5">
-      <dt>{label}</dt>
-      <dd className="tabular text-text">{children}</dd>
-    </div>
-  );
-}
-
-/**
- * What the three numbers on every source card mean.
- *
- * The product's whole promise is that a result can be interrogated, and it prints
- * `vector 0.84 · bm25 0.99 · fused 0.174` to make that possible — then explained none of
- * it anywhere. Exposing internals without a legend is not transparency, it is trivia. A
- * `<details>` because the legend is needed once and then never again.
- */
-function ScoreLegend() {
-  return (
-    <details className="border border-rule bg-bg p-3">
-      <summary className="hit-touch cursor-pointer text-caption font-medium text-text">
-        What these numbers mean
-      </summary>
-      <dl className="mt-3 grid gap-2 text-caption text-text-muted">
-        <div>
-          <dt className="font-medium text-text">Relevance</dt>
-          <dd>
-            An absolute grade from 0 to 1: how well this passage answers the question, judged after
-            retrieval. Below 0.67 nothing is answered from it, which is how abstention is decided.
-          </dd>
-        </div>
-        <div>
-          <dt className="font-medium text-text">vector</dt>
-          <dd>
-            Cosine similarity of meaning, 0 to 1. Finds passages that say the same thing in
-            different words. <span className="font-mono">none</span> means keyword search alone
-            surfaced this passage.
-          </dd>
-        </div>
-        <div>
-          <dt className="font-medium text-text">bm25</dt>
-          <dd>
-            Keyword match strength, normalised 0 to 1. Finds exact terms a paraphrase would miss,
-            which is what cuts through 78 near-identical delivery reports.
-          </dd>
-        </div>
-        <div>
-          <dt className="font-medium text-text">fused</dt>
-          <dd>
-            The combined ranking the two arms agreed on. Derived from positions rather than scores,
-            so it orders results and says nothing about how good the best one is. That is why it is
-            printed and not drawn as a bar.
-          </dd>
-        </div>
-      </dl>
-    </details>
   );
 }
 

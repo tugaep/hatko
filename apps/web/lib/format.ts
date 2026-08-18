@@ -101,3 +101,37 @@ export function highlightSegments(text: string, query: string): { text: string; 
     .filter((part) => part.length > 0)
     .map((part) => ({ text: part, match: terms.includes(part.toLowerCase()) }));
 }
+
+/**
+ * A passage, minus a leading markdown heading that only repeats the document title.
+ *
+ * Display-only, and deliberately not done at ingest: `chunk.ts` promises the stored chunk
+ * is the verbatim slice of the source file, and the retrieval and answer paths both depend
+ * on that. The duplication is a rendering problem, so it is solved where the rendering is.
+ *
+ * It matters on this corpus specifically. Every document is one chunk and every document
+ * opens with its own `# Title`, so a card that prints its title as a heading and then
+ * prints the passage was printing the same words twice, 142 times out of 142.
+ *
+ * The comparison is loose on case and punctuation but never on words: a heading that says
+ * anything the title does not is content, and content is never dropped.
+ */
+export function passageBody(content: string, documentTitle: string): string {
+  const [first, ...rest] = content.split('\n');
+  if (first === undefined) return content;
+
+  const heading = first.match(/^#{1,6}\s+(.*)$/);
+  if (!heading) return content;
+
+  const normalise = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+
+  if (normalise(heading[1] ?? '') !== normalise(documentTitle)) return content;
+
+  // Only the blank line the heading left behind, so indentation inside the passage stays
+  // exactly as the author wrote it.
+  return rest.join('\n').replace(/^\n+/, '');
+}
