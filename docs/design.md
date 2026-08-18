@@ -158,12 +158,14 @@ Three families, three distinct jobs. Any of them doing another's job is a bug.
 | Family                          | Job                                                                                                 |
 | ------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **Fraunces** (variable)         | Display, page titles, section headings, empty-state copy. Carries the field-guide character.        |
-| **Inter** (variable)            | All UI: body, labels, buttons, tables, form text. Chosen for metrics at small sizes in dense views. |
-| **IBM Plex Mono** (400/500/600) | Catalog numbers, document paths, scores, timestamps, chunk IDs, code.                               |
+| **Geist** (variable)            | All UI: body, labels, buttons, tables, form text. A Swiss neo-grotesque in the Helvetica/Univers line. |
+| **Geist Mono** (variable)       | Catalog numbers, document paths, scores, timestamps, chunk IDs, code.                               |
 
 Fraunces runs at `opsz` matched to size and `WONK 1` at 30px and above only — the wonk is character at display size and noise at 20px.
 
-Inter ships with `cv05, cv11, ss03` enabled to soften the single-storey shapes and open the terminals. Tabular figures are applied contextually via `.tabular`, never globally — prose should not be tabular.
+Geist and Geist Mono replaced Inter and IBM Plex Mono, which were two unrelated families doing adjacent jobs. Geist's closed apertures and horizontal terminals are the point of it, so the `cv05, cv11, ss03` that used to open Inter's terminals went with Inter rather than being carried over as three no-ops. The fallback chain is `'Helvetica Neue', Helvetica, Arial` — the faces the UI font was chosen to resemble, so an unloaded state has the same proportions. `system-ui` is deliberately absent: it is a different design on every OS, which is the opposite of what a fallback is for.
+
+Tabular figures are applied contextually via `.tabular`, never globally — prose should not be tabular.
 
 ### Scale
 
@@ -173,16 +175,16 @@ Inter ships with `cv05, cv11, ss03` enabled to soften the single-storey shapes a
 | `display`    | 38 / 1.10 | −0.025em | Fraunces 500  | Page hero                  |
 | `h1`         | 30 / 1.15 | −0.02em  | Fraunces 500  | Page title                 |
 | `h2`         | 24 / 1.25 | −0.015em | Fraunces 500  | Section                    |
-| `h3`         | 20 / 1.30 | −0.01em  | Inter 600     | Card title                 |
-| `h4`         | 16 / 1.40 | −0.005em | Inter 600     | Sub-head, table caption    |
-| `body`       | 16 / 1.60 | 0        | Inter 400     | Answers, prose             |
-| `body-sm`    | 14 / 1.55 | 0        | Inter 400     | UI default, table cells    |
-| `caption`    | 12 / 1.40 | 0.01em   | Inter 400     | Metadata, helper text      |
-| `eyebrow`    | 12 / 1.00 | 0.08em   | Inter 600     | Uppercase section labels   |
-| `mono`       | 13 / 1.50 | 0.02em   | Plex Mono 400 | Paths, snippets            |
-| `mono-label` | 11 / 1.40 | 0.06em   | Plex Mono 500 | Uppercase catalog numbers  |
+| `h3`         | 20 / 1.30 | −0.01em  | Geist 600     | Card title                 |
+| `h4`         | 16 / 1.40 | −0.005em | Geist 600     | Sub-head, table caption    |
+| `body`       | 16 / 1.60 | 0        | Geist 400     | Answers, prose             |
+| `body-sm`    | 14 / 1.55 | 0        | Geist 400     | UI default, table cells    |
+| `caption`    | 12 / 1.40 | 0.01em   | Geist 400     | Metadata, helper text      |
+| `eyebrow`    | 12 / 1.00 | 0.08em   | Geist 600     | Uppercase section labels   |
+| `mono`       | 13 / 1.50 | 0.02em   | Geist Mono 400 | Paths, snippets            |
+| `mono-label` | 11 / 1.40 | 0.06em   | Geist Mono 500 | Uppercase catalog numbers  |
 
-**Measure**: answer prose caps at `68ch`. The chat column caps at `720px`. Never let generated prose run the full width of a desktop viewport.
+**Measure**: answer prose caps at `68ch`, and so does the question chip above it — the chip used to align to the column edge instead, landing its right side 119px past the end of every line beneath it. The chat column takes `1fr` beside a `320-400px` evidence rail; a fixed `720px + 360px` left 112px of unexplained space at 1280. Never let generated prose run the full width of a desktop viewport.
 
 ---
 

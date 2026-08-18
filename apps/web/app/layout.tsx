@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Fraunces, IBM_Plex_Mono, Inter } from 'next/font/google';
+import { Fraunces, Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
 /**
@@ -7,6 +7,12 @@ import './globals.css';
  * no third-party connection, and no layout shift from a late-arriving face.
  *
  * Three families, three jobs. Any of them doing another's job is a bug.
+ *
+ * The UI and mono faces are Geist and Geist Mono — a Swiss neo-grotesque in the
+ * Helvetica/Univers line, with closed apertures and horizontal terminals, and a mono
+ * drawn against the same skeleton. They replaced Inter and IBM Plex Mono, which came
+ * from two unrelated families. The local fallback chain names Helvetica Neue first, so
+ * the face that swaps in before the webfont lands is the one it was chosen to resemble.
  */
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -16,16 +22,17 @@ const fraunces = Fraunces({
   display: 'swap',
 });
 
-const inter = Inter({
+const geist = Geist({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-geist',
   display: 'swap',
 });
 
-const plexMono = IBM_Plex_Mono({
+// Variable, so the 400/500/600 the type scale asks for come from one file rather than
+// three static weights.
+const geistMono = Geist_Mono({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-plex-mono',
+  variable: '--font-geist-mono',
   display: 'swap',
 });
 
@@ -43,7 +50,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${inter.variable} ${plexMono.variable}`}>
+    <html lang="en" className={`${fraunces.variable} ${geist.variable} ${geistMono.variable}`}>
       <body>{children}</body>
     </html>
   );

@@ -73,7 +73,7 @@ The vein is drawn as a vertical bar with a slight taper. At 16px and below the l
 
 **Wordmark**: `Hatko` set in Fraunces, weight 500, optical size at display, tracking `-0.02em`. Always capital H, never all-caps, never all-lowercase.
 
-Fraunces is the one place this system uses a font that generic AI output also reaches for. It is kept because the brand names it and because the field-guide register genuinely wants a display serif with some wonk in it — but it is confined to display sizes and page titles. Every label, button, table cell and number is Inter or Plex Mono. A display serif doing a label's job is the failure this note exists to prevent.
+Fraunces is the one place this system uses a font that generic AI output also reaches for. It is kept because the brand names it and because the field-guide register genuinely wants a display serif with some wonk in it — but it is confined to display sizes and page titles. Every label, button, table cell and number is Geist or Geist Mono. A display serif doing a label's job is the failure this note exists to prevent.
 
 ## Visual world: flat vector packaging
 
@@ -94,7 +94,7 @@ What this means concretely:
 1. **The label frame** — a 1px rule inset from the card edge with the catalog number in the top-right corner. The signature component; it wraps source cards, stat tiles, and document rows.
 2. **The corner notch** — a small diagonal cut on the top-right of primary cards, borrowed from a tear-open packet. Used sparingly, on one element per view.
 3. **Hairline rules** — 1px dividers as the primary structural device, generously spaced.
-4. **Catalog numbers** — IBM Plex Mono, small, uppercase, tracked out. `DOC-0142` · `CHUNK-08` · `RUN-2026-08-17`.
+4. **Catalog numbers** — Geist Mono, small, uppercase, tracked out. `DOC-0142` · `CHUNK-08` · `RUN-2026-08-17`.
 
 ### Illustration
 

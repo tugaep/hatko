@@ -2879,3 +2879,82 @@ and re-check", not "start editing to satisfy it".
 Verification of the interaction itself was done against the deployment rather than locally:
 a production build served on another port is cross-origin to the API, whose allowed origin
 is the dev port, so the CORS policy that protects the session also blocks that shortcut.
+
+---
+
+## Step 22 — the evidence rail becomes readable, and the type changes families
+
+A note on this entry before the content: it was written from the diff at commit time, not
+while the work happened, so it records what changed and what was checked rather than a
+running account of mistakes. That is a departure from how every entry above was produced,
+and the reason it is stated here is that the difference matters when reading them together.
+
+**The rail was the problem.** Six source cards each printing a whole document made the
+evidence column 2,271px tall beside a 217px answer, a 10:1 split in favour of passages the
+answer never cited. Reading the fourth passage put the answer it was evidence for entirely
+off screen, which is the one thing a citation is supposed to make unnecessary. Three
+changes together:
+
+- Each card is now a native `<details>` disclosure. Identity, the relevance meter and the
+  cited badge stay in the summary, because that is what a reader triages on; the retrieval
+  measures and the passage body sit inside. Cited cards open themselves, and in the abstain
+  case, where nothing is cited, the top-ranked passage opens instead, so "here is the
+  nearest thing we found" still shows something to judge. A card the reader closes by hand
+  stays closed.
+- The rail is its own scroll region from `lg` up, capped at `calc(100dvh-14rem)`. The
+  `14rem` is measured, not picked: a turn has to clear the 3.5rem header, the 4rem
+  composer, the 5rem scroll margin the new turn lands at, and the question chip, which is
+  13.1rem of fixed cost. At 10rem a turn came to 804px against 779px of usable height, off
+  by exactly the amount that made it not fit.
+- The deprecation strip sits outside the disclosure, because a closed card still has to
+  carry it.
+
+**Two layout numbers that were wrong and looked deliberate.** The question chip aligned to
+its column rather than to the answer's own measure, landing its right edge 119px past the
+end of every line beneath it. And the grid was a fixed `720px 360px`, which left 112px of
+unexplained space to the right of the rail at 1280. Both are now tied to the answer's
+`68ch` measure, with the slack going to the passages, which are the part that benefits from
+width.
+
+**A breakpoint bug that only existed between two breakpoints.** The rail's show/hide
+toggle was `md:hidden` while the two-column grid starts at `lg`, so between 768 and 1023 the
+panel was permanently open and had no control: a 772px-wide, 2,166px-tall stack of cards
+under the answer with no way to put it away. The breakpoint that shows the rail inline is
+the breakpoint that may drop the control.
+
+**Stopping is now possible, and it is not an error.** An `AbortController` per request, a
+stop control in the composer, and a neutral card saying the answer was stopped before it
+finished and that nothing unvalidated is shown. The draft is discarded on stop for the same
+reason it is labelled provisional while streaming: nothing in it has been through citation
+validation. Unmounting aborts too, because a pending request outliving its page keeps the
+answer model generating and keeps spending the account's allowance.
+
+**The live region was announcing the wrong thing.** `aria-live` sat on the list of turns,
+so every streamed token mutated a live region: a screen reader narrated the answer being
+typed and then narrated the whole of it again when the validated version replaced the
+draft. It is now a separate status region carrying three phase messages, which are the
+transitions a reader actually needs.
+
+**Contrast, found by checking rather than by looking.** A `none` value in the score row,
+which is how a reader sees that the lexical arm alone found a passage, was drawn in
+`--rule-strong`: 1.65:1 against the card fill, information rendered invisible. Muted
+carries the same de-emphasis at 5.77:1.
+
+**Typography changed families.** Inter and IBM Plex Mono were two unrelated families doing
+adjacent jobs; Geist and Geist Mono are one skeleton drawn twice. Two details worth
+recording. Inter's `cv05 / cv11 / ss03` opened its terminals, and Geist's closed apertures
+are the point of it, so the declaration went with the font instead of being carried over as
+three no-ops. And the fallback chain names Helvetica Neue, Helvetica, Arial, with `system-ui`
+deliberately absent: a fallback whose design differs on every OS is the opposite of a
+fallback. `docs/design.md` and `docs/brand.md` were updated in the same pass, because a
+spec that names the old faces is worse than no spec.
+
+**Two smaller fixes.** `--nav-h` was an inline custom property, which outranks every
+stylesheet rule and therefore cannot be undone at a breakpoint, so desktop kept reserving
+56px for a bottom bar that is `md:hidden`; it is set as classes now. And the embedding plot
+sized its width from `vh` alone, so a 1440x600 window drew the cloud at 468px with a
+thousand pixels going spare either side; a `max(28rem, 78vh)` floor fixes it, and below the
+floor the page scrolls, which is the right trade for a picture you inspect.
+
+Verified at commit time: typecheck clean, 282 tests passing, prettier clean, and
+`next build` clean with all eleven routes emitted.

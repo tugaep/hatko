@@ -217,8 +217,10 @@ export function LabelFrame({
  *
  * `as` exists because most of these label a panel, and a panel label is a heading. Nine
  * of them shipped as `<p>`, which left the dashboard with a three-entry heading outline
- * and no way to navigate it by heading at all. The visual treatment is identical either
- * way; only the element changes.
+ * and no way to navigate it by heading at all. `span` is for the ones that label a value
+ * inside phrasing content — a `<p>` nested in a `<span>` is invalid, and the browser
+ * silently reparents it. The visual treatment is identical either way; only the element
+ * changes.
  */
 export function Eyebrow({
   children,
@@ -229,7 +231,7 @@ export function Eyebrow({
   children: ReactNode;
   className?: string;
   id?: string;
-  as?: 'p' | 'h2' | 'h3';
+  as?: 'p' | 'h2' | 'h3' | 'span';
 }) {
   return (
     <Tag id={id} className={cx('text-eyebrow uppercase text-text-muted', className)}>

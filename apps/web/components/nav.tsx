@@ -36,9 +36,21 @@ export function Shell({ user, children }: { user: SessionUser; children: React.R
   const bottomBar = items.length > 1;
 
   return (
-    // Published so a sticky element inside a page can clear the bottom bar without
-    // knowing whether this user has one. The chat composer is the caller.
-    <div className="min-h-dvh" style={{ ['--nav-h' as string]: bottomBar ? '3.5rem' : '0rem' }}>
+    /*
+     * Published so a sticky element inside a page can clear the bottom bar without
+     * knowing whether this user has one. The chat composer is the caller.
+     *
+     * Set as classes rather than an inline style because the bar itself is `md:hidden`,
+     * and an inline custom property cannot be undone at a breakpoint — it outranks every
+     * stylesheet rule. So desktop kept reserving 56px for a bar that was not there, and
+     * the composer floated with a dead strip beneath it.
+     */
+    <div
+      className={cx(
+        'min-h-dvh',
+        bottomBar ? '[--nav-h:3.5rem] md:[--nav-h:0rem]' : '[--nav-h:0rem]',
+      )}
+    >
       {/* Opaque, not translucent — the interface is a printed surface, not glass. */}
       <header className="sticky top-0 z-[var(--z-sticky)] border-b border-rule bg-bg">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">

@@ -36,8 +36,13 @@
   --color-clay-600: #93361f;
 
   --font-display: var(--font-fraunces), Georgia, serif;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  /* Helvetica Neue first in the fallback, then Helvetica, then Arial: the faces the UI
+     face was chosen to resemble, so a machine that has not loaded the webfont yet — or
+     cannot — renders something with the same proportions rather than something with the
+     platform's own. `system-ui` is deliberately absent; it is a different design on
+     every OS, which is the opposite of what a fallback is for. */
+  --font-sans: var(--font-geist), 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* Three radii, and that is the whole set. Containers stay square. */
   --radius-sm: 3px;
@@ -215,11 +220,9 @@
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.55;
-    /* Softens Inter's single-storey shapes and opens the terminals. */
-    font-feature-settings:
-      'cv05' 1,
-      'cv11' 1,
-      'ss03' 1;
+    /* Inter's `cv05 / cv11 / ss03` used to be set here to open its terminals. Geist has
+       no such axes and closed apertures are the point of it, so the declaration went
+       with the font rather than being carried over as three no-ops. */
     -webkit-font-smoothing: antialiased;
   }
 

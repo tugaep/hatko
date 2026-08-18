@@ -215,8 +215,15 @@ function Plot({ map }: { map: EmbeddingMap }) {
          * Square because the fit scales per axis and a wide box is spent on whichever axis
          * the rotation is currently narrow along. Bounded by height as well as width so the
          * whole cube stays on screen without scrolling the page to follow it.
+         *
+         * The `max(28rem, …)` is a floor, and it is load-bearing. Sizing a width from `vh`
+         * means a short viewport produces a small plot however much width is going spare —
+         * a laptop window at 1440×600 would have drawn the cloud at 468px with a thousand
+         * pixels unused either side. Below the floor the page scrolls, which is the right
+         * trade: this is a picture you inspect, and it has a size below which it stops being
+         * one. `min(100%, …)` still keeps it inside its container on a phone.
          */
-        className="relative mx-auto mt-4 aspect-square w-full max-w-[min(100%,78vh)] border border-rule bg-bg-raised"
+        className="relative mx-auto mt-4 aspect-square w-full max-w-[min(100%,max(28rem,78vh))] border border-rule bg-bg-raised"
       >
         <canvas
           ref={canvasRef}
@@ -342,7 +349,7 @@ function Plot({ map }: { map: EmbeddingMap }) {
        * rather than merely enjoy.
        */}
       {map.points.length > 0 && (
-        <p className="mx-auto mt-2 max-w-[min(100%,78vh)] text-caption text-text-muted">
+        <p className="mx-auto mt-2 max-w-[min(100%,max(28rem,78vh))] text-caption text-text-muted">
           Drag to rotate, or focus the plot and use the arrow keys. Hover a point for its document
           and category.
         </p>

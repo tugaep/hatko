@@ -41,6 +41,8 @@ interface Turn {
   /** What has arrived so far. Provisional, and discarded once `response` is set. */
   draft: { sources: SearchResult[]; text: string } | null;
   error: string | null;
+  /** The reader stopped this one. Not an error, and styled as neither. */
+  stopped: boolean;
 }
 
 /** Real questions from the sample set, including one the corpus cannot answer. */
@@ -81,6 +83,15 @@ export function Chat({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [pending, setPending] = useState(false);
   const [flashed, setFlashed] = useState<string | null>(null);
+  /**
+   * What assistive tech is told, as phases rather than as content.
+   *
+   * The list of turns used to carry `aria-live` itself, which meant every streamed token
+   * mutated a live region — a screen reader narrated the answer being typed, then
+   * narrated the whole of it again when the validated version replaced the draft. The
+   * announcements a reader actually needs are the three transitions.
+   */
+  const [announcement, setAnnouncement] = useState('');
   const composerRef = useRef<HTMLInputElement>(null);
   const tailRef = useRef<HTMLLIElement>(null);
   const nextId = useRef(1);
@@ -88,12 +99,16 @@ export function Chat({
   // current value from a ref rather than closing over a stale `pending`.
   const pendingRef = useRef(false);
   pendingRef.current = pending;
+  /** The in-flight request, so the reader can stop one that is going nowhere. */
+  const abortRef = useRef<AbortController | null>(null);
 
   const ask = useCallback(async (query: string) => {
     const trimmed = query.trim();
     if (trimmed.length < 2 || pendingRef.current) return;
 
     const id = nextId.current++;
+    const controller = new AbortController();
+    abortRef.current = controller;
     /** Update just this turn. `setTurns` is functional throughout, so deltas cannot race. */
     const update = (fields: (turn: Turn) => Partial<Turn>) =>
       setTurns((previous) =>
@@ -102,18 +117,23 @@ export function Chat({
 
     setTurns((previous) => [
       ...previous,
-      { id, query: trimmed, response: null, draft: null, error: null },
+      { id, query: trimmed, response: null, draft: null, error: null, stopped: false },
     ]);
     setPending(true);
+    setAnnouncement('Searching the corpus.');
 
     try {
-      for await (const event of apiStream('/api/answer', answerStreamEventSchema, {
-        query: trimmed,
-      })) {
+      for await (const event of apiStream(
+        '/api/answer',
+        answerStreamEventSchema,
+        { query: trimmed },
+        controller.signal,
+      )) {
         if (event.type === 'passages') {
           // The rail can be read and checked while the answer is still being written,
           // which is most of the wait.
           update((turn) => ({ draft: { sources: event.sources, text: turn.draft?.text ?? '' } }));
+          setAnnouncement(`${event.sources.length} passages retrieved. Writing the answer.`);
         } else if (event.type === 'delta') {
           update((turn) => ({
             draft: {
@@ -123,6 +143,11 @@ export function Chat({
           }));
         } else if (event.type === 'answer') {
           update(() => ({ response: event.response, draft: null }));
+          setAnnouncement(
+            event.response.abstained
+              ? 'No documents cover this question. The nearest passages are listed.'
+              : `Answer ready, with ${event.response.citations.length} citations.`,
+          );
         } else {
           // A failure after the first byte. Status 0 because there is no status left to
           // report — the 200 went out with the passages — so the code carries the meaning.
@@ -130,6 +155,13 @@ export function Chat({
         }
       }
     } catch (error) {
+      // Stopping is a deliberate act, not a failure, so it does not take the error path.
+      // The draft still goes: nothing in it was validated.
+      if (controller.signal.aborted) {
+        update(() => ({ stopped: true, draft: null }));
+        setAnnouncement('Stopped.');
+        return;
+      }
       // A 401 here means the session expired mid-session. A full reload lets the server
       // gate make the call, rather than this component guessing at a redirect.
       if (isAuthError(error)) {
@@ -139,10 +171,27 @@ export function Chat({
       // The draft goes with it. A truncated answer left on screen beside an error card
       // reads as a partial result, when in fact nothing about it was ever validated.
       update(() => ({ error: messageOf(error), draft: null }));
+      setAnnouncement('That question could not be answered.');
     } finally {
       setPending(false);
+      abortRef.current = null;
     }
   }, []);
+
+  /** Retrying reuses `ask`, so a stopped turn has to lose its stopped state first. */
+  const retry = useCallback(
+    (turn: Turn) => {
+      setTurns((previous) => previous.filter((existing) => existing.id !== turn.id));
+      void ask(turn.query);
+    },
+    [ask],
+  );
+
+  const stop = useCallback(() => abortRef.current?.abort(), []);
+
+  // A pending request outliving the page it belongs to is a leak with a cost attached:
+  // the answer model keeps generating and the allowance keeps being spent.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   /** `/` focuses the composer, unless the user is already typing somewhere. */
   useEffect(() => {
@@ -229,27 +278,38 @@ export function Chat({
          * The live region is mounted here, once, for the life of the page — not created
          * along with each answer. A region inserted together with its content is not
          * announced by most assistive tech, which meant pressing Ask produced silence.
-         *
+         * It carries phase messages rather than the answer itself; see `announcement`.
+         */}
+        <p role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
+
+        {/*
          * `grid-cols-[minmax(0,1fr)]` rather than a bare `grid`: an auto track takes its
          * minimum from its content, and one unbreakable source path was enough to push the
          * whole column past the viewport on a phone.
+         *
+         * Turns are ruled off rather than only spaced. `gap-12` alone left a third
+         * question indistinguishable from a continuation of the second.
          */}
         <ol
-          aria-live="polite"
           aria-busy={pending}
-          className={cx('grid grid-cols-[minmax(0,1fr)] gap-12', turns.length > 0 && 'mt-8')}
+          className={cx('grid grid-cols-[minmax(0,1fr)]', turns.length > 0 && 'mt-8')}
         >
           {turns.map((turn, i) => (
             <li
               key={turn.id}
               ref={i === turns.length - 1 ? tailRef : null}
-              className="min-w-0 scroll-mt-20"
+              className={cx(
+                'min-w-0 scroll-mt-20',
+                i > 0 && 'mt-10 border-t border-rule pt-10',
+              )}
             >
               <TurnView
                 turn={turn}
                 flashed={flashed}
                 onCitationClick={(chunkId) => jumpToSource(turn.id, chunkId)}
-                onRetry={() => ask(turn.query)}
+                onRetry={() => retry(turn)}
               />
             </li>
           ))}
@@ -258,7 +318,7 @@ export function Chat({
         {turns.length === 0 && <EmptyState onPick={ask} disabled={pending} />}
       </div>
 
-      <Composer inputRef={composerRef} pending={pending} onSubmit={ask} />
+      <Composer inputRef={composerRef} pending={pending} onSubmit={ask} onStop={stop} />
     </div>
   );
 }
@@ -306,6 +366,7 @@ function TurnView({
   // Which passages the answer actually leaned on. Retrieval returns six; an answer
   // typically cites one or two, and the reader should not have to work that out.
   const citedChunkIds = new Set(response?.citations.map((citation) => citation.chunkId) ?? []);
+  const citedCount = sources.filter((source) => citedChunkIds.has(source.chunkId)).length;
 
   return (
     <article>
@@ -315,7 +376,12 @@ function TurnView({
        * container it floated over the *sources* rail while its own answer sat diagonally
        * opposite.
        */}
-      <div className="lg:max-w-[720px]">
+      {/*
+       * `68ch`, matching the answer's own measure, not the width of the column it sits
+       * in. Aligned to the column the chip's right edge landed 119px past the end of
+       * every line of the answer beneath it — aligned to nothing the reader can see.
+       */}
+      <div className="lg:max-w-[68ch]">
         <div className="flex justify-end">
           <h2 className="max-w-[560px] rounded-sm bg-bg-sunken px-3 py-2 text-body-sm text-text">
             {turn.query}
@@ -323,7 +389,13 @@ function TurnView({
         </div>
       </div>
 
-      <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,720px)_360px] lg:items-start lg:gap-10">
+      {/*
+       * `1fr` for the answer and a bounded track for the evidence, rather than the fixed
+       * `720px 360px` that left 112px of unexplained space to the right of the rail at
+       * 1280. The answer caps itself at 68ch regardless, so the slack belongs to the
+       * passages, which are the thing that benefits from width.
+       */}
+      <div className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] lg:items-start lg:gap-10">
         <div className="min-w-0">
           {turn.error ? (
             <ErrorCard
@@ -331,6 +403,21 @@ function TurnView({
               detail={turn.error}
               onRetry={onRetry}
             />
+          ) : turn.stopped ? (
+            /*
+             * Stopping is the reader's decision, so it is stated in the neutral
+             * informational tone — not an ErrorCard. The passages that had already
+             * arrived stay in the rail; they were retrieved and are still true.
+             */
+            <div className="fade border border-rule-strong bg-bg-sunken p-4">
+              <p className="text-body-sm text-text">
+                Stopped before the answer was finished. Nothing was validated, so nothing
+                is shown.
+              </p>
+              <Button size="sm" variant="secondary" onClick={onRetry} className="mt-3">
+                Ask again
+              </Button>
+            </div>
           ) : response ? (
             <>
               <Answer response={response} onCitationClick={onCitationClick} />
@@ -357,22 +444,61 @@ function TurnView({
         </div>
 
         {sources.length > 0 && (
+          /*
+           * The rail is its own scroll region from `lg` up. Before this it was an ordinary
+           * 2,271px column beside a 217px answer: reading the fourth passage put the
+           * answer it was evidence for entirely off-screen, which is the one thing a
+           * citation is supposed to make unnecessary. Capped, one question and all six of
+           * its passages fit on one screen and the evidence scrolls under a stationary
+           * answer.
+           *
+           * `14rem` is measured, not chosen. A turn has to clear the 3.5rem header, the
+           * 4rem composer, the 5rem `scroll-mt` the new turn lands at, and the question
+           * chip above the row: 13.1rem of fixed cost, so 14rem leaves about 15px of
+           * slack at any viewport height. At 10rem a turn came to 804px against 779px of
+           * usable height — off by exactly the amount that made it not fit.
+           *
+           * No `overscroll-contain`. It was here first and it was wrong: a pointer resting
+           * over the rail could scroll the rail to its end and then the page would not
+           * move at all. Chaining to the page is the behaviour a reader expects.
+           */
           <aside
-            className="mt-6 min-w-0 lg:mt-0"
+            className={cx(
+              'mt-6 min-w-0 lg:mt-0',
+              'lg:sticky lg:top-20 lg:max-h-[calc(100dvh-14rem)] lg:overflow-y-auto',
+            )}
             aria-labelledby={`${panelId}-heading`}
             onKeyDown={onPanelKeyDown}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-rule pb-2">
-              <Eyebrow as="h3" id={`${panelId}-heading`}>
-                {response?.abstained ? 'Nearest passages' : 'Sources'}
-              </Eyebrow>
+            {/* Sticky within that scroll region, so the count stays legible while the
+                cards move under it. */}
+            <div className="sticky top-0 z-[1] flex items-center justify-between gap-3 border-b border-rule bg-bg pb-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <Eyebrow as="h3" id={`${panelId}-heading`}>
+                  {response?.abstained ? 'Nearest passages' : 'Sources'}
+                </Eyebrow>
+                {/* Which of the six carried a claim, stated rather than counted by the
+                    reader off six border colours. */}
+                {citedCount > 0 && (
+                  <span className="text-caption text-text-muted">
+                    {citedCount} of {sources.length} cited
+                  </span>
+                )}
+              </div>
+              {/*
+               * `lg:hidden`, not `md:hidden`. The two-column grid starts at `lg`, so
+               * between 768 and 1023 the panel was permanently open *and* had no toggle:
+               * a 772px-wide, 2,166px-tall stack of cards under the answer with no way to
+               * put it away. The breakpoint that shows the rail inline is the breakpoint
+               * that may drop the control, and that is `lg`.
+               */}
               <button
                 type="button"
                 ref={toggleRef}
                 onClick={() => setSourcesOpen((open) => !open)}
                 aria-expanded={sourcesOpen}
                 aria-controls={panelId}
-                className="hit-touch rounded-sm text-caption font-medium text-text md:hidden"
+                className="hit-touch rounded-sm text-caption font-medium text-text lg:hidden"
               >
                 {sourcesOpen ? 'Hide' : `Show ${sources.length}`}
               </button>
@@ -382,9 +508,12 @@ function TurnView({
               id={panelId}
               className={cx(
                 'mt-3 grid grid-cols-[minmax(0,1fr)] gap-3',
-                sourcesOpen ? 'grid' : 'hidden md:grid',
+                sourcesOpen ? 'grid' : 'hidden lg:grid',
               )}
             >
+              {/* At the head of the rail, where the first score a reader meets is. It
+                  used to sit below all six cards — 2,300px past the numbers it explains. */}
+              <ScoreLegend />
               {sources.map((source, i) => (
                 <SourceCard
                   key={source.chunkId}
@@ -394,9 +523,17 @@ function TurnView({
                   domId={sourceDomId(turn.id, source.chunkId)}
                   cited={citedChunkIds.has(source.chunkId)}
                   flashed={flashed === sourceDomId(turn.id, source.chunkId)}
+                  /*
+                   * Cited passages are open; the rest are a titled row the reader opens.
+                   * When nothing was cited — the abstain case — the top-ranked passage
+                   * opens instead, so "here is the nearest thing we found" still shows
+                   * something to judge rather than six closed rows.
+                   */
+                  startOpen={
+                    citedChunkIds.size > 0 ? citedChunkIds.has(source.chunkId) : i === 0
+                  }
                 />
               ))}
-              <ScoreLegend />
             </div>
           </aside>
         )}
@@ -520,10 +657,12 @@ function Composer({
   inputRef,
   pending,
   onSubmit,
+  onStop,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>;
   pending: boolean;
   onSubmit: (query: string) => void;
+  onStop: () => void;
 }) {
   const [value, setValue] = useState('');
 
@@ -569,9 +708,20 @@ function Composer({
           // user is focused on is a worse cure than the disease.
           readOnly={pending}
         />
-        <Button type="submit" loading={pending} disabled={value.trim().length < 2}>
-          Ask
-        </Button>
+        {/*
+         * While a request is in flight the primary control is Stop, not a disabled Ask
+         * with a spinner in it. A generation costs money and takes seconds, and the
+         * reader who has just realised they asked the wrong question had no exit at all.
+         */}
+        {pending ? (
+          <Button type="button" variant="secondary" onClick={onStop}>
+            Stop
+          </Button>
+        ) : (
+          <Button type="submit" disabled={value.trim().length < 2}>
+            Ask
+          </Button>
+        )}
       </div>
     </form>
   );
