@@ -623,9 +623,13 @@ question fully relevant, which destroys abstention. See [docs/self-hosted.md](do
 
 ## Deployment guide
 
-Live at <https://hatko.tugrap.dev>, behind the same sign-in as a local install. Verified end to
-end: TLS, health, discovery documents, the `401` challenge that starts a client's OAuth flow,
-sign-in, a streamed answer, and an abstention.
+Live at <https://hatko.tugrap.dev>, behind the same sign-in as a local install. Verified from
+outside on the current build: TLS, `/health` reporting 142 passages, both discovery documents,
+the `401` challenge that starts a client's OAuth flow, and every authenticated page and API
+refusing an anonymous request. Verified on the host itself: the retrieval and answer path
+citing `sdk-notes-v3.md` and grading the deprecated v2 at 0.00, an abstention on a question the
+corpus does not cover, an incremental ingest skipping all 142 unchanged documents, and an index
+whose 142 chunks and 142 vectors agree.
 
 Three Node processes and one reverse proxy on a single VPS. No database server, no container
 runtime, no backend build step.
@@ -644,7 +648,10 @@ and cookie `Domain` all become things that have to be right. On one origin none 
 come up.
 
 ```bash
-npm install && npm run build:web          # the web app is the only thing that builds
+npm install
+# NEXT_PUBLIC_API_URL is inlined into the browser bundle at build time, so the build
+# has to run after .env exists and with that value in its environment.
+NEXT_PUBLIC_API_URL="$(grep '^NEXT_PUBLIC_API_URL=' .env | cut -d= -f2-)" npm run build:web
 sudo systemctl enable --now hatko-api hatko-web hatko-mcp
 ```
 
@@ -658,12 +665,15 @@ hatko.tugrap.dev {
 }
 ```
 
-Caddy, because it obtains and renews the certificate without a second tool. Three production
+Caddy, because it obtains and renews the certificate without a second tool. Four production
 settings are easy to get wrong, and each is documented with its symptom. `NODE_ENV=production`
 makes cookies `Secure`, so the app stops working over plain HTTP, which is intended. `MCP_URL` has
-to be the address clients actually dial, or their tokens' audience will not match. And
+to be the address clients actually dial, or their tokens' audience will not match.
 `MCP_ALLOWED_HOSTS` has to name the public hostname, because behind a proxy the rebinding guard
-sees it and refuses everything it does not recognise.
+sees it and refuses everything it does not recognise. And `NEXT_PUBLIC_API_URL` has to be set
+_before_ the build rather than at runtime, because Next inlines it: get that wrong and the server
+answers `/health` perfectly while every visitor's browser reports it cannot reach the API. That
+one is written from experience, not from the documentation.
 
 [docs/deployment.md](docs/deployment.md) has the full guide: unit files, the optional watcher
 service, the nginx equivalent and the header it needs, a verification checklist, operations, and how
