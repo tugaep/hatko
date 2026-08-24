@@ -115,7 +115,7 @@ function buildAuth() {
       /**
        * OAuth 2.1 / OIDC authorization server, for MCP clients.
        *
-       * Hatko is its own provider rather than delegating to a hosted IdP, and that is
+       * hatko is its own provider rather than delegating to a hosted IdP, and that is
        * a constraint rather than a preference: the brief requires the system to run on
        * a fresh machine from the README, and an external identity provider would make
        * a network account a prerequisite for `npm install`.

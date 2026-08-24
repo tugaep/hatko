@@ -30,11 +30,12 @@ TECHNICAL-REQUIREMENTS.md
 bonus.md
 documentation.md
 
-# Tooling (claude-mem, `next dev`) writes a CLAUDE.md into every directory it touches.
-# The root file is the working agreement and is tracked; the generated ones are noise,
-# and inside sample_dataset they would also be ingested as corpus documents.
+# The working agreement, and the CLAUDE.md files tooling scatters into every directory
+# it touches. The root file is kept locally: it is a rubric, a scope lock and a build-order
+# checklist for the exercise this project began as, which is context for the author rather
+# than for a reader of the result. Inside sample_dataset these would also be ingested as
+# corpus documents.
 CLAUDE.md
-!/CLAUDE.md
 
 # Agent tooling. `.claude/launch.json` describes how to start the dev servers, which
 # `package.json` and the README already state for a person; the rest is session state.

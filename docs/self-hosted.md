@@ -1,6 +1,6 @@
 # Running on self-hosted models
 
-Hatko talks to OpenAI over two endpoints — `POST /embeddings` and
+hatko talks to OpenAI over two endpoints, `POST /embeddings` and
 `POST /chat/completions`. Ollama, llama.cpp, LM Studio and vLLM all serve those two
 endpoints in the same request and response shape, so running with no external provider
 is a change of address rather than a second client. There is no provider abstraction in
@@ -15,7 +15,7 @@ deliberately basic: **one** validated configuration, listed below.
 
 Both rows are `npm run eval -- --rerank --answers` on the same machine, on 18 Aug 2026,
 against the 142-document sample corpus this project used at the time. Nothing here is
-estimated — and nothing here has been re-measured against the current corpus, which is
+estimated, and nothing here has been re-measured against the current corpus, which is
 1083 documents and 7539 chunks. Treat the comparison between configurations as sound and
 the absolute figures as belonging to a corpus that is no longer the default.
 
@@ -25,7 +25,7 @@ the absolute figures as belonging to a corpus that is no longer the default.
 | Ollama `qwen2.5:7b` + `nomic-embed-text`        |     100% |     100% | 1.000 |         12/12 |   4.4 s |
 
 Latency is one `npm run ask` on an Apple M5 Pro with GPU acceleration; expect
-considerably worse without a GPU. The answer checks are the important column — they
+considerably worse without a GPU. The answer checks are the important column, because they
 assert that answerable questions are answered with a real citation, that unanswerable
 ones abstain, and that no citation is invented.
 
@@ -39,7 +39,7 @@ tried and it did not work" is more useful than a silent omission:
 
 The `llama3.2:3b` failure is the one that matters. A model that cannot say "nothing here
 answers this" turns the corpus's most important behaviour into confident invention, and
-it fails quietly — the system looks healthy and answers everything.
+it fails quietly. The system looks healthy and answers everything.
 
 ---
 
@@ -47,7 +47,7 @@ it fails quietly — the system looks healthy and answers everything.
 
 ### The vector column width
 
-`chunks_vec` is a `vec0` virtual table whose width is a literal — `float[1536]` for
+`chunks_vec` is a `vec0` virtual table whose width is a literal: `float[1536]` for
 OpenAI, `float[768]` for `nomic-embed-text`. It cannot be altered, and vectors from two
 embedding models are not comparable in any case, so **changing the embedding model means
 rebuilding the index**:
@@ -72,7 +72,7 @@ that quietly empties search is worse than no form field.
 
 ### The abstain threshold
 
-Abstention compares the reranker's absolute grade against `MIN_USEFUL_GRADE / 3` —
+Abstention compares the reranker's absolute grade against `MIN_USEFUL_GRADE / 3`, and
 0.67. That threshold was calibrated on `gpt-4o-mini`, and it holds for `qwen2.5:7b`:
 measured, answerable questions grade 1.00 and unanswerable ones 0.00, so the two sets do
 not overlap at all. It does **not** hold for the rejected models above. Any new model
@@ -92,7 +92,7 @@ ollama serve
 ollama pull nomic-embed-text
 ollama pull qwen2.5:7b
 
-# 3. point Hatko at it, in .env
+# 3. point hatko at it, in .env
 OPENAI_BASE_URL=http://localhost:11434/v1
 ANSWER_MODEL=qwen2.5:7b
 RERANK_MODEL=qwen2.5:7b

@@ -45,7 +45,7 @@ function reportListenFailure(error: NodeJS.ErrnoException, port: number, variabl
 }
 
 const server = serve({ fetch: createApp().fetch, port: config.mcpPort }, (info) => {
-  console.log(`Hatko MCP on http://localhost:${info.port}/mcp`);
+  console.log(`hatko MCP on http://localhost:${info.port}/mcp`);
   console.log(`  corpus     ${Number(chunks)} passages indexed`);
   console.log(`  auth       OAuth 2.1 / OIDC, or Authorization: Bearer <session token>`);
   // Same allowance the HTTP API reports, charged to the same account — a client's tool

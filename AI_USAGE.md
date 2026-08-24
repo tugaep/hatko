@@ -1007,7 +1007,7 @@ saying plainly because the root `tsconfig.json` excludes `apps/web`, so
 ## Step 6: the web UI (17 Aug 2026)
 
 Next.js 16 App Router, Tailwind v4 CSS-first, three surfaces — sign-in, chat, admin
-dashboard. Product name changed to **Hatko**; palette, type scale and every token kept
+dashboard. Product name changed to **hatko**; palette, type scale and every token kept
 exactly as `docs/design.md` specifies. Light theme only, so the `.dark` block in the
 design doc is deliberately not implemented: a token set with no switch to reach it is
 dead weight, and shipping it half-wired would be worse than not shipping it.
@@ -1094,9 +1094,9 @@ independently returns 403.
 
 ---
 
-## Renamed to Hatko (17 Aug 2026)
+## Renamed to hatko (17 Aug 2026)
 
-The product was called Sorrel through steps 1–6 and is now **Hatko**. The rename is
+The product was called Sorrel through steps 1–6 and is now **hatko**. The rename is
 mechanical everywhere except one place, and that place is the interesting one.
 
 ### The one thing a find-and-replace could not do
@@ -1105,10 +1105,10 @@ mechanical everywhere except one place, and that place is the interesting one.
 forage — you find it by knowing where to look." That sentence justified the palette
 ("a dark green brand named Sorrel is coherent") and the whole botanical field-guide
 visual world. Substituting the new name into it produces a claim that is simply false:
-Hatko is not a plant.
+hatko is not a plant.
 
 So the rationale was rewritten rather than substituted. The name section now says
-plainly that Hatko is coined and means nothing — a brand document whose first section
+plainly that hatko is coined and means nothing — a brand document whose first section
 is a false etymology cannot be trusted for the rest of its claims — and the field-guide
 metaphor is re-derived from what the product does: a large collection where everything
 must be findable, labelled and traceable is the problem a botanical plate solves,
@@ -1806,7 +1806,7 @@ is told the significant bonus was skipped. Rewritten to describe the two credent
 file actually accepts.
 
 **A consent screen made a promise the code does not keep.** The last line of the OAuth
-consent page read "You can revoke access by signing out of Hatko." I checked it against
+consent page read "You can revoke access by signing out of hatko." I checked it against
 the library rather than assuming, and it is false: Better Auth's `getMcpSession` resolves
 a token by looking it up in `oauthAccessToken` and never consults the session table, and
 the `mcp()` plugin re-exports only `oAuthConsent` from `oidcProvider` — so
@@ -3472,3 +3472,40 @@ redeployed, so the real hostname is back in all three.
 said they will configure new credentials before deploying, which is the thing that actually
 resolves it — the old passwords remain reachable through `git log -p` on any clone, and
 publishing does not change that either way.
+
+---
+
+## Step 32 — editing out the tells, and dropping the exercise from the repository
+
+Two passes over the writing, plus a scope change to what the repository carries.
+
+**Em dashes, and what replaced them.** There were roughly 190 across the markdown. Each one
+needed a decision rather than a substitution: a period where two sentences were fighting for
+one line, a comma for a genuine aside, a colon where the second half explains the first,
+parentheses for a true interruption. A few sentences had to be rebuilt because the dash was
+hiding the fact that they had no grammar underneath it. Two dashes stayed. One is inside a
+verbatim JSON response where the document title is `Russo–Circassian War`, and editing quoted
+output to suit a style rule would make the example false; the numeric ranges became "0.0833 to
+0.1818" instead.
+
+**The bolded-lead list in the README's capability section was the worse tell.** Seven items,
+each opening with a bolded sentence fragment followed by a restatement of it. That shape reads
+as generated because it is what a model produces when asked to sound organised. Rewritten as
+prose, it lost nothing except the scaffolding.
+
+**Lowercasing the name found a contradiction.** `docs/brand.md` said "Always capital H, never
+all-caps, never all-lowercase" while the application's own wordmark has always rendered
+lowercase. The instruction settled which was right, so the brand rule now matches what ships
+rather than what was once specified.
+
+**The data source is now cited in the README rather than only in the attribution file.** Which
+Wikipedia, retrieved through which API, on which date, walked from which category root, under
+which licence, and how a reader traces a document back to the page and its authors. It sat one
+click away before, which is not the same as being stated.
+
+**The exercise left the repository.** The brief's eight files were already untracked and had
+never reached the remote, which I confirmed against the published tree rather than assuming.
+`CLAUDE.md` had not: a `!/CLAUDE.md` negation was overriding the ignore rule below it, so the
+working agreement, the grading rubric and the build-order checklist were all public. That file
+is context for whoever was doing the exercise, not for someone reading the result, so it is
+untracked now and the two README links to it are gone.

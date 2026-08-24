@@ -1,13 +1,13 @@
 # The corpus
 
-**`corpus/` is not in this repository.** Run `npm run corpus:fetch` and it appears —
+**`corpus/` is not in this repository.** Run `npm run corpus:fetch` and it appears:
 1083 markdown documents, about twenty minutes, no API key needed. `npm run setup` does it
 for you as its first step.
 
 ## Why the data is not here
 
-It is text from the English Wikipedia, which is published under CC BY-SA 4.0 — a
-share-alike licence. Committing it would attach that obligation to everyone who clones
+It is text from the English Wikipedia, published under CC BY-SA 4.0, a share-alike
+licence. Committing it would attach that obligation to everyone who clones
 this repository, over text none of us wrote, in a project whose own code is MIT. Shipping
 the recipe instead keeps the two licences from having to be reconciled: what is version
 controlled is `scripts/wiki-corpus.mjs` and the category list in `package.json`, both
@@ -22,13 +22,13 @@ specific documents.
 
 Articles from the English Wikipedia, walked from eleven Circassian categories and
 converted to markdown. Once fetched, that text is
-**[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)** and stays that way —
-this repository's MIT licence does not cover it. In short, and not as a substitute for
+**[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)** and stays that way.
+This repository's MIT licence does not cover it. In short, and not as a substitute for
 reading the licence: you may reuse and adapt it, including commercially, provided you
 attribute it and release your adaptation under the same terms.
 
 The corpus is regenerated rather than pinned, so a fetch today will not match one from
-last year — Wikipedia articles and category memberships change. That is a fair
+last year, because Wikipedia articles and category memberships change. That is a fair
 description of the system's actual job.
 
 **Attribution.** Each file's `# ` heading is the title of the Wikipedia article it came
@@ -39,14 +39,14 @@ reached through, which is a fact about the category graph rather than about the 
 
 **What the conversion changed.** Articles were fetched as plain-text extracts, so
 infoboxes, tables, images, references, and inline citation markers are absent; section
-headings survive as markdown headings. Nothing was rewritten, reordered, or summarised —
-the prose is Wikipedia's. Text that is missing is missing entirely rather than altered.
+headings survive as markdown headings. Nothing was rewritten, reordered, or summarised. The prose
+is Wikipedia's. Text that is missing is missing entirely rather than altered.
 
 **Why this corpus.** It replaced a corpus of invented internal documents. Wikipedia was
 chosen because it is freely licensed, densely cross-referential, and full of genuinely
-near-identical articles — several hundred short biographies sharing most of their
-vocabulary — which is the retrieval problem this system is built to handle rather than an
-accident of the sample.
+near-identical articles. Several hundred short biographies share most of their vocabulary,
+which is the retrieval problem this system is built to handle rather than an accident of
+the sample.
 
 **A different corpus.** `npm run corpus:wikipedia -- <out-dir> <max-files> <categories>`
 takes any category list. Wikipedia's

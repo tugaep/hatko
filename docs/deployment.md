@@ -1,9 +1,9 @@
-# Deploying Hatko
+# Deploying hatko
 
 Target for this deployment: **`hatko.tugrap.dev`**.
 
 Three Node processes and one reverse proxy. No database server, no container runtime
-required, no build pipeline for the backend — Node runs the TypeScript directly.
+required, no build pipeline for the backend, because Node runs the TypeScript directly.
 
 The corpus is internal, so the whole site sits behind the same sign-in. There is no
 public sign-up and no anonymous page except the sign-in screen itself and `/health`.
@@ -24,7 +24,7 @@ Everything is served from `https://hatko.tugrap.dev`, with a reverse proxy in fr
 
 **One origin rather than subdomains, deliberately.** Split across
 `app.` and `api.`, the session cookie has to be widened to the parent domain and every
-browser request becomes cross-origin — so CORS, `SameSite` and cookie `Domain` all
+browser request becomes cross-origin, so CORS, `SameSite` and cookie `Domain` all
 become things that have to be right, and each is a way to lock yourself out or to leak a
 cookie further than intended. On one origin none of those questions exist: the cookie is
 host-only, requests are same-origin, and CORS never enters the picture. The API keeps its
@@ -43,7 +43,7 @@ git clone <this repository> hatko && cd hatko
 npm install
 ```
 
-`npm install` needs no native toolchain — `sqlite-vec` ships prebuilt binaries and
+`npm install` needs no native toolchain, since `sqlite-vec` ships prebuilt binaries and
 everything else is JavaScript.
 
 The web app is the only thing that builds. The API and MCP server run their sources
@@ -92,9 +92,9 @@ Four of these are load-bearing, and each fails in its own way:
 - **`BETTER_AUTH_SECRET`** signs sessions and derives the key that encrypts the stored
   API key. The placeholder from `.env.example` is refused by name, so a copied file
   cannot ship. Changing it later invalidates every session and makes an API key saved
-  through the UI undecryptable — the app says so and asks for it again.
+  through the UI undecryptable. The app says so and asks for it again.
 - **`MCP_ALLOWED_HOSTS`** must name the public hostname. The MCP server rejects a `Host`
-  it does not recognise, and behind a proxy that Host is `hatko.tugrap.dev` — omit this
+  it does not recognise, and behind a proxy that Host is `hatko.tugrap.dev`, so omit this
   and every MCP request is a 403.
 - **`NEXT_PUBLIC_API_URL`** is baked into the browser bundle at build time. Change it
   and you must re-run `npm run build:web`.
@@ -152,7 +152,7 @@ Three services. `systemd` units, with a template for the shared parts:
 ```ini
 # /etc/systemd/system/hatko-api.service
 [Unit]
-Description=Hatko API
+Description=hatko API
 After=network.target
 
 [Service]
@@ -185,7 +185,7 @@ sudo systemctl enable --now hatko-api hatko-web hatko-mcp
 ExecStart=/usr/bin/npm run ingest:watch
 ```
 
-This watches `CORPUS_PATH` and re-indexes when documents change — incrementally, so
+This watches `CORPUS_PATH` and re-indexes when documents change, incrementally, so
 unchanged files are not re-embedded. Skip it if the corpus is updated by a deploy, in
 which case run `npm run ingest` as a deploy step instead.
 
@@ -219,7 +219,7 @@ hatko.tugrap.dev {
 }
 ```
 
-The nginx equivalent needs `proxy_set_header Host $host;` on every block — the MCP
+The nginx equivalent needs `proxy_set_header Host $host;` on every block, because the MCP
 server's rebinding guard reads that header, and nginx's default of `$proxy_host` would
 make it see `127.0.0.1:4100` instead of the public name. That would happen to pass, since
 loopback is always allowed, but it would also mean the guard was checking nothing.
@@ -241,7 +241,7 @@ curl -s https://hatko.tugrap.dev/.well-known/oauth-protected-resource
 # resource must be https://hatko.tugrap.dev/mcp
 
 # Unauthenticated MCP call: expect 401 with a WWW-Authenticate header, which is what
-# starts a client's OAuth flow. Anything else — 403, 404, a Caddy error page — means the
+# starts a client's OAuth flow. Anything else, whether a 403, a 404 or a Caddy error page, means the
 # request is not reaching the MCP process.
 curl -si -X POST https://hatko.tugrap.dev/mcp \
   -H 'content-type: application/json' \
@@ -251,7 +251,7 @@ curl -si -X POST https://hatko.tugrap.dev/mcp \
 
 **This probe cannot tell you whether `MCP_ALLOWED_HOSTS` is right, and no unauthenticated
 probe can.** The rebinding guard sits behind the bearer check, so a request with no token
-is a 401 under every `Host` — including the one you forgot to configure. Read it from the
+is a 401 under every `Host`, including the one you forgot to configure. Read it from the
 startup banner instead, which prints the list the process actually loaded:
 
 ```bash
@@ -259,7 +259,7 @@ journalctl -u hatko-mcp -n 20 | grep hosts
 #   hosts      localhost, 127.0.0.1, [::1], localhost:4100, 127.0.0.1:4100, [::1]:4100, hatko.tugrap.dev
 ```
 
-If the public hostname is absent there, every authenticated client will get a 403 — all
+If the public hostname is absent there, every authenticated client will get a 403, and all
 of them, at once, after the deployment looked healthy. Fix `MCP_ALLOWED_HOSTS` and
 restart before connecting anything.
 
@@ -272,7 +272,7 @@ Connect a client to check the OAuth path end to end:
 claude mcp add --transport http hatko https://hatko.tugrap.dev/mcp
 ```
 
-It should send you to a Hatko consent screen naming the client, and work after you
+It should send you to a hatko consent screen naming the client, and work after you
 approve it.
 
 ---
@@ -331,7 +331,7 @@ sudo systemctl restart hatko-api hatko-web hatko-mcp
 ```
 
 Migrations are forward-only and run once each; `db:migrate` on an up-to-date database
-does nothing. Restart all three — they share `@hatko/core`, so a schema change affects
+does nothing. Restart all three. They share `@hatko/core`, so a schema change affects
 every one of them, and a process left running on old code is how a fixed bug appears not
 to be fixed.
 
@@ -354,14 +354,14 @@ content and credentials live.
 
 Stated rather than implied, because each is a real gap and none is hard to add later.
 
-- **Rate limiting does not survive a second process.** There is a limit now —
+- **Rate limiting does not survive a second process.** There is a limit now,
   `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW_SECONDS` per account across `/search`,
-  `/answer` and the MCP tool, 30 a minute by default — but the counter is in memory, so
+  `/answer` and the MCP tool, 30 a minute by default, but the counter is in memory, so
   running two API processes would grant each account the allowance twice and a restart
   forgets what anyone had spent. One process per service, which is what this guide sets
   up, is the condition under which it means what it says.
 - **No horizontal scaling.** SQLite means one machine. The protocol layers are stateless,
-  so the ceiling is the database file, and the migration path is Postgres + pgvector —
+  so the ceiling is the database file, and the migration path is Postgres with pgvector,
   a storage swap rather than a redesign, because retrieval is confined to
   `packages/core/src/retrieval`.
 - **No email.** Password resets and invitations do not exist; an administrator sets an

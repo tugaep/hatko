@@ -135,7 +135,7 @@ export function McpView() {
         <Commands lines={[discovery.protectedResource, discovery.authorizationServer]} />
 
         <p className="mt-4 max-w-[68ch] text-body-sm text-text-muted">
-          Claude Code, which will send you to a Hatko consent screen naming the client:
+          Claude Code, which will send you to a hatko consent screen naming the client:
         </p>
         <Commands lines={[`claude mcp add --transport http hatko ${url}`]} />
 

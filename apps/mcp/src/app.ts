@@ -106,7 +106,7 @@ function buildServer(user: SessionUser): McpServer {
     { name: 'hatko', version: '0.1.0' },
     {
       instructions:
-        'Hatko searches an internal document corpus. Use search_corpus for any question about ' +
+        'hatko searches an internal document corpus. Use search_corpus for any question about ' +
         'internal projects, SDKs, builds, incidents or delivery history, and answer only from the ' +
         'passages it returns, citing their source paths. When it reports that nothing covers the ' +
         'question, say so — do not fall back on your own knowledge.',

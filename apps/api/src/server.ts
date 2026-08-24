@@ -47,7 +47,7 @@ function reportListenFailure(error: NodeJS.ErrnoException, port: number, variabl
 }
 
 const server = serve({ fetch: app.fetch, port: config.apiPort }, (info) => {
-  console.log(`Hatko API on http://localhost:${info.port}`);
+  console.log(`hatko API on http://localhost:${info.port}`);
   console.log(`  corpus     ${Number(chunks)} passages indexed`);
   console.log(
     `  model key  ${keyStatus.configured ? `${keyStatus.source} (${keyStatus.hint})` : 'not configured — set it in the admin settings page'}`,

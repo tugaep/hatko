@@ -1,18 +1,33 @@
-# Hatko
+# hatko
 
 **Semantic search and grounded answers over a private document corpus.**
 
-Hatko answers questions in plain language from an indexed corpus, citing the exact passages
-each claim rests on. When the corpus does not contain the answer, it says so and cites
-nothing — abstention is a designed outcome rather than a failure path, and it is enforced in
-code rather than requested in a prompt.
+hatko answers questions in plain language from an indexed corpus and cites the exact
+passages each claim rests on. When the corpus does not contain the answer, it says so and
+cites nothing. That refusal is a designed outcome rather than a failure path, and it is
+enforced in code instead of being requested in a prompt.
 
-Three surfaces share one retrieval pipeline: a chat interface for end users, an
-administrative dashboard for operating the system, and an MCP server exposing the same
-retriever to external clients and agents. All three sit behind authentication, and every
-access decision is made server-side from the session's role.
+Three surfaces share one retrieval pipeline: a chat interface for readers, an
+administrative dashboard for running the system, and an MCP server that exposes the same
+retriever to outside clients. All three sit behind authentication, and every access
+decision is made on the server from the session's role.
 
 **Live deployment:** [hatko.tugrap.dev](https://hatko.tugrap.dev)
+
+The demo runs on 1083 articles from the [English Wikipedia](https://en.wikipedia.org),
+retrieved through the [MediaWiki Action API](https://www.mediawiki.org/wiki/API:Main_page)
+on 24 August 2026 and converted to markdown by
+[`scripts/wiki-corpus.mjs`](scripts/wiki-corpus.mjs). Every article is Circassian in
+subject, walked from eleven categories rooted at
+[Category:Circassians](https://en.wikipedia.org/wiki/Category:Circassians). That text is
+Wikipedia's, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), and
+each document keeps its article title as its heading so you can trace it back to the page
+and its authors. It is not committed to this repository:
+[sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md) says why, and
+`npm run corpus:fetch` rebuilds it.
+
+Pick a subject you have documents for and point `CORPUS_PATH` at them. Nothing in the
+system knows or cares that this particular corpus is about Circassians.
 
 ---
 
@@ -55,29 +70,30 @@ curl -s https://hatko.tugrap.dev/health
 
 ## Capabilities
 
-**Ingestion is repeatable and observable.** A content-hash diff means unchanged files are
-never re-embedded, every run is recorded with counts and an outcome, and every document
-carries an indexing status.
+Ingestion is repeatable and it leaves a record. A content-hash diff means unchanged files
+are never re-embedded. Every run is written down with its counts and its outcome, and every
+document carries an indexing status you can look up.
 
-**Retrieval is hybrid.** Dense vectors and BM25 are fused with Reciprocal Rank Fusion, then
-an LLM rerank pass grades absolute relevance. That grade is what makes honest abstention
-possible; a fused rank score cannot support a threshold.
+Retrieval runs two arms. Dense vectors and BM25 go through Reciprocal Rank Fusion, and then
+an LLM rerank pass grades how relevant each passage actually is. That grade is what makes
+refusal possible at all, because a fused rank score has no absolute meaning to threshold
+against.
 
-**Citations are verified, not trusted.** Markers in a generated answer are checked against
-the passages actually supplied, invalid markers are stripped, and an answer left citing
-nothing is withheld rather than published.
+Citations get checked rather than trusted. Every marker in a generated answer is matched
+against the passages that were really supplied. Invalid markers are stripped, and if
+stripping them leaves an answer with no citations at all, the answer is withheld.
 
-**The chat interface shows its working.** Answers stream, the cited passages are listed
-beneath them, and each passage is printed in full so any claim can be checked at its source.
+The chat page shows its working. Answers stream in, the cited passages are listed under
+them, and each passage is printed in full so you can check any claim at its source.
 
-**The dashboard operates the system.** Index health, search analytics, documents, ingestion
-runs, model configuration, MCP status, user management, and a three-dimensional projection
-of the embedding space.
+The dashboard is where you run the thing: index health, search analytics, documents,
+ingestion runs, model configuration, MCP status, user accounts, and a rotatable
+three-dimensional projection of the embedding space.
 
-**An MCP server exposes `search_corpus`,** authenticated by OIDC or a bearer session token,
-resolving to the same authorization check as the web API.
+The MCP server exposes one tool, `search_corpus`. It accepts either OIDC or a bearer session
+token, and both land on the same authorization check the web API uses.
 
-**Authorization is server-side.** Two roles, `user` and `admin`, enforced as route
+Authorization happens on the server. Two roles, `user` and `admin`, checked as route
 middleware before any handler runs.
 
 ---
@@ -178,8 +194,8 @@ npm run setup
 ```
 
 That is `corpus:fetch`, then `db:migrate`, then `seed`, then `ingest`. The fetch is the
-slow part — around twenty minutes for 1083 Wikipedia articles, one request each, no API
-key required. The corpus is not committed;
+slow part: roughly twenty minutes for 1083 Wikipedia articles, one request each, and no
+API key needed. The corpus is not committed;
 [sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md) explains why and what it
 retrieves. Already have documents of your own? Point `CORPUS_PATH` at them and run the
 three steps after the fetch instead.
@@ -261,10 +277,10 @@ the active source, and no route ever returns the value.
 ## Accounts
 
 `npm run setup` creates two accounts from the `SEED_*` values in `.env`. There are no default
-credentials and none are published here: seeding fails, naming the missing variable, if any of the
-four is unset. A password committed to a public repository becomes a password on every deployment
-that neglects to change it — a hazard this file previously demonstrated, having once carried a
-working administrator credential for the live instance.
+credentials and none published here. If any of the four is unset, seeding stops and names the
+variable. A password committed to a public repository becomes the password on every deployment that
+forgets to change it, which this file demonstrated for a while by carrying a working administrator
+credential for the live instance.
 
 Generate the passwords rather than choosing them:
 
@@ -357,7 +373,7 @@ curl -s -b jar.txt -X POST http://localhost:4000/api/search \
 ```
 
 A real run, and it shows why the arms are fused rather than picked between. This passage scores
-0.8811 on the vector side and 0.7642 on the keyword side — both arms found it, which is what
+0.8811 on the vector side and 0.7642 on the keyword side. Both arms found it, and that is what
 lifts it above the several hundred biographies that mention Circassia, war and Russia in almost
 the same words. `heading` is populated because the corpus is long articles now, so a passage is a
 section rather than a whole document, and `ordinal` 32 says how far into the article it sits.
@@ -399,9 +415,9 @@ curl -s -b jar.txt -X POST http://localhost:4000/api/answer \
 Verbatim output, including a detail deliberately left in place: the cited passage is a biography,
 not the article titled "Circassian flag". Three passages from the flag article were retrieved and
 two of them graded 0.33; the biography quotes the flag's description in full and graded 1.00. The
-answer is correct and the citation genuinely supports it, which is the guarantee — the promise is
-that every claim is checkable against the passage shown, not that the passage comes from the
-document with the most obvious title.
+answer is right and the citation really does support it, which is the guarantee. The promise is
+that you can check every claim against the passage shown. It is not a promise that the passage
+comes from the document with the most obvious title.
 
 An abstention is a 200 carrying `abstained: true`, no citations, and the nearest passages so the
 reader can judge the miss for themselves:
@@ -425,8 +441,8 @@ curl -s -b jar.txt -X POST http://localhost:4000/api/answer \
 ```
 
 That is the hard case rather than an easy one. The question is lexically almost identical to the
-one above, and retrieval confidently returns `circassian-culture/circassian-flag.md` for it — the
-corpus has a flag article, just not that flag. Fused scores cannot tell the two questions apart;
+one above, and retrieval confidently returns `circassian-culture/circassian-flag.md` for it. The
+corpus has a flag article. It is just not that flag. Fused scores cannot tell the two questions apart;
 the grader can, and scores all six passages 0.00. Abstention is a judgement about relevance, not a
 threshold on a retrieval score.
 
@@ -495,7 +511,7 @@ curl -s -b jar.txt -X POST http://localhost:4000/api/admin/ingestion/run \
 
 Nothing had changed, so all 1083 documents were skipped on their content hash: 108 ms and no
 embedding calls at all. The first run over the same corpus embeds 7539 passages and takes 56.7 s,
-which is the whole point of hashing — the expensive path runs once.
+which is the whole point of hashing. The expensive path runs once.
 
 Ingestion is awaited rather than backgrounded. That is comfortable at a hundred milliseconds for a
 no-op and defensible at a minute for a full re-index, but it is a real ceiling: a corpus large
@@ -573,7 +589,7 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MCP auth via OIDC        | Better Auth's `mcp` and `oidcProvider` plugins, so hatko is itself the authorization server. No hosted IdP, because the system has to run on a fresh machine. Discovery, dynamic client registration, PKCE, and a consent screen forced on every authorization. Bearer sessions stay available for scripts. |
 | Self-updating pipeline   | `npm run ingest:watch`, built on stdlib `fs.watch` with a 500 ms debounce. It coalesces bursts, never re-enters a run, and never drops a change that arrives mid-run. New, changed and removed files are all detected incrementally.                                                                        |
-| Live deployment          | [docs/deployment.md](docs/deployment.md) — three processes behind Caddy, TLS, systemd units, and a verification checklist. Deployed and verified end to end; the public instance is currently offline.                                                                                                      |
+| Live deployment          | [hatko.tugrap.dev](https://hatko.tugrap.dev). Three Node processes and Caddy on one host, with TLS, systemd units, and a verification checklist in [docs/deployment.md](docs/deployment.md).                                                                                                                |
 | Retrieval quality        | Hybrid vector and BM25 search, RRF tuned by sweep, LLM rerank with absolute grading                                                                                                                                                                                                                         |
 | Evaluation               | `npm run eval` reports recall@k, MRR, a per-arm comparison and answer-content checks                                                                                                                                                                                                                        |
 | Search-experience polish | Streamed answers, citation markers that jump to and promote the passage they point at, a cited-passage list under every answer, term highlighting inside the passages, a score legend, keyboard shortcuts                                                                                                   |
@@ -585,7 +601,7 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Admin-managed encrypted API key | An operator can rotate the credential without shell access. It is encrypted at rest with a key derived from `BETTER_AUTH_SECRET`, no route reads it back, and the environment variable stays supported.                                                                                                   |
 | Rate limiting                   | Otherwise a valid token can drive unbounded rerank calls, which is real money. One allowance keyed by user id, shared by `/search`, `/answer` and the MCP tool, defaulting to 30 a minute.                                                                                                                |
-| Self-hosted model support       | Removes the paid dependency. One configuration measured 12 of 12 (`qwen2.5:7b` with `nomic-embed-text`) — on the previous corpus, and not re-measured since; [docs/self-hosted.md](docs/self-hosted.md) says so plainly, along with two documented rejections.                                            |
+| Self-hosted model support       | Removes the paid dependency. One configuration measured 12 of 12 (`qwen2.5:7b` with `nomic-embed-text`), on the previous corpus and not re-measured since. [docs/self-hosted.md](docs/self-hosted.md) says so, along with two rejected models.                                                            |
 | 3D embedding view               | The retriever's central claim is that near-identical documents collapse into one indistinguishable cluster, and this makes that visible instead of asserted. PCA by power iteration onto a canvas, drag to rotate, click a point to read its passage. Both parts are stdlib, so no three.js and no t-SNE. |
 | First-run setup checklist       | A fresh instance needs three things in a particular order. The dashboard says which, and links to each.                                                                                                                                                                                                   |
 | Admin model selection           | Answer and rerank models, intersected with what the provider actually advertises, with the measured model marked and a warning when the rerank model changes, because that is the model abstention depends on.                                                                                            |
@@ -597,7 +613,7 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 ## Design decisions
 
 The four the brief asks about, in a sentence or two each. Longer reasoning lives in code comments
-next to the decision, and in [CLAUDE.md](CLAUDE.md).
+next to the decision it explains.
 
 **Chunking: cut on headings, then merge upward.** Split on markdown headings, merge adjacent
 sections up to about 1200 characters, and hard-split only a section that exceeds 2000 on its own.
@@ -605,7 +621,7 @@ The documents are already structured, so cutting where the author cut never spli
 Merging matters because a heading-only split leaves a fragment wherever someone wrote a two-line
 section, and a fragment has too little text for a meaningful embedding. On this corpus the result
 is 1083 documents and 7539 chunks, averaging 1082 characters: 277 documents are short enough to
-stay whole, and the longest splits into 150. Both halves earn their place — the same code produced
+stay whole, and the longest splits into 150. Both halves earn their place. The same code produced
 exactly one chunk per document on an earlier corpus of 142 short files, which is the argument for
 the merge step rather than a fact about either corpus.
 
@@ -622,8 +638,8 @@ pool the size of the whole collection and hit sqlite-vec's 4096 cap; it is cappe
 near-identical documents are the normal case: asked who led the Circassian Confederation, semantic
 search alone returns a wall of biographies that each mention Circassia, war, Russia and exile, and
 the lexical arm rescues it because the office is named in only a couple of them. The converse holds
-too — BM25 cannot match "a language with an unusually large number of speech sounds" against a
-document that says "consonants", and the stemmer does not bridge `built` and `building`. Measured,
+too. BM25 cannot match "a language with an unusually large number of speech sounds" against a
+document that says "consonants", and the stemmer never gets `built` to meet `building`. Measured,
 each arm alone reaches 67% recall@3 and together they reach 100%. RRF fuses ranks rather than
 scores, because BM25 and cosine distance are not commensurable. Its textbook `k=60` with 30
 candidates measured worse than the keyword arm alone on the corpus it was swept against, because
@@ -634,9 +650,9 @@ and 10 candidates per arm, chosen by sweep and pinned by a test.
 to 3 per passage instead of producing a ranking. RRF scores carry no information about match
 quality, since the top result scores the same constant whether it answers the question or is merely
 the least bad of several thousand. The eval prints the proof: fused scores for answerable questions
-span 0.0833–0.1818 and for unanswerable ones 0.0833–0.1333, which overlap, so no cut between them
-exists. Graded relevance does separate — answerable questions grade 1.00 and unanswerable ones at
-most 0.33 — and the threshold sits at 0.67 between them.
+span 0.0833 to 0.1818 and for unanswerable ones 0.0833 to 0.1333. Those overlap, so there is no
+cut between them. Graded relevance does separate: answerable questions grade 1.00 and unanswerable
+ones at most 0.33, and the threshold sits at 0.67 in between.
 
 Grading also fixes an ordering failure no tuning can. Hybrid reaches 100% recall@3 but only 56%
 recall@1, so on nearly half the questions the right passage is retrieved without being ranked
@@ -653,8 +669,8 @@ the model volunteering them.
 
 ### Measured results
 
-`npm run eval -- --rerank --answers`, 24 Aug 2026 — 7539 chunks, 9 answerable questions and 3 the
-corpus cannot answer:
+`npm run eval -- --rerank --answers`, 24 Aug 2026, over 7539 chunks with 9 answerable questions
+and 3 the corpus cannot answer:
 
 | Arm     | recall@1 | recall@3 | recall@5 |   MRR |
 | ------- | -------: | -------: | -------: | ----: |
@@ -664,9 +680,9 @@ corpus cannot answer:
 
 Fusion is worth its complexity here in a way a single number hides. At rank 1 hybrid ties the
 vector arm, so if recall@1 were the only figure quoted you would conclude the keyword arm is dead
-weight. At rank 3 the two arms reach 67% each and fused they reach 100% — they miss _different_
-questions, which is the entire premise, and the answer path retrieves six passages precisely
-because that is where the fusion pays.
+weight. At rank 3 the two arms reach 67% each and fused they reach 100%, because they miss
+_different_ questions. That is the entire premise, and it is why the answer path retrieves six
+passages: six is where the fusion pays.
 
 Answer checks: 12 of 12. Every answerable question was answered with a valid citation, every
 unanswerable one abstained, and no citation was invented.
@@ -680,8 +696,8 @@ One ground-truth correction, disclosed because moving goalposts after seeing res
 an evaluation loses its meaning: the Ubykh question originally listed one expected document and retrieval
 returned a different one, `ubykh-language/ubykh-phonology.md`, which opens by stating the language
 has the largest consonant inventory of any documented language without clicks. That answers the
-question more directly than the document listed. Both are accepted now — the ground truth was
-wrong, not the ranking — and the reasoning is recorded next to the question itself.
+question more directly than the document listed. Both are accepted now, because the ground truth
+was wrong rather than the ranking, and the reasoning sits next to the question itself.
 
 A self-hosted setup (Ollama `qwen2.5:7b` with `nomic-embed-text`) scored 12 of 12 at 4.4 s against
 2.7 s, and two smaller models were measured and rejected: `qwen2.5:3b` at 7 of 12 because it omits
@@ -827,7 +843,6 @@ two SSE chunks surviving reassembly.
 | [docs/self-hosted.md](docs/self-hosted.md)                       | Running without a paid provider: what was measured and what was rejected            |
 | [docs/design.md](docs/design.md), [docs/brand.md](docs/brand.md) | The UI specification and the brand                                                  |
 | [AI_USAGE.md](AI_USAGE.md)                                       | What AI did, what it got wrong, and how that was caught                             |
-| [CLAUDE.md](CLAUDE.md)                                           | The working agreement: locked scope, decisions and their reasons                    |
 | [`.env.example`](.env.example)                                   | Every variable, annotated with what breaks when it is wrong                         |
 | [sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md)   | Where the corpus came from and the licence it carries                               |
 
@@ -839,8 +854,8 @@ The code is [MIT](LICENSE).
 
 That covers everything in the repository, because the corpus is not in it. `npm run
 corpus:fetch` downloads Wikipedia articles, and that text is
-[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) — a share-alike licence
-whose obligations would otherwise land on everyone who cloned this over text none of us
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), a share-alike licence
+whose obligations would otherwise land on everyone who cloned this, over text none of us
 wrote. Shipping the fetcher rather than the data keeps the two licences separate:
 `scripts/wiki-corpus.mjs` is MIT, and what it downloads stays Wikipedia's.
 [sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md) has the detail.
