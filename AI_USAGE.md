@@ -2569,7 +2569,7 @@ Typecheck passed, the build passed, all 280 tests passed, and the page was visib
 The identical escape two lines away was fine because it sits inside a JS expression, which
 is exactly why it was easy to miss. Reading the rendered DOM is what found it.
 
-Demo user credentials changed to `user@tugrap.dev` / `PlayableFactory6677` at the user's
+Demo user credentials changed to a second seeded account at the user's
 request, and the fallback defaults in `accounts.ts` aligned with `.env.example` and the
 README so a clone with no `.env` seeds exactly the documented accounts — they had drifted
 to `admin@hatko.local`, which no document mentioned.
@@ -3335,3 +3335,50 @@ Cold 7469 ms, cached 1 ms.
 and briefly blocks for up to 0.9 s of it. That is a real remaining cost, and the honest
 next step if it matters is a randomised SVD rather than more yielding, since the
 arithmetic itself is what is left.
+
+---
+
+## Step 29 — making it publishable
+
+Two changes, both prompted by the question of whether this could be made public.
+
+**The credentials were the blocker, and history is why rotation is not optional.** The
+README published a working administrator for the live deployment, `.env.example` carried
+the same password, and `accounts.ts` had it a third time as a `??` fallback — so an
+operator who never set `SEED_ADMIN_PASSWORD` silently got an administrator whose password
+is in this repository. All three are gone: seeding now throws, naming the missing variable
+and showing an `openssl rand` line, and the README documents how to generate credentials
+rather than which ones to use.
+
+**What that does not do is remove them from the past.** Sixty-one commits still contain
+the old README, and `git log -p` will produce those credentials on any clone. Scrubbing
+history means rewriting every commit and force-pushing, which changes every hash. Rotating
+the passwords on the deployment is the fix that actually works, and it is the operator's
+to do — I do not handle passwords.
+
+**The corpus is no longer in the repository, which resolved the licensing question by
+removing it.** Wikipedia text is CC BY-SA 4.0, and committing 8.3 MB of it would attach a
+share-alike obligation to everyone cloning an MIT project, over text none of us wrote. The
+fetcher and its category list are version-controlled instead — `npm run corpus:fetch`
+rebuilds an equivalent corpus, and `npm run setup` runs it first.
+
+**That broke the tests, and the honest fix was not to hide it.** Twenty-three tests ingest
+the real corpus, and on a fresh clone there is none. They now skip with the path and the
+command to fix it: `npm test` on a clone is 264 passing, 0 failing, 23 skipped. The
+tempting alternative was to fall back to the fixture corpus, which would have kept the
+count at 287 while quietly testing retrieval-on-a-thousand-crowded-documents against four
+documents about widgets.
+
+**One thing did move to the fixture, legitimately.** Every test in `generate.test.ts` is
+about what happens to an answer _after_ retrieval — which citation markers survive, when
+an answer becomes an abstention — with stubbed graders and generators throughout, so the
+passages only have to exist. Two failed on the switch and both were worth the look: they
+asked a deliberately unanswerable question and asserted that the near-miss passages are
+still shown, which needs retrieval to return something. Changing the question preserved
+the test, because the grader is what forces the abstention. All twenty-one now run on a
+clone.
+
+**Still stale, and stated rather than fixed.** The README quotes 142 documents in several
+places below the setup section. I corrected the ones in the install path and the corpus
+description; the rest sit inside prose about measured retrieval behaviour, and rewriting
+those honestly means re-running the eval on this corpus rather than editing the numbers.

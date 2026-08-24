@@ -10,7 +10,8 @@ operating the system, and an MCP tool so the same retriever can be called by an 
 agent. All three are behind sign-in, and every access decision is made on the server from the
 session's role.
 
-**Live demo:** <https://hatko.tugrap.dev>. Sign in with the [demo credentials](#demo-credentials).
+**Live demo:** <https://hatko.tugrap.dev>. Read-only for the public; sign-up is closed and
+accounts are created by an administrator, so run it locally to see the admin surfaces.
 
 ```bash
 curl -s https://hatko.tugrap.dev/health
@@ -66,7 +67,7 @@ packages/core      ingest · retrieval · answer · db · auth · eval · provid
 apps/api           Hono HTTP API: search, answers, admin, auth, OAuth discovery
 apps/web           Next 16: sign-in, chat, dashboard, OAuth consent screen
 apps/mcp           MCP server, its own process and port
-sample_dataset/    the provided corpus (142 markdown files) and sample questions
+sample_dataset/    sample questions, and where `corpus:fetch` puts the corpus
 docs/              mcp.md · deployment.md · self-hosted.md · design.md · brand.md
 ```
 
@@ -119,25 +120,31 @@ NEXT_PUBLIC_API_URL=http://localhost:4000
 BETTER_AUTH_SECRET=…                       # openssl rand -base64 32
 RATE_LIMIT_MAX=30
 RATE_LIMIT_WINDOW_SECONDS=60
-SEED_ADMIN_EMAIL=efe@tugrap.dev
-SEED_ADMIN_PASSWORD=PlayableFactory7766
-SEED_USER_EMAIL=user@tugrap.dev
-SEED_USER_PASSWORD=PlayableFactory6677
+SEED_ADMIN_EMAIL=admin@example.com
+SEED_ADMIN_PASSWORD=<generate one; seeding refuses to run without it>
+SEED_USER_EMAIL=user@example.com
+SEED_USER_PASSWORD=<generate one>
 ```
 
-**3. Migrate the database, seed the accounts, index the corpus.**
+**3. Fetch the corpus, migrate the database, seed the accounts, index.**
 
 ```bash
 npm run setup
 ```
 
-That is `db:migrate`, then `seed`, then `ingest`, and it prints what it did:
+That is `corpus:fetch`, then `db:migrate`, then `seed`, then `ingest`. The fetch is the
+slow part — around twenty minutes for 1083 Wikipedia articles, one request each, no API
+key required. The corpus is not committed;
+[sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md) explains why and what it
+retrieves. Already have documents of your own? Point `CORPUS_PATH` at them and run the
+three steps after the fetch instead.
 
 ```
+1083 files -> ./sample_dataset/corpus
 migrated  001_init … 009_forbid_chunk_content_update
-created   efe@tugrap.dev         admin
-created   user@tugrap.dev        user
-indexed   142 documents · 142 passages · 0 failed · 3.1s
+created   admin@example.com      admin
+created   user@example.com       user
+indexed   1083 documents · 7539 passages · 0 failed · 56.7s
 ```
 
 ### Seeding, separately
@@ -206,15 +213,27 @@ the active source, and no route ever returns the value.
 
 ---
 
-## Demo credentials
+## Accounts
 
-`npm run setup` creates both accounts from the `SEED_*` values in `.env`. They work locally and on
-the live demo.
+`npm run setup` creates two accounts from the `SEED_*` values in your `.env`. There are no default
+credentials and none published here: seeding fails, naming the variable, if any of the four is
+unset. A password committed to a public repository is a password on every deployment that forgot to
+change it, and that is not a hypothetical — this file used to carry a working administrator for the
+live demo.
 
-| Role  | Email             | Password              | Can reach                      |
-| ----- | ----------------- | --------------------- | ------------------------------ |
-| Admin | `efe@tugrap.dev`  | `PlayableFactory7766` | Chat, and the whole admin area |
-| User  | `user@tugrap.dev` | `PlayableFactory6677` | Chat only                      |
+Pick your own, generating rather than inventing the passwords:
+
+```bash
+SEED_ADMIN_EMAIL=admin@example.com
+SEED_ADMIN_PASSWORD=$(openssl rand -base64 18)
+SEED_USER_EMAIL=user@example.com
+SEED_USER_PASSWORD=$(openssl rand -base64 18)
+```
+
+| Role  | Reads from     | Can reach                      |
+| ----- | -------------- | ------------------------------ |
+| Admin | `SEED_ADMIN_*` | Chat, and the whole admin area |
+| User  | `SEED_USER_*`  | Chat only                      |
 
 Sign in as the regular user to see the authorization working. The dashboard link is absent from the
 nav, requesting `/dashboard` directly redirects to chat with the reason stated on the page, and the
@@ -256,7 +275,7 @@ Sign in and keep the cookie:
 ```bash
 curl -s -c jar.txt -X POST http://localhost:4000/api/auth/sign-in/email \
   -H 'content-type: application/json' \
-  -d '{"email":"efe@tugrap.dev","password":"PlayableFactory7766"}'
+  -d '{"email":"'"$SEED_ADMIN_EMAIL"'","password":"'"$SEED_ADMIN_PASSWORD"'"}'
 ```
 
 Search:
@@ -726,6 +745,23 @@ two SSE chunks surviving reassembly.
 | [AI_USAGE.md](AI_USAGE.md)                                       | What AI did, what it got wrong, and how that was caught                             |
 | [CLAUDE.md](CLAUDE.md)                                           | The working agreement: locked scope, decisions and their reasons                    |
 | [`.env.example`](.env.example)                                   | Every variable, annotated with what breaks when it is wrong                         |
+| [sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md)   | Where the corpus came from and the licence it carries                               |
+
+---
+
+## Licence
+
+The code is [MIT](LICENSE).
+
+That covers everything in the repository, because the corpus is not in it. `npm run
+corpus:fetch` downloads Wikipedia articles, and that text is
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) — a share-alike licence
+whose obligations would otherwise land on everyone who cloned this over text none of us
+wrote. Shipping the fetcher rather than the data keeps the two licences separate:
+`scripts/wiki-corpus.mjs` is MIT, and what it downloads stays Wikipedia's.
+[sample_dataset/ATTRIBUTION.md](sample_dataset/ATTRIBUTION.md) has the detail.
+
+---
 
 Built by Tuğrap Efe Dikpınar. [tugrap.dev](https://tugrap.dev) ·
 [github.com/tugaep](https://github.com/tugaep)

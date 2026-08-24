@@ -11,6 +11,7 @@ import { ingest } from '../ingest/pipeline.ts';
 import { hybridSearch } from './search.ts';
 import { MIN_RERANK_CANDIDATES, retrieveAndRerank } from './retrieve.ts';
 import { RELEVANCE, hasGroundedSupport, rerank } from './rerank.ts';
+import { FIXTURE_CORPUS, hasCorpus, skipWithoutCorpus } from '../testing/corpus.ts';
 
 /**
  * Retrieval against the real sample corpus.
@@ -31,14 +32,17 @@ const stubEmbedder = async (text: string) => {
   });
 };
 
-// Ingesting the corpus takes ~70ms, so one index is shared across the file.
+// One index shared across the file, since ingesting the corpus is the slow part.
+// Guarded because the corpus is fetched rather than checked in — see skipWithoutCorpus.
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-search-'));
 const db = openDb(path.join(dir, 'search.db'));
-await ingest(db, {
-  trigger: 'cli',
-  corpusPath: config.corpusPath,
-  embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
-});
+if (hasCorpus) {
+  await ingest(db, {
+    trigger: 'cli',
+    corpusPath: config.corpusPath,
+    embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
+  });
+}
 
 /**
  * A second index over the fixture corpus in `../testing`, for the two tests that
@@ -49,7 +53,7 @@ await ingest(db, {
 const fixtureDb = openDb(path.join(dir, 'fixture.db'));
 await ingest(fixtureDb, {
   trigger: 'cli',
-  corpusPath: path.join(import.meta.dirname, '..', 'testing', 'fixture-corpus'),
+  corpusPath: FIXTURE_CORPUS,
   embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
 });
 
@@ -65,34 +69,42 @@ const searchFixture = (query: string, options = {}) =>
 const search = (query: string, options = {}) =>
   hybridSearch(db, query, { embedder: stubEmbedder, ...options });
 
-test('hybrid fusion returns results and every score field is populated coherently', async () => {
-  const results = await search('What is the maximum file size for an AppLovin playable?');
+test(
+  'hybrid fusion returns results and every score field is populated coherently',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const results = await search('What is the maximum file size for an AppLovin playable?');
 
-  assert.ok(results.length > 0);
-  for (const result of results) {
-    // A result must have come from at least one arm.
-    assert.ok(
-      result.vectorScore !== null || result.keywordScore !== null,
-      'result belongs to neither arm',
-    );
-    assert.ok(result.score > 0, 'fused score is positive');
-    assert.equal(result.rerankScore, null, 'not reranked yet');
-  }
-});
+    assert.ok(results.length > 0);
+    for (const result of results) {
+      // A result must have come from at least one arm.
+      assert.ok(
+        result.vectorScore !== null || result.keywordScore !== null,
+        'result belongs to neither arm',
+      );
+      assert.ok(result.score > 0, 'fused score is positive');
+      assert.equal(result.rerankScore, null, 'not reranked yet');
+    }
+  },
+);
 
-test('the keyword arm finds the document the vector arm cannot', async () => {
-  // With stub embeddings the vector arm is noise, so a hit here is entirely the
-  // lexical arm doing the work — which is the case for its existence. This corpus
-  // is one dense topic, so a dish name is what separates one document about
-  // Circassian food from the dozen others that share most of their vocabulary.
-  const results = await search('Which Circassian dish is served in a walnut sauce?', {
-    arm: 'keyword',
-  });
+test(
+  'the keyword arm finds the document the vector arm cannot',
+  { skip: skipWithoutCorpus },
+  async () => {
+    // With stub embeddings the vector arm is noise, so a hit here is entirely the
+    // lexical arm doing the work — which is the case for its existence. This corpus
+    // is one dense topic, so a dish name is what separates one document about
+    // Circassian food from the dozen others that share most of their vocabulary.
+    const results = await search('Which Circassian dish is served in a walnut sauce?', {
+      arm: 'keyword',
+    });
 
-  assert.equal(results[0]?.sourcePath, 'circassian-cuisine/circassian-chicken.md');
-});
+    assert.equal(results[0]?.sourcePath, 'circassian-cuisine/circassian-chicken.md');
+  },
+);
 
-test('fusion keeps a passage found by only one arm', async () => {
+test('fusion keeps a passage found by only one arm', { skip: skipWithoutCorpus }, async () => {
   // The whole point of a full outer join rather than an inner one.
   const results = await search('Which languages must every playable ship with?');
   const keywordOnly = results.filter((r) => r.vectorScore === null && r.keywordScore !== null);
@@ -104,14 +116,18 @@ test('fusion keeps a passage found by only one arm', async () => {
   );
 });
 
-test('a query with no usable keyword terms falls back to vector-only', async () => {
-  // "!!!" produces no FTS expression; passing an empty string to MATCH would be a
-  // syntax error rather than an empty result.
-  const results = await search('!!! ???');
+test(
+  'a query with no usable keyword terms falls back to vector-only',
+  { skip: skipWithoutCorpus },
+  async () => {
+    // "!!!" produces no FTS expression; passing an empty string to MATCH would be a
+    // syntax error rather than an empty result.
+    const results = await search('!!! ???');
 
-  assert.ok(results.length > 0, 'vector arm still returns candidates');
-  assert.ok(results.every((r) => r.keywordScore === null));
-});
+    assert.ok(results.length > 0, 'vector arm still returns candidates');
+    assert.ok(results.every((r) => r.keywordScore === null));
+  },
+);
 
 test('deprecation metadata travels with the result', async () => {
   const results = await searchFixture('widget init batches events', {
@@ -125,28 +141,36 @@ test('deprecation metadata travels with the result', async () => {
   assert.equal(v1.supersededBy, 'Widget API v2');
 });
 
-test('the category filter restricts results without emptying them', async () => {
-  const results = await search('cheese and walnut dishes', { category: 'circassian-cuisine' });
+test(
+  'the category filter restricts results without emptying them',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const results = await search('cheese and walnut dishes', { category: 'circassian-cuisine' });
 
-  assert.ok(results.length > 0);
-  assert.ok(results.every((r) => r.category === 'circassian-cuisine'));
-});
+    assert.ok(results.length > 0);
+    assert.ok(results.every((r) => r.category === 'circassian-cuisine'));
+  },
+);
 
-test('an unknown category returns nothing, without paying for an embedding', async () => {
-  let embedCalls = 0;
-  const counting = async (text: string) => {
-    embedCalls++;
-    return stubEmbedder(text);
-  };
+test(
+  'an unknown category returns nothing, without paying for an embedding',
+  { skip: skipWithoutCorpus },
+  async () => {
+    let embedCalls = 0;
+    const counting = async (text: string) => {
+      embedCalls++;
+      return stubEmbedder(text);
+    };
 
-  const results = await hybridSearch(db, 'anything at all', {
-    category: 'no-such-category',
-    embedder: counting,
-  });
+    const results = await hybridSearch(db, 'anything at all', {
+      category: 'no-such-category',
+      embedder: counting,
+    });
 
-  assert.equal(results.length, 0);
-  assert.equal(embedCalls, 0, 'a category that cannot match must not reach the provider');
-});
+    assert.equal(results.length, 0);
+    assert.equal(embedCalls, 0, 'a category that cannot match must not reach the provider');
+  },
+);
 
 /**
  * The filter runs after fusion, so a truncated candidate pool silently loses
@@ -165,51 +189,55 @@ test('an unknown category returns nothing, without paying for an embedding', asy
  * target by luck often enough to make this pass without the fix — which is how the
  * first version of this test fooled me. BM25 over these fixtures is deterministic.
  */
-test('a category filter finds a passage that ranks low across the whole corpus', async () => {
-  const corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-deep-'));
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-deep-db-'));
-  const deepDb = openDb(path.join(scratch, 'deep.db'));
+test(
+  'a category filter finds a passage that ranks low across the whole corpus',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const corpus = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-deep-'));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-deep-db-'));
+    const deepDb = openDb(path.join(scratch, 'deep.db'));
 
-  fs.mkdirSync(path.join(corpus, 'filler'));
-  for (let i = 0; i < 240; i++) {
+    fs.mkdirSync(path.join(corpus, 'filler'));
+    for (let i = 0; i < 240; i++) {
+      fs.writeFileSync(
+        path.join(corpus, 'filler', `note-${String(i).padStart(3, '0')}.md`),
+        `# Filler Note ${i}\n\n` +
+          'Quarterly telemetry calibration report. '.repeat(6) +
+          `Revision ${i}.\n`,
+      );
+    }
+
+    fs.mkdirSync(path.join(corpus, 'target'));
     fs.writeFileSync(
-      path.join(corpus, 'filler', `note-${String(i).padStart(3, '0')}.md`),
-      `# Filler Note ${i}\n\n` +
-        'Quarterly telemetry calibration report. '.repeat(6) +
-        `Revision ${i}.\n`,
+      path.join(corpus, 'target', 'buried.md'),
+      '# Buried Document\n\n' +
+        'Assorted unrelated prose about scheduling and staffing, mentioning ' +
+        'calibration exactly once, padded so its length matches the filler notes ' +
+        'and cannot win on brevity alone. '.repeat(2) +
+        '\n',
     );
-  }
 
-  fs.mkdirSync(path.join(corpus, 'target'));
-  fs.writeFileSync(
-    path.join(corpus, 'target', 'buried.md'),
-    '# Buried Document\n\n' +
-      'Assorted unrelated prose about scheduling and staffing, mentioning ' +
-      'calibration exactly once, padded so its length matches the filler notes ' +
-      'and cannot win on brevity alone. '.repeat(2) +
-      '\n',
-  );
+    await ingest(deepDb, {
+      trigger: 'cli',
+      corpusPath: corpus,
+      embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
+    });
 
-  await ingest(deepDb, {
-    trigger: 'cli',
-    corpusPath: corpus,
-    embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
-  });
+    const results = await hybridSearch(deepDb, 'quarterly telemetry calibration report', {
+      arm: 'keyword',
+      category: 'target',
+    });
 
-  const results = await hybridSearch(deepDb, 'quarterly telemetry calibration report', {
-    arm: 'keyword',
-    category: 'target',
-  });
+    assert.equal(results.length, 1, 'the only document in the category must be found');
+    assert.equal(results[0]?.sourcePath, 'target/buried.md');
 
-  assert.equal(results.length, 1, 'the only document in the category must be found');
-  assert.equal(results[0]?.sourcePath, 'target/buried.md');
+    deepDb.close();
+    fs.rmSync(corpus, { recursive: true, force: true });
+    fs.rmSync(scratch, { recursive: true, force: true });
+  },
+);
 
-  deepDb.close();
-  fs.rmSync(corpus, { recursive: true, force: true });
-  fs.rmSync(scratch, { recursive: true, force: true });
-});
-
-test('limit is respected', async () => {
+test('limit is respected', { skip: skipWithoutCorpus }, async () => {
   const results = await search('playable build pipeline', { limit: 3 });
   assert.ok(results.length <= 3);
 });
@@ -221,22 +249,30 @@ test('limit is respected', async () => {
  * by the schema's two-character minimum, but this function is exported and step 7's
  * MCP tool is a second caller with its own boundary.
  */
-test('a blank query returns nothing rather than arbitrary passages', async () => {
-  for (const query of ['', '   ', '\n\t']) {
-    assert.deepEqual(await search(query), [], `"${query}" should retrieve nothing`);
-  }
-});
+test(
+  'a blank query returns nothing rather than arbitrary passages',
+  { skip: skipWithoutCorpus },
+  async () => {
+    for (const query of ['', '   ', '\n\t']) {
+      assert.deepEqual(await search(query), [], `"${query}" should retrieve nothing`);
+    }
+  },
+);
 
 /**
  * Both are interpolated into SQL. `rrfK = 0` divides by zero at rank 1, which
  * SQLite returns as NULL and COALESCE turns into a score of zero — so the best hit
  * sorts last and the ranking inverts without erroring.
  */
-test('retrieval knobs are rejected rather than producing a silently wrong order', async () => {
-  await assert.rejects(search('build', { candidates: -5 }), /non-negative integer/);
-  await assert.rejects(search('build', { rrfK: 0 }), /greater than zero/);
-  await assert.rejects(search('build', { rrfK: -1 }), /greater than zero/);
-});
+test(
+  'retrieval knobs are rejected rather than producing a silently wrong order',
+  { skip: skipWithoutCorpus },
+  async () => {
+    await assert.rejects(search('build', { candidates: -5 }), /non-negative integer/);
+    await assert.rejects(search('build', { rrfK: 0 }), /greater than zero/);
+    await assert.rejects(search('build', { rrfK: -1 }), /greater than zero/);
+  },
+);
 
 // --- rerank -----------------------------------------------------------------
 
@@ -264,75 +300,91 @@ test('reranking reorders by graded relevance, not by fusion rank', async () => {
   assert.equal(reranked[0]?.rerankScore, 1);
 });
 
-test('ungraded passages fall behind graded ones rather than being dropped', async () => {
-  const results = await search('playable build pipeline', { limit: 5 });
-  const [first, ...rest] = results;
+test(
+  'ungraded passages fall behind graded ones rather than being dropped',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const results = await search('playable build pipeline', { limit: 5 });
+    const [first, ...rest] = results;
 
-  const partial = await rerank('anything', results, {
-    grader: async () => new Map([[first!.chunkId, RELEVANCE.DIRECT]]),
-  });
+    const partial = await rerank('anything', results, {
+      grader: async () => new Map([[first!.chunkId, RELEVANCE.DIRECT]]),
+    });
 
-  assert.equal(partial.length, results.length, 'an incomplete response must not shrink results');
-  assert.equal(partial[0]?.chunkId, first!.chunkId);
-  assert.ok(partial.slice(1).every((r) => r.rerankScore === null));
-  assert.deepEqual(
-    partial.slice(1).map((r) => r.chunkId),
-    rest.map((r) => r.chunkId),
-    'ungraded passages keep their fusion order',
-  );
-});
+    assert.equal(partial.length, results.length, 'an incomplete response must not shrink results');
+    assert.equal(partial[0]?.chunkId, first!.chunkId);
+    assert.ok(partial.slice(1).every((r) => r.rerankScore === null));
+    assert.deepEqual(
+      partial.slice(1).map((r) => r.chunkId),
+      rest.map((r) => r.chunkId),
+      'ungraded passages keep their fusion order',
+    );
+  },
+);
 
-test('a reranker failure degrades to fusion order rather than to no results', async () => {
-  const results = await search('playable build pipeline', { limit: 5 });
+test(
+  'a reranker failure degrades to fusion order rather than to no results',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const results = await search('playable build pipeline', { limit: 5 });
 
-  const fallback = await rerank('anything', results, {
-    grader: async () => {
-      throw new Error('provider unavailable');
-    },
-  });
+    const fallback = await rerank('anything', results, {
+      grader: async () => {
+        throw new Error('provider unavailable');
+      },
+    });
 
-  assert.deepEqual(
-    fallback.map((r) => r.chunkId),
-    results.map((r) => r.chunkId),
-  );
-  assert.ok(fallback.every((r) => r.rerankScore === null));
-});
+    assert.deepEqual(
+      fallback.map((r) => r.chunkId),
+      results.map((r) => r.chunkId),
+    );
+    assert.ok(fallback.every((r) => r.rerankScore === null));
+  },
+);
 
-test('abstention distinguishes "judged irrelevant" from "never judged"', async () => {
-  const results = await search('playable build pipeline', { limit: 5 });
+test(
+  'abstention distinguishes "judged irrelevant" from "never judged"',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const results = await search('playable build pipeline', { limit: 5 });
 
-  const graded = await rerank('q', results, { grader: gradeBy({}) });
-  assert.equal(hasGroundedSupport(graded), false, 'all zeros means no support');
+    const graded = await rerank('q', results, { grader: gradeBy({}) });
+    assert.equal(hasGroundedSupport(graded), false, 'all zeros means no support');
 
-  const supported = await rerank('q', results, {
-    grader: gradeBy({ [results[0]!.sourcePath]: RELEVANCE.PARTIAL }),
-  });
-  assert.equal(hasGroundedSupport(supported), true, 'a partial answer is support');
+    const supported = await rerank('q', results, {
+      grader: gradeBy({ [results[0]!.sourcePath]: RELEVANCE.PARTIAL }),
+    });
+    assert.equal(hasGroundedSupport(supported), true, 'a partial answer is support');
 
-  const ungraded = await rerank('q', results, {
-    grader: async () => {
-      throw new Error('down');
-    },
-  });
-  // Null, not false. Abstaining because the grader was unreachable would turn an
-  // outage into a confident claim that the corpus lacks the answer.
-  assert.equal(hasGroundedSupport(ungraded), null);
-});
+    const ungraded = await rerank('q', results, {
+      grader: async () => {
+        throw new Error('down');
+      },
+    });
+    // Null, not false. Abstaining because the grader was unreachable would turn an
+    // outage into a confident claim that the corpus lacks the answer.
+    assert.equal(hasGroundedSupport(ungraded), null);
+  },
+);
 
-test('same-topic-but-not-answering does not clear the abstain bar', async () => {
-  // The hard abstention case: asking about a TikTok size limit retrieves the
-  // AppLovin spec, which shares almost every word but answers a different question.
-  const results = await search('What is the maximum file size for a TikTok playable?', {
-    arm: 'keyword',
-    limit: 5,
-  });
+test(
+  'same-topic-but-not-answering does not clear the abstain bar',
+  { skip: skipWithoutCorpus },
+  async () => {
+    // The hard abstention case: asking about a TikTok size limit retrieves the
+    // AppLovin spec, which shares almost every word but answers a different question.
+    const results = await search('What is the maximum file size for a TikTok playable?', {
+      arm: 'keyword',
+      limit: 5,
+    });
 
-  const graded = await rerank('What is the maximum file size for a TikTok playable?', results, {
-    grader: gradeBy({ 'network-specs-applovin.md': RELEVANCE.SAME_TOPIC }),
-  });
+    const graded = await rerank('What is the maximum file size for a TikTok playable?', results, {
+      grader: gradeBy({ 'network-specs-applovin.md': RELEVANCE.SAME_TOPIC }),
+    });
 
-  assert.equal(hasGroundedSupport(graded), false, 'grade 1 must not be treated as support');
-});
+    assert.equal(hasGroundedSupport(graded), false, 'grade 1 must not be treated as support');
+  },
+);
 
 test('RRF damping keeps a confident single-arm hit ahead of a mediocre both-arm hit', () => {
   const rrf = (k: number, ranks: number[]) => ranks.reduce((sum, r) => sum + 1 / (k + r), 0);
@@ -364,43 +416,47 @@ test('RRF damping keeps a confident single-arm hit ahead of a mediocre both-arm 
  * grader below marks a passage that fusion ranks *last* as the only relevant one, so the
  * assertion can only pass if grading happened across the whole floor before truncation.
  */
-test('a small limit truncates after grading, not before it', async () => {
-  const query = 'playable build pipeline';
+test(
+  'a small limit truncates after grading, not before it',
+  { skip: skipWithoutCorpus },
+  async () => {
+    const query = 'playable build pipeline';
 
-  const fused = await hybridSearch(db, query, {
-    embedder: stubEmbedder,
-    limit: MIN_RERANK_CANDIDATES,
-  });
-  assert.ok(
-    fused.length === MIN_RERANK_CANDIDATES,
-    'the corpus yields at least a full floor of candidates for this query',
-  );
+    const fused = await hybridSearch(db, query, {
+      embedder: stubEmbedder,
+      limit: MIN_RERANK_CANDIDATES,
+    });
+    assert.ok(
+      fused.length === MIN_RERANK_CANDIDATES,
+      'the corpus yields at least a full floor of candidates for this query',
+    );
 
-  // The one passage fusion likes least, which a pre-truncation rerank could never see.
-  const buried = fused.at(-1)!;
+    // The one passage fusion likes least, which a pre-truncation rerank could never see.
+    const buried = fused.at(-1)!;
 
-  const single = await retrieveAndRerank(db, query, {
-    limit: 1,
-    embedder: stubEmbedder,
-    grader: gradeBy({ [buried.sourcePath]: RELEVANCE.DIRECT }),
-  });
+    const single = await retrieveAndRerank(db, query, {
+      limit: 1,
+      embedder: stubEmbedder,
+      grader: gradeBy({ [buried.sourcePath]: RELEVANCE.DIRECT }),
+    });
 
-  assert.equal(single.length, 1, 'the caller still gets exactly the limit it asked for');
-  assert.equal(
-    single[0]?.sourcePath,
-    buried.sourcePath,
-    'the best-judged passage is returned, not the best-fused one',
-  );
-  assert.equal(single[0]?.rerankScore, 1);
+    assert.equal(single.length, 1, 'the caller still gets exactly the limit it asked for');
+    assert.equal(
+      single[0]?.sourcePath,
+      buried.sourcePath,
+      'the best-judged passage is returned, not the best-fused one',
+    );
+    assert.equal(single[0]?.rerankScore, 1);
 
-  // And a limit above the floor widens the pool rather than capping it.
-  const wide = await retrieveAndRerank(db, query, {
-    limit: MIN_RERANK_CANDIDATES + 4,
-    embedder: stubEmbedder,
-    grader: gradeBy({}),
-  });
-  assert.ok(
-    wide.length > MIN_RERANK_CANDIDATES,
-    'asking for more than the floor returns more than the floor',
-  );
-});
+    // And a limit above the floor widens the pool rather than capping it.
+    const wide = await retrieveAndRerank(db, query, {
+      limit: MIN_RERANK_CANDIDATES + 4,
+      embedder: stubEmbedder,
+      grader: gradeBy({}),
+    });
+    assert.ok(
+      wide.length > MIN_RERANK_CANDIDATES,
+      'asking for more than the floor returns more than the floor',
+    );
+  },
+);

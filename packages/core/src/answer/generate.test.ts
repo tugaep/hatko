@@ -8,6 +8,7 @@ import type { SearchResult } from '@hatko/shared';
 import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { ingest } from '../ingest/pipeline.ts';
+import { FIXTURE_CORPUS } from '../testing/corpus.ts';
 import { ProviderError } from '../providers/openai.ts';
 import { RELEVANCE } from '../retrieval/rerank.ts';
 import {
@@ -36,10 +37,19 @@ const stubEmbedder = async (text: string) => {
 };
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-answer-'));
+/**
+ * The fixture corpus, not the real one.
+ *
+ * Everything in this file is about what happens to an answer *after* retrieval — which
+ * markers survive validation, when an answer becomes an abstention, what a stream
+ * publishes. The graders and generators are all stubs, so the passages only have to
+ * exist; their subject is never asserted. Running against the fetched corpus made these
+ * tests skip on a fresh clone for no benefit, and made them slow for no reason.
+ */
 const db = openDb(path.join(dir, 'answer.db'));
 await ingest(db, {
   trigger: 'cli',
-  corpusPath: config.corpusPath,
+  corpusPath: FIXTURE_CORPUS,
   embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
 });
 
@@ -51,7 +61,7 @@ await ingest(db, {
 const fixtureDb = openDb(path.join(dir, 'fixture.db'));
 await ingest(fixtureDb, {
   trigger: 'cli',
-  corpusPath: path.join(import.meta.dirname, '..', 'testing', 'fixture-corpus'),
+  corpusPath: FIXTURE_CORPUS,
   embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
 });
 
@@ -143,8 +153,11 @@ test('a citation is listed once however many times it is used', () => {
 // --- abstention -------------------------------------------------------------
 
 test('abstains when the reranker judges every passage irrelevant', async () => {
+  // The question retrieves passages and the grader rejects all of them. That is the
+  // case worth testing: abstaining because nothing retrieved *answers* the question,
+  // rather than because nothing was retrieved at all — which is a different path.
   const response = await ask(
-    'What is the starting salary for a junior developer?',
+    'Why does the widget client flush events?',
     async () => {
       throw new Error('the generator must not be called when support is absent');
     },
@@ -161,7 +174,7 @@ test('an answer that cites nothing is treated as an abstention', async () => {
   // An uncited claim cannot be checked against a source, which is the one thing
   // this system exists to guarantee, so it is withheld rather than published.
   const response = await ask(
-    'Why are sound assets built in a separate pass?',
+    'Why does the widget client flush events?',
     async () => 'Sound assets are built separately because the encoder is single-threaded.',
   );
 
@@ -172,7 +185,7 @@ test('an answer that cites nothing is treated as an abstention', async () => {
 
 test('an answer whose every citation is invented abstains rather than publishing', async () => {
   const response = await ask(
-    'Why are sound assets built in a separate pass?',
+    'Why does the widget client flush events?',
     async () => 'Because of the encoder [42].',
   );
 
@@ -182,7 +195,7 @@ test('an answer whose every citation is invented abstains rather than publishing
 
 test('a grounded answer keeps its citations and does not abstain', async () => {
   const response = await ask(
-    'Why are sound assets built in a separate pass?',
+    'Why does the widget client flush events?',
     async (_q, passages) =>
       `Audio is encoded in a dedicated pass [1]. Total passages: ${passages.length}.`,
   );
@@ -198,7 +211,7 @@ test('a generator failure raises rather than masquerading as an abstention', asy
   // "No documents cover this" would be a false statement about the corpus when
   // the real problem is that the provider is down.
   await assert.rejects(
-    ask('Why are sound assets built in a separate pass?', async () => {
+    ask('Why does the widget client flush events?', async () => {
       throw new Error('provider unavailable');
     }),
     /Could not generate an answer.*provider unavailable/s,
@@ -210,7 +223,7 @@ test('a provider failure keeps its type so the API can answer 502, not 500', asy
   // moment". Wrapped in a plain Error it became a generic 500 instead, which tells the
   // reader to wait for an engineer when what they should do is press the button again.
   await assert.rejects(
-    ask('Why are sound assets built in a separate pass?', async () => {
+    ask('Why does the widget client flush events?', async () => {
       throw new ProviderError('upstream 503');
     }),
     (error: unknown) => error instanceof ProviderError,
@@ -220,7 +233,7 @@ test('a provider failure keeps its type so the API can answer 502, not 500', asy
 test('an unreachable grader does not cause a false abstention', async () => {
   // hasGroundedSupport returns null here, not false. Abstaining on a judgement
   // that never happened would turn an outage into a claim about the corpus.
-  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+  const response = await answerQuestion(db, 'Why does the widget client flush events?', {
     arm: 'keyword',
     grader: async () => {
       throw new Error('grader down');
@@ -290,7 +303,7 @@ const streaming =
 
 test('the streamed fragments reassemble into the answer that was published', async () => {
   const deltas: string[] = [];
-  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+  const response = await answerQuestion(db, 'Why does the widget client flush events?', {
     arm: 'keyword',
     grader: allRelevant,
     generator: streaming('Audio is encoded in a dedicated pass [1].'),
@@ -309,7 +322,7 @@ test('a streamed answer that cites nothing still abstains', async () => {
   // checked against a passage. A client that treats the fragments as the answer publishes
   // a claim this system refused to make.
   const deltas: string[] = [];
-  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+  const response = await answerQuestion(db, 'Why does the widget client flush events?', {
     arm: 'keyword',
     grader: allRelevant,
     generator: streaming(
@@ -328,7 +341,7 @@ test('an invented marker is stripped from the published answer after being strea
   // The deltas are raw model output, so `[42]` does reach the reader mid-stream. What must
   // not happen is it surviving into the validated answer as a citation to nowhere.
   let streamed = '';
-  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+  const response = await answerQuestion(db, 'Why does the widget client flush events?', {
     arm: 'keyword',
     grader: allRelevant,
     generator: streaming('Encoded in a dedicated pass [1], single-threaded [42].'),
@@ -352,7 +365,7 @@ test('the passages are reported before generation starts', async () => {
   const order: string[] = [];
   let reported: SearchResult[] = [];
 
-  const response = await answerQuestion(db, 'Why are sound assets built in a separate pass?', {
+  const response = await answerQuestion(db, 'Why does the widget client flush events?', {
     arm: 'keyword',
     grader: allRelevant,
     onPassages: (passages) => {
@@ -377,7 +390,7 @@ test('the passages are reported even when the answer is withheld', async () => {
   // An abstention the reader cannot inspect is one they have to take on faith. The near
   // misses are how they judge whether the corpus really lacks the answer.
   let reported = 0;
-  const response = await answerQuestion(db, 'What is the starting salary for a junior developer?', {
+  const response = await answerQuestion(db, 'Why does the widget client flush events?', {
     arm: 'keyword',
     grader: noneRelevant,
     onPassages: (passages) => {

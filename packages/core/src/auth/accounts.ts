@@ -60,18 +60,43 @@ export async function upsertAccount(db: Db, account: DemoAccount): Promise<Upser
   return 'created';
 }
 
-/** The two accounts the README documents, read from the environment with defaults. */
+/**
+ * Read one required seed value, or say exactly what is missing and how to fix it.
+ *
+ * These used to fall back to literals, which is a comfortable default and the wrong one
+ * for a credential: an operator who never set `SEED_ADMIN_PASSWORD` got a working
+ * administrator whose password is published in this repository, and nothing anywhere
+ * told them so. A seeding step that stops is recoverable in thirty seconds; an
+ * administrator account with a known password is not recoverable at all once the host
+ * is reachable.
+ */
+function required(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value.trim() === '') {
+    throw new Error(
+      `${name} is not set. Seeding creates real sign-in credentials, so it has no ` +
+        `default — a fallback here would be a published password on every deployment ` +
+        `that forgot to override it.\n\n` +
+        `Set it in .env, using a value you generate rather than one you copy:\n` +
+        `  ${name}=$(openssl rand -base64 18)\n\n` +
+        `See .env.example for the full list.`,
+    );
+  }
+  return value;
+}
+
+/** The two demo accounts `npm run seed` creates, entirely from the environment. */
 export function demoAccounts(): DemoAccount[] {
   return [
     {
-      email: process.env.SEED_ADMIN_EMAIL ?? 'efe@tugrap.dev',
-      password: process.env.SEED_ADMIN_PASSWORD ?? 'PlayableFactory7766',
+      email: required('SEED_ADMIN_EMAIL'),
+      password: required('SEED_ADMIN_PASSWORD'),
       name: 'Demo Admin',
       role: 'admin',
     },
     {
-      email: process.env.SEED_USER_EMAIL ?? 'user@tugrap.dev',
-      password: process.env.SEED_USER_PASSWORD ?? 'PlayableFactory6677',
+      email: required('SEED_USER_EMAIL'),
+      password: required('SEED_USER_PASSWORD'),
       name: 'Demo User',
       role: 'user',
     },

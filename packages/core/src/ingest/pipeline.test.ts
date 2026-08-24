@@ -8,6 +8,7 @@ import { config } from '../config.ts';
 import { openDb } from '../db/client.ts';
 import { listDocumentsFiltered, listIngestionRuns } from '../db/repository.ts';
 import { ingest, type Embedder } from './pipeline.ts';
+import { FIXTURE_CORPUS, skipWithoutCorpus } from '../testing/corpus.ts';
 
 /**
  * Every document, for assertions that care about the whole corpus.
@@ -61,8 +62,6 @@ function tempDb() {
  * Pointing those at the real corpus coupled them to whichever corpus happened to
  * be installed, and they broke when it was replaced.
  */
-const FIXTURE_CORPUS = path.join(import.meta.dirname, '..', 'testing', 'fixture-corpus');
-
 /** A throwaway copy of the corpus, so tests that delete files leave the real one alone. */
 function tempCorpus() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-corpus-'));
@@ -78,7 +77,7 @@ function tempCorpus() {
 const run = (db: ReturnType<typeof openDb>, corpusPath: string, force = false) =>
   ingest(db, { trigger: 'cli', corpusPath, embedder: stubEmbedder, force });
 
-test('indexes the whole sample corpus', async () => {
+test('indexes the whole sample corpus', { skip: skipWithoutCorpus }, async () => {
   using ctx = tempDb();
   const result = await run(ctx.db, config.corpusPath);
 
@@ -93,29 +92,33 @@ test('indexes the whole sample corpus', async () => {
   assert.equal(vectors.n, chunks.n, 'every chunk has exactly one vector');
 });
 
-test('re-running skips everything — ingestion is repeatable and cheap', async () => {
-  using ctx = tempDb();
-  await run(ctx.db, config.corpusPath);
+test(
+  're-running skips everything — ingestion is repeatable and cheap',
+  { skip: skipWithoutCorpus },
+  async () => {
+    using ctx = tempDb();
+    await run(ctx.db, config.corpusPath);
 
-  let embedCalls = 0;
-  const countingEmbedder: Embedder = async (texts) => {
-    embedCalls += texts.length;
-    return stubEmbedder(texts);
-  };
+    let embedCalls = 0;
+    const countingEmbedder: Embedder = async (texts) => {
+      embedCalls += texts.length;
+      return stubEmbedder(texts);
+    };
 
-  const second = await ingest(ctx.db, {
-    trigger: 'cli',
-    corpusPath: config.corpusPath,
-    embedder: countingEmbedder,
-  });
+    const second = await ingest(ctx.db, {
+      trigger: 'cli',
+      corpusPath: config.corpusPath,
+      embedder: countingEmbedder,
+    });
 
-  assert.equal(second.docsSkipped, second.docsTotal, 'unchanged content is skipped wholesale');
-  assert.equal(second.docsIndexed, 0);
-  assert.equal(second.docsUpdated, 0);
-  assert.equal(embedCalls, 0, 're-ingest must not re-embed a single unchanged passage');
-});
+    assert.equal(second.docsSkipped, second.docsTotal, 'unchanged content is skipped wholesale');
+    assert.equal(second.docsIndexed, 0);
+    assert.equal(second.docsUpdated, 0);
+    assert.equal(embedCalls, 0, 're-ingest must not re-embed a single unchanged passage');
+  },
+);
 
-test('--force re-embeds despite unchanged hashes', async () => {
+test('--force re-embeds despite unchanged hashes', { skip: skipWithoutCorpus }, async () => {
   using ctx = tempDb();
   const first = await run(ctx.db, config.corpusPath);
 
@@ -126,93 +129,101 @@ test('--force re-embeds despite unchanged hashes', async () => {
   assert.equal(forced.docsIndexed, 0);
 });
 
-test('a changed file is re-indexed and its stale passages replaced', async () => {
-  using ctx = tempDb();
-  using corpus = tempCorpus();
-  await run(ctx.db, corpus.path);
+test(
+  'a changed file is re-indexed and its stale passages replaced',
+  { skip: skipWithoutCorpus },
+  async () => {
+    using ctx = tempDb();
+    using corpus = tempCorpus();
+    await run(ctx.db, corpus.path);
 
-  // The document is identified by its own chunk rows rather than by vocabulary.
-  // Picking a word that appears in exactly one document worked on a small corpus
-  // and quietly stopped being true when the corpus grew, so the assertions below
-  // are anchored to rowids and to a term invented for this test.
-  const source = 'circassian-cuisine/circassian-smoked-cheese.md';
-  const before = ctx.db
-    .prepare(
-      `SELECT c.id FROM chunks c
+    // The document is identified by its own chunk rows rather than by vocabulary.
+    // Picking a word that appears in exactly one document worked on a small corpus
+    // and quietly stopped being true when the corpus grew, so the assertions below
+    // are anchored to rowids and to a term invented for this test.
+    const source = 'circassian-cuisine/circassian-smoked-cheese.md';
+    const before = ctx.db
+      .prepare(
+        `SELECT c.id FROM chunks c
          JOIN documents d ON d.id = c.document_id
         WHERE d.source_path = ?`,
-    )
-    .all(source) as Array<{ id: number }>;
-  assert.ok(before.length > 0, 'fixture document was indexed to begin with');
+      )
+      .all(source) as Array<{ id: number }>;
+    assert.ok(before.length > 0, 'fixture document was indexed to begin with');
 
-  fs.writeFileSync(
-    path.join(corpus.path, source),
-    '# Circassian smoked cheese\n\nThe cheese is now cured in brine and ' +
-      'labelled qorthaven, a word that appears nowhere else.\n',
-  );
-
-  const second = await run(ctx.db, corpus.path);
-
-  assert.equal(second.docsUpdated, 1, 'exactly the changed document is re-indexed');
-  assert.equal(second.docsSkipped, second.docsTotal - 1);
-
-  const hits = ctx.db
-    .prepare("SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH 'qorthaven'")
-    .get() as { n: number };
-  assert.equal(hits.n, 1, 'the new text is searchable');
-
-  // The old passages are gone from the keyword index, not merely outranked. A
-  // replaced document that leaves its previous rows behind answers questions
-  // from text that is no longer in the corpus.
-  const placeholders = before.map(() => '?').join(',');
-  const stale = ctx.db
-    .prepare(`SELECT count(*) n FROM chunks_fts WHERE rowid IN (${placeholders})`)
-    .get(...before.map((r) => Number(r.id))) as { n: number };
-  assert.equal(stale.n, 0, 'the replaced passages are gone from the index');
-});
-
-test('a file deleted from the corpus is pruned from all three stores', async () => {
-  using ctx = tempDb();
-  using corpus = tempCorpus();
-  const first = await run(ctx.db, corpus.path);
-
-  // Track the document's own rows rather than asserting on vocabulary: terms in
-  // this corpus repeat heavily across documents, so a keyword-based check would
-  // pass or fail for the wrong reason.
-  const doomed = ctx.db
-    .prepare(
-      `SELECT c.id FROM chunks c
-         JOIN documents d ON d.id = c.document_id
-        WHERE d.source_path = 'circassian-cuisine/lepsi-dish.md'`,
-    )
-    .all() as Array<{ id: number }>;
-  assert.ok(doomed.length > 0, 'fixture document was indexed to begin with');
-  const doomedIds = doomed.map((row) => Number(row.id));
-
-  fs.rmSync(path.join(corpus.path, 'circassian-cuisine', 'lepsi-dish.md'));
-  const second = await run(ctx.db, corpus.path);
-
-  assert.equal(second.docsDeleted, 1);
-  assert.equal(second.docsTotal, first.docsTotal - 1);
-
-  const placeholders = doomedIds.map(() => '?').join(',');
-  const remaining = (table: string) =>
-    Number(
-      (
-        ctx.db
-          .prepare(`SELECT count(*) n FROM ${table} WHERE rowid IN (${placeholders})`)
-          .get(...doomedIds) as { n: number }
-      ).n,
+    fs.writeFileSync(
+      path.join(corpus.path, source),
+      '# Circassian smoked cheese\n\nThe cheese is now cured in brine and ' +
+        'labelled qorthaven, a word that appears nowhere else.\n',
     );
 
-  assert.equal(remaining('chunks'), 0, 'passages removed');
-  assert.equal(remaining('chunks_vec'), 0, 'vectors removed');
-  assert.equal(remaining('chunks_fts'), 0, 'keyword postings removed');
+    const second = await run(ctx.db, corpus.path);
 
-  const vectors = ctx.db.prepare('SELECT count(*) n FROM chunks_vec').get() as { n: number };
-  const chunks = ctx.db.prepare('SELECT count(*) n FROM chunks').get() as { n: number };
-  assert.equal(vectors.n, chunks.n, 'vectors stay in step with chunks after a prune');
-});
+    assert.equal(second.docsUpdated, 1, 'exactly the changed document is re-indexed');
+    assert.equal(second.docsSkipped, second.docsTotal - 1);
+
+    const hits = ctx.db
+      .prepare("SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH 'qorthaven'")
+      .get() as { n: number };
+    assert.equal(hits.n, 1, 'the new text is searchable');
+
+    // The old passages are gone from the keyword index, not merely outranked. A
+    // replaced document that leaves its previous rows behind answers questions
+    // from text that is no longer in the corpus.
+    const placeholders = before.map(() => '?').join(',');
+    const stale = ctx.db
+      .prepare(`SELECT count(*) n FROM chunks_fts WHERE rowid IN (${placeholders})`)
+      .get(...before.map((r) => Number(r.id))) as { n: number };
+    assert.equal(stale.n, 0, 'the replaced passages are gone from the index');
+  },
+);
+
+test(
+  'a file deleted from the corpus is pruned from all three stores',
+  { skip: skipWithoutCorpus },
+  async () => {
+    using ctx = tempDb();
+    using corpus = tempCorpus();
+    const first = await run(ctx.db, corpus.path);
+
+    // Track the document's own rows rather than asserting on vocabulary: terms in
+    // this corpus repeat heavily across documents, so a keyword-based check would
+    // pass or fail for the wrong reason.
+    const doomed = ctx.db
+      .prepare(
+        `SELECT c.id FROM chunks c
+         JOIN documents d ON d.id = c.document_id
+        WHERE d.source_path = 'circassian-cuisine/lepsi-dish.md'`,
+      )
+      .all() as Array<{ id: number }>;
+    assert.ok(doomed.length > 0, 'fixture document was indexed to begin with');
+    const doomedIds = doomed.map((row) => Number(row.id));
+
+    fs.rmSync(path.join(corpus.path, 'circassian-cuisine', 'lepsi-dish.md'));
+    const second = await run(ctx.db, corpus.path);
+
+    assert.equal(second.docsDeleted, 1);
+    assert.equal(second.docsTotal, first.docsTotal - 1);
+
+    const placeholders = doomedIds.map(() => '?').join(',');
+    const remaining = (table: string) =>
+      Number(
+        (
+          ctx.db
+            .prepare(`SELECT count(*) n FROM ${table} WHERE rowid IN (${placeholders})`)
+            .get(...doomedIds) as { n: number }
+        ).n,
+      );
+
+    assert.equal(remaining('chunks'), 0, 'passages removed');
+    assert.equal(remaining('chunks_vec'), 0, 'vectors removed');
+    assert.equal(remaining('chunks_fts'), 0, 'keyword postings removed');
+
+    const vectors = ctx.db.prepare('SELECT count(*) n FROM chunks_vec').get() as { n: number };
+    const chunks = ctx.db.prepare('SELECT count(*) n FROM chunks').get() as { n: number };
+    assert.equal(vectors.n, chunks.n, 'vectors stay in step with chunks after a prune');
+  },
+);
 
 test('deprecation is detected in the right direction, not merely detected', async () => {
   using ctx = tempDb();
@@ -249,35 +260,39 @@ test('categories are derived from the corpus directory layout', async () => {
   assert.ok(categories.has('uncategorised'), 'root-level files fall back');
 });
 
-test('every run is recorded whether or not anything changed', async () => {
-  using ctx = tempDb();
-  await run(ctx.db, config.corpusPath);
-  await run(ctx.db, config.corpusPath);
+test(
+  'every run is recorded whether or not anything changed',
+  { skip: skipWithoutCorpus },
+  async () => {
+    using ctx = tempDb();
+    await run(ctx.db, config.corpusPath);
+    await run(ctx.db, config.corpusPath);
 
-  const runs = listIngestionRuns(ctx.db);
+    const runs = listIngestionRuns(ctx.db);
 
-  assert.equal(runs.length, 2);
-  assert.ok(runs.every((r) => r.status === 'succeeded'));
-  assert.ok(runs.every((r) => r.finishedAt !== null));
-  assert.ok(runs.every((r) => r.durationMs !== null && r.durationMs >= 0));
-  assert.ok(runs.every((r) => r.trigger === 'cli'));
+    assert.equal(runs.length, 2);
+    assert.ok(runs.every((r) => r.status === 'succeeded'));
+    assert.ok(runs.every((r) => r.finishedAt !== null));
+    assert.ok(runs.every((r) => r.durationMs !== null && r.durationMs >= 0));
+    assert.ok(runs.every((r) => r.trigger === 'cli'));
 
-  /**
-   * A measured duration, not a subtraction of two second-resolution timestamps.
-   *
-   * `durationMs >= 0` above was an assertion that could not fail: the old
-   * derivation returned 0 for every run shorter than a second, which on this corpus
-   * was all of them — a real 1.5 second cold ingest of 142 documents recorded 0 ms.
-   * Reading and hashing 142 files and writing 142 documents in three stores cannot
-   * take zero time, so this is the assertion that distinguishes the two.
-   */
-  const cold = runs.at(-1)!;
-  assert.ok(
-    cold.durationMs !== null && cold.durationMs > 0,
-    `a cold ingest of ${cold.docsTotal} documents reported ${cold.durationMs} ms`,
-  );
-  assert.ok(cold.durationMs < 120_000, 'and a duration in milliseconds, not some other unit');
-});
+    /**
+     * A measured duration, not a subtraction of two second-resolution timestamps.
+     *
+     * `durationMs >= 0` above was an assertion that could not fail: the old
+     * derivation returned 0 for every run shorter than a second, which on this corpus
+     * was all of them — a real 1.5 second cold ingest of 142 documents recorded 0 ms.
+     * Reading and hashing 142 files and writing 142 documents in three stores cannot
+     * take zero time, so this is the assertion that distinguishes the two.
+     */
+    const cold = runs.at(-1)!;
+    assert.ok(
+      cold.durationMs !== null && cold.durationMs > 0,
+      `a cold ingest of ${cold.docsTotal} documents reported ${cold.durationMs} ms`,
+    );
+    assert.ok(cold.durationMs < 120_000, 'and a duration in milliseconds, not some other unit');
+  },
+);
 
 /**
  * Tooling that shares the corpus directory must not become documents.
@@ -288,44 +303,51 @@ test('every run is recorded whether or not anything changed', async () => {
  * that would do real damage, since pointing CORPUS_PATH at a repository is a
  * supported thing to do.
  */
-test('tooling files sharing the corpus directory are not indexed', async () => {
-  using ctx = tempDb();
-  using corpus = tempCorpus();
+test(
+  'tooling files sharing the corpus directory are not indexed',
+  { skip: skipWithoutCorpus },
+  async () => {
+    using ctx = tempDb();
+    using corpus = tempCorpus();
 
-  const clean = await run(ctx.db, corpus.path);
+    const clean = await run(ctx.db, corpus.path);
 
-  fs.writeFileSync(path.join(corpus.path, 'CLAUDE.md'), '<claude-mem-context>\n\n');
-  fs.mkdirSync(path.join(corpus.path, 'node_modules', 'some-pkg'), { recursive: true });
-  fs.writeFileSync(
-    path.join(corpus.path, 'node_modules', 'some-pkg', 'README.md'),
-    '# Some Package\n\nUnrelated dependency documentation.\n',
-  );
-  fs.mkdirSync(path.join(corpus.path, '.github'), { recursive: true });
-  fs.writeFileSync(path.join(corpus.path, '.github', 'PULL_REQUEST_TEMPLATE.md'), '# PR\n\nx\n');
+    fs.writeFileSync(path.join(corpus.path, 'CLAUDE.md'), '<claude-mem-context>\n\n');
+    fs.mkdirSync(path.join(corpus.path, 'node_modules', 'some-pkg'), { recursive: true });
+    fs.writeFileSync(
+      path.join(corpus.path, 'node_modules', 'some-pkg', 'README.md'),
+      '# Some Package\n\nUnrelated dependency documentation.\n',
+    );
+    fs.mkdirSync(path.join(corpus.path, '.github'), { recursive: true });
+    fs.writeFileSync(path.join(corpus.path, '.github', 'PULL_REQUEST_TEMPLATE.md'), '# PR\n\nx\n');
 
-  const ignored: string[] = [];
-  const after = await ingest(ctx.db, {
-    trigger: 'cli',
-    corpusPath: corpus.path,
-    embedder: stubEmbedder,
-    onProgress: (p) => {
-      if (p.message.startsWith('ignored ')) ignored.push(p.message);
-    },
-  });
+    const ignored: string[] = [];
+    const after = await ingest(ctx.db, {
+      trigger: 'cli',
+      corpusPath: corpus.path,
+      embedder: stubEmbedder,
+      onProgress: (p) => {
+        if (p.message.startsWith('ignored ')) ignored.push(p.message);
+      },
+    });
 
-  assert.equal(after.docsTotal, clean.docsTotal, 'four stray markdown files, no new documents');
-  assert.equal(after.docsSkipped, clean.docsTotal, 'and nothing re-embedded');
+    assert.equal(after.docsTotal, clean.docsTotal, 'four stray markdown files, no new documents');
+    assert.equal(after.docsSkipped, clean.docsTotal, 'and nothing re-embedded');
 
-  const paths = listDocuments(ctx.db).map((d) => d.sourcePath);
-  assert.ok(!paths.includes('CLAUDE.md'), 'the plugin stub is not a document');
-  assert.ok(!paths.some((p) => p.startsWith('node_modules/')), 'dependency docs are not documents');
-  assert.ok(!paths.some((p) => p.startsWith('.github/')), 'hidden directories are not documents');
+    const paths = listDocuments(ctx.db).map((d) => d.sourcePath);
+    assert.ok(!paths.includes('CLAUDE.md'), 'the plugin stub is not a document');
+    assert.ok(
+      !paths.some((p) => p.startsWith('node_modules/')),
+      'dependency docs are not documents',
+    );
+    assert.ok(!paths.some((p) => p.startsWith('.github/')), 'hidden directories are not documents');
 
-  // An exclusion nobody can see is indistinguishable from a document that failed
-  // to index, which is the whole reason the original bug went unnoticed.
-  assert.equal(ignored.length, 1, 'the run reports what it ignored');
-  assert.match(ignored[0]!, /CLAUDE\.md/);
-});
+    // An exclusion nobody can see is indistinguishable from a document that failed
+    // to index, which is the whole reason the original bug went unnoticed.
+    assert.equal(ignored.length, 1, 'the run reports what it ignored');
+    assert.match(ignored[0]!, /CLAUDE\.md/);
+  },
+);
 
 /**
  * `docs_failed` on the run and the failed documents in the table have to agree.
@@ -390,22 +412,26 @@ test('a failure on a document new this run is still visible afterwards', async (
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('an embedding failure marks the run failed rather than leaving it running', async () => {
-  using ctx = tempDb();
-  const failing: Embedder = async () => {
-    throw new Error('provider unavailable');
-  };
+test(
+  'an embedding failure marks the run failed rather than leaving it running',
+  { skip: skipWithoutCorpus },
+  async () => {
+    using ctx = tempDb();
+    const failing: Embedder = async () => {
+      throw new Error('provider unavailable');
+    };
 
-  await assert.rejects(
-    ingest(ctx.db, { trigger: 'cli', corpusPath: config.corpusPath, embedder: failing }),
-    /provider unavailable/,
-  );
+    await assert.rejects(
+      ingest(ctx.db, { trigger: 'cli', corpusPath: config.corpusPath, embedder: failing }),
+      /provider unavailable/,
+    );
 
-  const [latest] = listIngestionRuns(ctx.db);
-  assert.equal(latest?.status, 'failed');
-  assert.match(latest?.error ?? '', /provider unavailable/);
-  assert.ok(latest?.finishedAt, 'a failed run is still closed out');
-});
+    const [latest] = listIngestionRuns(ctx.db);
+    assert.equal(latest?.status, 'failed');
+    assert.match(latest?.error ?? '', /provider unavailable/);
+    assert.ok(latest?.finishedAt, 'a failed run is still closed out');
+  },
+);
 
 /**
  * Two overlapping runs left the three stores consistent — the write phases are

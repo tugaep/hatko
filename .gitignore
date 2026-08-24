@@ -43,3 +43,11 @@ CLAUDE.md
 # Design-review tool output. The findings that mattered are in AI_USAGE.md; the
 # snapshot itself is a local backlog, not a deliverable.
 .impeccable/
+
+# The corpus itself is not in the repository.
+#
+# It is Wikipedia text under CC BY-SA 4.0, and shipping it would put a share-alike
+# obligation on anyone who clones this. `npm run corpus:fetch` rebuilds it from the
+# same categories in about twenty minutes, so what is version-controlled is the
+# recipe rather than the data.
+sample_dataset/corpus/
