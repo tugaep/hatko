@@ -193,8 +193,8 @@ export const ABSTAIN_MESSAGE = 'No documents cover this.';
  * Superseded documents among the passages, derived from ingest-time metadata.
  *
  * This is deliberately not left to the model. Asked three different ways, the
- * answer model kept resolving sample question 2 correctly from sdk-notes-v3 while
- * silently omitting that v2 is deprecated — it had the passage, flagged
+ * answer model kept answering correctly from the current document while silently
+ * omitting that the older one is deprecated — it had the passage, flagged
  * DEPRECATED, and simply did not judge the fact worth stating. Since deprecation
  * is already known for certain at ingest, the notice is computed rather than
  * requested, and the prompt rule is kept only as a redundant second path.

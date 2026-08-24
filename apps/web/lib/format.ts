@@ -47,7 +47,7 @@ export function catalogNumber(prefix: string, id: number, width = 4): string {
 /**
  * Words too common to be worth marking.
  *
- * Without this, "which languages must every playable ship with" highlighted `with`,
+ * Without this, "which languages must a release ship with" highlighted `with`,
  * `every`, `must` and `the` throughout every passage — which is not emphasis, it is
  * confetti, and it hides the two words that actually matched.
  */
@@ -111,7 +111,7 @@ export function highlightSegments(text: string, query: string): { text: string; 
  *
  * It matters on this corpus specifically. Every document is one chunk and every document
  * opens with its own `# Title`, so a card that prints its title as a heading and then
- * prints the passage was printing the same words twice, 142 times out of 142.
+ * prints the passage was printing the same words twice, on every single document.
  *
  * The comparison is loose on case and punctuation but never on words: a heading that says
  * anything the title does not is content, and content is never dropped.

@@ -6,15 +6,18 @@ import { toFtsQuery } from './query.ts';
 /**
  * Hybrid retrieval: dense vectors and BM25, fused by Reciprocal Rank Fusion.
  *
- * Why both arms. The corpus contains 78 near-identical delivery reports, and
- * embeddings of near-identical text are near-identical vectors — so a purely
- * semantic search answers "why are sound assets built in a separate pass" with a
- * wall of delivery reports that all talk vaguely about builds and audio. The
- * lexical arm rescues it, because "separate pass" is a literal phrase in exactly
- * one document. The converse also holds: BM25 alone cannot match a question
- * phrased entirely in different words from the document, and the porter stemmer
- * does not bridge irregular forms (`built` never meets `building`). Each arm
- * covers the other's blind spot.
+ * Why both arms. The corpus is one dense subject, so near-identical text is the
+ * normal case rather than the exception — hundreds of short biographies sharing
+ * almost all of their vocabulary, and embeddings of near-identical text are
+ * near-identical vectors. Asked who led the Circassian Confederation, a purely
+ * semantic search returns a wall of lives that each mention Circassia, war,
+ * Russia and exile. The lexical arm rescues it, because the office is named in
+ * only a couple of documents. The converse also holds: BM25 alone cannot match a
+ * question phrased entirely in different words from the document — "which
+ * language had an unusually large number of speech sounds" against a document
+ * that says "consonants" — and the porter stemmer does not bridge irregular forms
+ * (`built` never meets `building`). Each arm covers the other's blind spot, and
+ * the eval measures the gap: 67% recall@3 for either arm alone, 100% fused.
  *
  * Why RRF rather than a weighted score blend. Cosine distance and BM25 are not
  * commensurable — BM25 is unbounded, corpus-relative and negative in SQLite,
@@ -45,24 +48,30 @@ import { toFtsQuery } from './query.ts';
  * RRF damping. Larger values flatten the advantage of a high rank, which makes
  * "retrieved by both arms" outweigh "retrieved first by one arm".
  *
- * The literature's k=60 comes from TREC runs fusing ~1000 candidates. Against 142
- * chunks it is far too large: a rank-1 hit found by one arm scores 1/61 = 0.0164,
- * while a mediocre rank-20 hit found by both scores 1/80 + 1/80 = 0.025 and wins.
- * Measured on the eval set, k=60 dropped localization-guide.md from keyword rank 1
- * to outside the hybrid top 30. The default here is chosen by sweep, not by
- * citation — see the eval script.
+ * The literature's k=60 comes from TREC runs fusing ~1000 candidates. Against a
+ * candidate pool of ten it is far too large: a rank-1 hit found by one arm scores
+ * 1/61 = 0.0164, while a mediocre rank-20 hit found by both scores 1/80 + 1/80 =
+ * 0.025 and wins. Measured on a 142-chunk corpus, k=60 pushed a document from
+ * keyword rank 1 to outside the hybrid top 30 — the sweep that produced this
+ * default. It is chosen by measurement rather than by citation; see the eval
+ * script, which still reports per-arm recall so a bad value shows up as a number.
  */
 const DEFAULT_RRF_K = 10;
 
 /**
  * Candidates drawn from each arm before fusion.
  *
- * The sweep found this matters more than k: at depth 10 the hybrid arm reaches
- * recall@3 of 100%, at depth 20-30 it drops to 89% for every value of k tried.
- * The reason is proportional — 30 candidates out of 142 chunks is a fifth of the
- * corpus, so almost everything appears in both arms and the summed score rewards
- * being mediocre twice over being right once. This should grow with the corpus,
- * not stay fixed: it is a fraction of the collection, not an absolute.
+ * The sweep found this matters more than k: at depth 10 the hybrid arm reached
+ * recall@3 of 100%, and at depth 20-30 it fell to 89% for every value of k tried.
+ * The reason is proportional — on the 142-chunk corpus it was swept against, 30
+ * candidates was a fifth of everything, so almost every document appeared in both
+ * arms and the summed score rewarded being mediocre twice over being right once.
+ *
+ * That argument says the depth should be a fraction of the collection rather than
+ * a constant, and this is still a constant. It survives at 7539 chunks because ten
+ * of that is a far smaller fraction than ten of 142 — the sweep's failure mode is
+ * a pool that is too *large*, and growth moves away from it. A corpus small enough
+ * that ten candidates is a meaningful share of it would want this reconsidered.
  */
 const DEFAULT_CANDIDATES = 10;
 

@@ -66,11 +66,18 @@ export const EVAL_QUESTIONS: EvalQuestion[] = [
   {
     id: 'ubykh-consonants',
     question: 'Which Caucasian language had an unusually large number of speech sounds?',
-    expected: ['circassian-culture/ubykh-language.md'],
+    expected: ['circassian-culture/ubykh-language.md', 'ubykh-language/ubykh-phonology.md'],
     mustMention: ['consonant'],
     probes:
-      '"Speech sounds" appears nowhere in the corpus; the document says "consonants". The ' +
-      'keyword arm cannot bridge that, so a hit here is the vector arm doing the work.',
+      '"Speech sounds" appears nowhere in the corpus; the documents say "consonants". The ' +
+      'keyword arm cannot bridge that, so a hit here is the vector arm doing the work.\n\n' +
+      'Two documents are accepted, and the second was added after retrieval found it and ' +
+      'this list called it a miss. That is worth flagging, because moving the goalposts ' +
+      'after seeing a result is usually how an eval gets quietly corrupted. It stands here ' +
+      'because the ground truth was wrong rather than the ranking: ubykh-phonology.md opens ' +
+      'with "the largest consonant inventory of all documented languages that do not use ' +
+      'clicks, with 84", which answers the question more directly than the language article ' +
+      'originally listed. A question with two right answers should say so.',
   },
   {
     id: 'horse-breed',

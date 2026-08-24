@@ -70,7 +70,7 @@ async function runOnce(trigger: IngestionTrigger, force: boolean): Promise<numbe
 
       // Per-file counters redraw one line in place. Carriage returns are
       // meaningless once the output is piped to a file or a log, where they would
-      // leave 142 concatenated fragments on a single line — so off a TTY the
+      // leave a thousand concatenated fragments on a single line — so off a TTY the
       // counters are dropped entirely and only phase transitions are printed.
       if (isPerFile && !isFailure) {
         if (!process.stdout.isTTY) return;

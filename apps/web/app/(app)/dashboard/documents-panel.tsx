@@ -19,7 +19,7 @@ import { Badge, Button, ErrorCard, Input, SkeletonLine, cx } from '../../../comp
  * The corpus, as rows.
  *
  * Filtering, sorting and paging all happen on the server — `listDocumentsFiltered` does
- * all three, and fetching 142 rows to sort them in the browser is the kind of shortcut
+ * all three, and fetching every row to sort them in the browser is the kind of shortcut
  * that stops working at the first real corpus.
  *
  * One markup tree serves both layouts. The `table-cards` utility turns each row into a

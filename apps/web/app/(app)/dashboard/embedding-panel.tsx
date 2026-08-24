@@ -10,11 +10,11 @@ import { DocumentDialog } from './document-dialog.tsx';
  * The corpus as its vectors see it.
  *
  * This panel exists to settle an argument the rest of the system only asserts. Hybrid
- * retrieval is justified in three documents by the claim that 78 of the 142 files are
- * near-identical delivery reports, that they therefore sit almost on top of one another
- * in the embedding space, and that a vector arm alone consequently returns four of them
- * for a question none of them answer. Projected to three dimensions the claim stops being
- * a sentence: the delivery reports are a dense knot and everything else is scattered
+ * retrieval is justified in three documents by the claim that much of the corpus is
+ * near-identical, that those documents therefore sit almost on top of one another in the
+ * embedding space, and that a vector arm alone consequently returns a wall of them for a
+ * question none of them answer. Projected to three dimensions the claim stops being a
+ * sentence: the crowded categories are a dense knot and everything else is scattered
  * around it, and the spread figures in the legend put a number on the difference.
  *
  * Drawn on a canvas with hand-written arithmetic rather than three.js: this is a few

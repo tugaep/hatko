@@ -155,11 +155,11 @@ Every text token clears 4.5:1 in both themes. Every interactive boundary clears 
 
 Three families, three distinct jobs. Any of them doing another's job is a bug.
 
-| Family                          | Job                                                                                                 |
-| ------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Fraunces** (variable)         | Display, page titles, section headings, empty-state copy. Carries the field-guide character.        |
-| **Geist** (variable)            | All UI: body, labels, buttons, tables, form text. A Swiss neo-grotesque in the Helvetica/Univers line. |
-| **Geist Mono** (variable)       | Catalog numbers, document paths, scores, timestamps, chunk IDs, code.                               |
+| Family                    | Job                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Fraunces** (variable)   | Display, page titles, section headings, empty-state copy. Carries the field-guide character.           |
+| **Geist** (variable)      | All UI: body, labels, buttons, tables, form text. A Swiss neo-grotesque in the Helvetica/Univers line. |
+| **Geist Mono** (variable) | Catalog numbers, document paths, scores, timestamps, chunk IDs, code.                                  |
 
 Fraunces runs at `opsz` matched to size and `WONK 1` at 30px and above only — the wonk is character at display size and noise at 20px.
 
@@ -169,18 +169,18 @@ Tabular figures are applied contextually via `.tabular`, never globally — pros
 
 ### Scale
 
-| Token        | Size / LH | Tracking | Family        | Use                        |
-| ------------ | --------- | -------- | ------------- | -------------------------- |
-| `display-lg` | 48 / 1.05 | −0.03em  | Fraunces 500  | Sign-in, marketing surface |
-| `display`    | 38 / 1.10 | −0.025em | Fraunces 500  | Page hero                  |
-| `h1`         | 30 / 1.15 | −0.02em  | Fraunces 500  | Page title                 |
-| `h2`         | 24 / 1.25 | −0.015em | Fraunces 500  | Section                    |
-| `h3`         | 20 / 1.30 | −0.01em  | Geist 600     | Card title                 |
-| `h4`         | 16 / 1.40 | −0.005em | Geist 600     | Sub-head, table caption    |
-| `body`       | 16 / 1.60 | 0        | Geist 400     | Answers, prose             |
-| `body-sm`    | 14 / 1.55 | 0        | Geist 400     | UI default, table cells    |
-| `caption`    | 12 / 1.40 | 0.01em   | Geist 400     | Metadata, helper text      |
-| `eyebrow`    | 12 / 1.00 | 0.08em   | Geist 600     | Uppercase section labels   |
+| Token        | Size / LH | Tracking | Family         | Use                        |
+| ------------ | --------- | -------- | -------------- | -------------------------- |
+| `display-lg` | 48 / 1.05 | −0.03em  | Fraunces 500   | Sign-in, marketing surface |
+| `display`    | 38 / 1.10 | −0.025em | Fraunces 500   | Page hero                  |
+| `h1`         | 30 / 1.15 | −0.02em  | Fraunces 500   | Page title                 |
+| `h2`         | 24 / 1.25 | −0.015em | Fraunces 500   | Section                    |
+| `h3`         | 20 / 1.30 | −0.01em  | Geist 600      | Card title                 |
+| `h4`         | 16 / 1.40 | −0.005em | Geist 600      | Sub-head, table caption    |
+| `body`       | 16 / 1.60 | 0        | Geist 400      | Answers, prose             |
+| `body-sm`    | 14 / 1.55 | 0        | Geist 400      | UI default, table cells    |
+| `caption`    | 12 / 1.40 | 0.01em   | Geist 400      | Metadata, helper text      |
+| `eyebrow`    | 12 / 1.00 | 0.08em   | Geist 600      | Uppercase section labels   |
 | `mono`       | 13 / 1.50 | 0.02em   | Geist Mono 400 | Paths, snippets            |
 | `mono-label` | 11 / 1.40 | 0.06em   | Geist Mono 500 | Uppercase catalog numbers  |
 
@@ -459,9 +459,9 @@ Label frame plus:
 
 ### Deprecated banner
 
-When retrieval surfaces a superseded document (the `sdk-notes-v2` case), the source card gets a full-width strip above the title: `--danger-subtle` fill, 1px `--danger`, 12px pad, `body-sm`.
+When retrieval surfaces a superseded document (the `widget-api-v1` case), the source card gets a full-width strip above the title: `--danger-subtle` fill, 1px `--danger`, 12px pad, `body-sm`.
 
-> **Deprecated.** Superseded by _Lumen SDK v3_. → View current
+> **Deprecated.** Superseded by _Widget API v2_. → View current
 
 This is a product-correctness feature wearing a visual token. The retrieval layer flags it; the UI must not bury it.
 
@@ -473,7 +473,7 @@ Centered in the answer column: a flat vector pressed-leaf specimen at 96px in gr
 
 > No documents cover this.
 
-Then, in `body-sm` `--text-muted`: _Hatko only answers from the indexed corpus. Nothing in the 142 indexed documents addresses this question._ Below that, the closest-scoring chunks under a `Nearest passages` eyebrow, so the user can judge for themselves.
+Then, in `body-sm` `--text-muted`: _Hatko only answers from the indexed corpus. Nothing in the indexed documents addresses this question._ Below that, the closest-scoring chunks under a `Nearest passages` eyebrow, so the user can judge for themselves.
 
 Styling this as a failure would teach users that honesty is malfunction. It gets the same visual weight and care as a successful answer.
 

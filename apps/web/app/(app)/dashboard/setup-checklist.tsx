@@ -16,7 +16,7 @@ import { Button, Eyebrow, LabelFrame } from '../../../components/ui.tsx';
  * question answering "the model provider could not be reached", neither of which names
  * the actual missing step.
  *
- * The order is not cosmetic. Ingestion embeds 142 documents, which is a provider call
+ * The order is not cosmetic. Ingestion embeds every document, which is a provider call
  * per document, so it cannot run before there is a working credential — and the model
  * has to be reachable before the credential can be shown to work. Each step therefore
  * unlocks the next, and a checklist that let you start at the bottom would only move
@@ -73,7 +73,12 @@ export function SetupChecklist({
     {
       title: 'Corpus indexed',
       done: stats.index.chunksTotal > 0,
-      todo: `Run ingestion. ${stats.index.documentsTotal || 142} documents, one embedding call each.`,
+      // No fallback count. This used to read `|| 142`, which was the sample corpus's
+      // size and became a confident lie the moment the corpus changed — and it showed
+      // precisely when the number was unknown, which is when a guess is least defensible.
+      todo: stats.index.documentsTotal
+        ? `Run ingestion. ${stats.index.documentsTotal} documents, one embedding call each.`
+        : 'Run ingestion. One embedding call per document.',
       href: '/dashboard/ingestion',
     },
   ];

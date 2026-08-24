@@ -45,12 +45,12 @@ This is a design constraint, not a slogan. It rules out the confident-blob-of-pr
 
 Plain, precise, quietly certain. Hatko sounds like a good technical writer, not a product marketer.
 
-| Do                                    | Don't                                           |
-| ------------------------------------- | ----------------------------------------------- |
-| "No documents cover this."            | "I couldn't find anything, sorry!"              |
-| "Indexed 142 documents in 12s."       | "Success! Your corpus is ready 🎉"              |
-| "sdk-notes-v2 is deprecated. See v3." | "Note: there may be a newer version available." |
-| "Ingestion failed on 3 files."        | "Oops! Something went wrong."                   |
+| Do                                     | Don't                                           |
+| -------------------------------------- | ----------------------------------------------- |
+| "No documents cover this."             | "I couldn't find anything, sorry!"              |
+| "Indexed 1083 documents in 57s."       | "Success! Your corpus is ready 🎉"              |
+| "widget-api-v1 is deprecated. See v2." | "Note: there may be a newer version available." |
+| "Ingestion failed on 3 files."         | "Oops! Something went wrong."                   |
 
 Rules:
 

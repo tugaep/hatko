@@ -30,7 +30,7 @@ import { categoryOf, scanCorpus, readDocument, titleOf, type SourceDocument } fr
  *   4. write           — one transaction per document
  *
  * Phase 3 is separated so embedding is batched across documents. Doing it inside
- * a per-file loop would mean 142 sequential API round trips for the sample
+ * a per-file loop would mean one sequential API round trip per document in the
  * corpus; batching turns that into a handful.
  *
  * Repeatability comes from the content hash: a file whose bytes have not changed

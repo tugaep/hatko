@@ -340,7 +340,7 @@ const SORT_COLUMNS: Record<DocumentSort, string> = {
 /**
  * `ORDER BY` for a sorted listing, with two properties worth stating.
  *
- * Ties break on `source_path`, so paging is stable: 78 delivery reports all have
+ * Ties break on `source_path`, so paging is stable: hundreds of documents share
  * `chunk_count = 1`, and without a tiebreaker SQLite may return them in a different order
  * for page 1 and page 2, which silently drops and duplicates rows across a page boundary.
  *
@@ -375,7 +375,7 @@ export function listDocumentsFiltered(
   if (filter.q) {
     // Parameterised, so the user's text cannot alter the statement — but binding is
     // not the whole job. LIKE reads `%` and `_` in the *value* as wildcards, so
-    // searching for `_` matched every document and `%` matched all 142. Escaping
+    // searching for `_` matched every document and `%` matched the whole corpus. Escaping
     // them, and the escape character itself, makes the search mean what it says.
     where.push(`(lower(title) LIKE ? ESCAPE '\\' OR lower(source_path) LIKE ? ESCAPE '\\')`);
     const needle = `%${filter.q.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;

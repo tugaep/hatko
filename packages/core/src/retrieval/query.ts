@@ -91,9 +91,10 @@ const STOPWORDS = new Set([
 
 /**
  * Words are letters, digits and internal dots or hyphens, so identifiers survive
- * intact: `lumen.track`, `sdk-notes-v3` and `4.2` are exactly the tokens that
- * distinguish documents in this corpus, and splitting them would throw away the
- * most discriminating terms in a technical question.
+ * intact. `widget.flush`, `nart-saga`, `4.2`, `CC BY-SA` — in a corpus of
+ * technical or reference documents these are the most discriminating tokens a
+ * question can carry, and splitting them throws away exactly the terms that
+ * separate one near-identical document from another.
  */
 const TOKEN_RE = /[\p{L}\p{N}]+(?:[.\-_][\p{L}\p{N}]+)*/gu;
 

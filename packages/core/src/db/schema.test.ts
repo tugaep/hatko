@@ -134,7 +134,7 @@ test('keyword arm matches the real corpus wording for sample question 3', () => 
   // Sample question 3 asks "Why are sound assets built in a separate pass?" — note
   // "separate" against the document's "separately". Porter bridges that pair, which
   // is what lets the keyword arm surface this document. It matters because the
-  // corpus contains 78 near-identical delivery reports that crowd out the correct
+  // corpus contains many near-identical documents that crowd out the correct
   // answer on vector similarity alone; the lexical arm is what rescues this query.
   const hits = ctx.db
     .prepare("SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH 'sound AND separate AND pass'")

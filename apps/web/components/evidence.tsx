@@ -361,7 +361,7 @@ function ScoreLegend() {
           <dt className="font-medium text-text">bm25</dt>
           <dd>
             Keyword match strength, normalised 0 to 1. Finds exact terms a paraphrase would miss,
-            which is what cuts through 78 near-identical delivery reports.
+            which is what separates one document from its near-identical neighbours.
           </dd>
         </div>
         <div>

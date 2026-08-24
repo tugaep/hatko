@@ -13,8 +13,11 @@ deliberately basic: **one** validated configuration, listed below.
 
 ## 1. What was measured
 
-Both rows are `npm run eval -- --rerank --answers` against the 142-document sample
-corpus, on the same machine, on 18 Aug 2026. Nothing here is estimated.
+Both rows are `npm run eval -- --rerank --answers` on the same machine, on 18 Aug 2026,
+against the 142-document sample corpus this project used at the time. Nothing here is
+estimated — and nothing here has been re-measured against the current corpus, which is
+1083 documents and 7539 chunks. Treat the comparison between configurations as sound and
+the absolute figures as belonging to a corpus that is no longer the default.
 
 | Configuration                                   | recall@1 | recall@3 |   MRR | Answer checks | Latency |
 | ----------------------------------------------- | -------: | -------: | ----: | ------------: | ------: |

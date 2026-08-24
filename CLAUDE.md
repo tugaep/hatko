@@ -112,10 +112,11 @@ genuinely better is encouraged; tell us what you added and why."
   the OpenAI path stays the default.
 - **3D embedding view** (step 12). A dashboard tab projecting the stored vectors to three
   dimensions. Not decoration: the argument this whole retriever rests on is that 78
-  near-identical delivery reports collapse into one indistinguishable cluster, and this
-  is that claim made visible instead of asserted. PCA over the 142×142 Gram matrix by
-  power iteration, and a canvas projection with drag-to-rotate — both stdlib, because
-  t-SNE and three.js are each a dependency for what fifty lines of arithmetic covers.
+  near-identical documents collapse into one indistinguishable cluster, and this
+  is that claim made visible instead of asserted. PCA by power iteration over whichever
+  of the Gram or covariance matrix is smaller, and a canvas projection with
+  drag-to-rotate — both stdlib, because t-SNE and three.js are each a dependency for
+  what fifty lines of arithmetic covers.
 - **Run the deploy** (step 13). Step 8b wrote the guide and its own verification
   checklist but nobody has run it on a server, which `AI_USAGE.md` says plainly. The
   bonus asks for a shareable link, so the guide has to become a deployment. Last before
@@ -171,9 +172,12 @@ schemas in `packages/shared`, so the database and the API share one definition.
 `erasableSyntaxOnly` is on, so no `enum`, no `namespace`, no parameter
 properties. Use `import type` for type-only imports.
 
-**No ANN index.** 142 chunks scan exhaustively in about 1 ms. An approximate
-index would trade recall away for latency we do not need. Revisit two orders of
-magnitude larger.
+**No ANN index.** A full hybrid query over 7539 chunks measures about 13 ms,
+scanned exhaustively. An approximate index would trade recall away for latency
+nobody is waiting on. The one place this stopped scaling is the category filter,
+which asked for a candidate pool the size of the collection and hit sqlite-vec's
+4096 cap; it is capped there now and `search.ts` records which guarantee that
+weakened.
 
 **npm workspaces, not pnpm.** Corepack is gone in Node 26; npm ships with Node.
 
@@ -190,42 +194,47 @@ textbook k=60.** With k=60 and a 30-candidate pool, hybrid scored _worse_ than
 keyword alone (recall@1 78% vs 89%): summing 1/(k+rank) rewards ranking mediocrely
 in both arms over ranking first in one, which dropped `localization-guide.md` from
 keyword rank 1 to outside the hybrid top 30. k=60 assumes ~1000 candidates; 30 of
-142 chunks is a fifth of the corpus. Candidate depth should scale with the corpus,
-as a fraction rather than a constant. Pinned by a test in
-`packages/core/src/retrieval/search.test.ts`.
+142 chunks is a fifth of that corpus. Candidate depth should scale with the corpus
+as a fraction rather than a constant; it survives at 7539 chunks because the
+sweep's failure mode is a pool that is too _large_, and growth moves away from it.
+Pinned by a test in `packages/core/src/retrieval/search.test.ts`.
 
 **The reranker grades absolute relevance 0–3, not a ranking**, because abstention
 depends on it. Fused scores cannot support a threshold: RRF is rank-derived, so
 the top result scores the same constant whether it answers the question or is the
-least bad of 142. Measured, answerable questions score 1.00 and unanswerable ones
-at most 0.33, with the threshold at 0.67 between them.
+least bad of several thousand. Measured on the current corpus: fused scores overlap
+between answerable and unanswerable questions (0.0833–0.1818 against 0.0833–0.1333),
+while graded relevance separates cleanly — 1.00 against at most 0.33, threshold 0.67.
 
 ---
 
 ## 6. Corpus facts that shape retrieval
 
-The sample corpus is 142 files, ~17.7k words, ~24k tokens. The difficulty is
-planted, not incidental:
+The corpus is not in the repository — `npm run corpus:fetch` builds it, because it
+is Wikipedia text under a share-alike licence. What it produces: 1083 documents,
+7539 chunks, 68 categories, ~1.28M words. The difficulty is real rather than
+planted, which is the point of choosing one dense subject:
 
-- **78 near-identical delivery reports.** Measured: for "is hard-coding UI copy a
-  QA blocker" the vector arm returns four delivery reports in its top five and
-  misses the answer entirely, while the keyword arm puts it at rank 1. The lexical
-  arm is what cuts through the crowding.
-- **`sdk-notes-v2.md` is deprecated and semantically near-identical to `v3`.**
-  Measured: BM25 ranks v2 _above_ v3 for sample question 2, because v2 mentions
-  `lumen.track` more prominently than the document that replaced it. The rerank
-  pass is what corrects it — no lexical or vector tuning can. Deprecation is detected at ingest, stored on
-  the document, passed to the answer prompt, and surfaced in the UI. A correct
-  answer to sample question 2 says v2 is deprecated.
-- **Answers span documents.** `build-pipeline.md`, `incident-postmortem-2026-03.md`
-  and `lumen-build-4.2.md` are three views of one incident.
-- **Docs are tiny** — max 1030 bytes, mean 800. Measured: the chunker produces
-  exactly one chunk per document, 142 for 142. That is deliberate, not a bug.
-  `sample_questions.md` names expected answers as whole documents, so a
-  document-sized passage is exactly the unit being evaluated, and splitting the 78
-  delivery reports into interchangeable "## Sign-off" fragments would make the
-  mush problem worse. The heading-split and merge logic is what keeps the same
-  code correct on a corpus with longer files.
+- **Hundreds of near-identical biographies.** 117 in one category alone, and
+  several hundred across the corpus, each mentioning Circassia, war, Russia,
+  exile and the Ottoman Empire in almost the same words. Measured: asked who led
+  the Circassian Confederation, the vector arm alone reaches 67% recall@3 and
+  fusion with the lexical arm reaches 100%. The crowding is what the second arm
+  exists for.
+- **Questions phrased in words the corpus does not use.** "A language with an
+  unusually large number of speech sounds" against documents that say
+  "consonants". The lexical arm cannot bridge that at all; the vector arm can.
+  Each arm misses a _different_ set of questions, which is why fusing them beats
+  either — 67% each, 100% together.
+- **No document declares itself obsolete.** Encyclopaedia articles do not, so the
+  deprecation trap that justifies the rerank pass is carried by the fixture corpus
+  in `packages/core/src/testing/` instead. Detection, the answer prompt and the UI
+  notice are unchanged; only the evidence for them moved.
+- **Documents are long and split properly.** Mean 7675 bytes, longest 215 KB.
+  Measured: 7539 chunks from 1083 documents, mean 1082 characters, 277 documents
+  small enough to stay whole and one splitting into 150. The earlier corpus of 142
+  short files produced exactly one chunk each, and the same code was correct then —
+  which is the argument for having both the split and the merge.
 - **The porter stemmer does not conflate irregular verbs** — `built` and
   `building` never meet. Asserted in `packages/core/src/db/schema.test.ts` so it
   stays visible. The vector arm covers this class of gap.
@@ -307,7 +316,7 @@ Each step ends somewhere demonstrable.
 | 10  | Streaming answers — completes a bonus                  | **done** — SSE, verified live end to end             |
 | 11  | Self-hosted models, OpenAI path stays default          | **done** — qwen2.5:7b 12/12, admin-selectable        |     |
 | 12  | 3D embedding view on the dashboard                     | **done** — PCA, canvas, verified against the corpus  |
-| 13  | Run the deploy against hatko.tugrap.dev                | **done** — live, TLS, verified end to end            |
+| 13  | Run the deploy against hatko.tugrap.dev                | **done** — verified end to end; instance now offline |
 | 14  | README, AI usage log, history cleanup                  | **done** — README written, log kept per step         |
 | 15  | First-run onboarding + model selection                 | **done** — checklist, dropdowns, verified in browser |
 | 16  | Admin area split into sections, one page per subject   | **done** — routes, not tab state                     |

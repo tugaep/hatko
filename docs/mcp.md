@@ -36,7 +36,7 @@ npm run start:mcp
 
 ```
 Hatko MCP on http://localhost:4100/mcp
-  corpus     142 passages indexed
+  corpus     7539 passages indexed
   auth       OAuth 2.1 / OIDC, or Authorization: Bearer <session token>
   clients    point them at this URL; see docs/mcp.md
 ```
@@ -265,9 +265,11 @@ is a storage swap rather than a redesign because retrieval is confined to
 **Latency is two model round trips, not our code.** A call spends roughly 200 ms
 embedding the query and 1–2 s in the rerank pass. The per-request `McpServer` and
 transport allocation is noise against that — and it is not optional anyway: the SDK
-throws `Stateless transport cannot be reused across requests`. Retrieval itself scans
-all 142 chunks exhaustively in about 1 ms, which beats an approximate index at this
-size; revisit around two orders of magnitude more.
+throws `Stateless transport cannot be reused across requests`. Retrieval itself is about
+13 ms for a full hybrid query over 7539 chunks, scanned exhaustively, which still beats
+an approximate index at this size. The one place exhaustive scanning stopped scaling was
+the category filter, which asked for a pool the size of the collection and hit
+sqlite-vec's 4096 cap; `search.ts` documents the cap and the guarantee it weakened.
 
 **Rate limiting is per account, in memory, per process.** A token no longer drives
 unbounded rerank calls: `search_corpus` draws from the same allowance as the HTTP API's

@@ -6,25 +6,21 @@
  * ceiling on its own.
  *
  * Why heading-aware rather than a fixed-width sliding window: the documents are
- * already structured, with ~294 level-2 headings across 142 files. A fixed window
- * would slice through the middle of "QA findings and fixes" and hand the answer
- * model half a list. Cutting where the author already cut never splits an idea.
+ * already structured. A fixed window slices through the middle of a section and
+ * hands the answer model half a list. Cutting where the author already cut never
+ * splits an idea.
  *
- * Why merge upward afterwards: in this corpus the sections are *small*. The
- * largest document is 1030 bytes and the mean is 800, so a heading-only split
- * would produce many ~250-byte fragments. Fragments retrieve badly — there is not
- * enough text for a meaningful embedding — and they retrieve especially badly
- * here, because the 78 near-identical delivery reports would shatter into
- * hundreds of interchangeable "## Sign-off" pieces that no ranking could tell
- * apart. Merging up to a target keeps a whole small document as one coherent
- * passage while still splitting a genuinely long one on its own headings.
+ * Why merge upward afterwards: a heading-only split produces fragments wherever an
+ * author wrote a two-line section, and fragments retrieve badly — there is not
+ * enough text for a meaningful embedding. Merging up to a target keeps a short
+ * document whole while still splitting a long one on its own headings.
  *
- * Measured on the sample corpus, this produces exactly one chunk per document:
- * 142 documents, 142 chunks, mean 799 characters. Every file is below the target,
- * so nothing splits. That is the correct outcome rather than a degenerate one —
- * sample_questions.md names expected answers as whole documents, so document-sized
- * passages are precisely the retrieval unit being evaluated. The splitting path is
- * what keeps this same code correct against a corpus with longer files.
+ * Both halves matter, because a corpus exercises whichever one it needs. Measured
+ * on the corpus `npm run corpus:fetch` produces: 1083 documents, 7539 chunks, mean
+ * 1082 characters. 277 documents are small enough to stay whole, and the longest
+ * splits into 150. An earlier corpus of 142 short files produced exactly one chunk
+ * each, and the same code was correct then too — which is the argument for the
+ * merge step rather than a fact about either corpus.
  */
 
 export interface RawChunk {
@@ -101,7 +97,7 @@ function splitIntoSections(body: string): Section[] {
       flush();
       // The level-1 heading is normally the document title. It is kept in the
       // content anyway: it carries the distinguishing words — client, game, date —
-      // that separate one delivery report from the other 77 in keyword search.
+      // that separate one near-identical document from its neighbours in keyword search.
       heading = match[2]?.trim() || null;
       level = match[1]?.length ?? 0;
     }

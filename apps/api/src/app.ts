@@ -56,7 +56,7 @@ export function createApp() {
    *
    * The corpus is internal. A login anyone may create an account for is not access
    * control, it is a doorbell — and the audit confirmed the consequence: a stranger
-   * could register and read all 142 documents. Accounts are created deliberately,
+   * could register and read the entire corpus. Accounts are created deliberately,
    * server-side, by `npm run seed`, for the same reason roles are.
    *
    * Blocked at the route rather than with Better Auth's `disableSignUp`, because

@@ -193,7 +193,7 @@ function RunRow({ run }: { run: IngestionRun }) {
           <div key={label} className="flex items-baseline gap-1.5">
             <dt className="text-caption text-text-muted">{label}</dt>
             {/*
-             * A zero is not news. Printing all five counts at full ink meant `skipped 142`
+             * A zero is not news. Printing all five counts at full ink meant `skipped 1083`
              * and four zeros shouted equally, six rows deep — so the one number that says
              * what the run did was the hardest to find.
              */}

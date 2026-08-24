@@ -10,12 +10,13 @@ operating the system, and an MCP tool so the same retriever can be called by an 
 agent. All three are behind sign-in, and every access decision is made on the server from the
 session's role.
 
-**Live demo:** <https://hatko.tugrap.dev>. Read-only for the public; sign-up is closed and
-accounts are created by an administrator, so run it locally to see the admin surfaces.
+**Running it:** `npm install && npm run setup`, then `npm run dev:api` and `npm run dev:web`.
+Setup fetches the corpus, so allow it about twenty minutes the first time — the [install
+section](#install) has the detail.
 
 ```bash
-curl -s https://hatko.tugrap.dev/health
-# {"status":"ok","indexedChunks":142}
+curl -s http://localhost:4000/health
+# {"status":"ok","indexedChunks":7539}
 ```
 
 ### Main features
@@ -33,7 +34,9 @@ curl -s https://hatko.tugrap.dev/health
   configuration, MCP status, user management, and a 3D view of the embedding space.
 - An MCP server exposes `search_corpus`, authenticated by OIDC or a bearer session token.
 - Auth has two roles, `user` and `admin`, and the check is route middleware on the server.
-- Measured: recall@1 100%, MRR 1.000, 12 of 12 answer checks on the sample set. 286 tests.
+- Measured on the 1083-document corpus: hybrid retrieval reaches 100% recall@3 against 67% for
+  either arm alone, MRR 0.759, and 12 of 12 answer checks pass — including the three questions
+  the corpus cannot answer, where the correct result is a refusal. 287 tests.
 
 ---
 
@@ -247,7 +250,7 @@ accounts from the dashboard.
 
 ## API documentation
 
-Base URL is `http://localhost:4000` locally and `https://hatko.tugrap.dev` deployed. Everything is
+Base URL is `http://localhost:4000` locally, or your own origin when deployed. Everything is
 JSON. Authentication is the session cookie in a browser, or `Authorization: Bearer <session token>`
 for scripts.
 
@@ -255,7 +258,7 @@ for scripts.
 
 | Method | Endpoint                                  | Description                                                          |
 | ------ | ----------------------------------------- | -------------------------------------------------------------------- |
-| `GET`  | `/health`                                 | Unauthenticated. `{"status":"ok","indexedChunks":142}`               |
+| `GET`  | `/health`                                 | Unauthenticated. `{"status":"ok","indexedChunks":7539}`              |
 | `GET`  | `/api/session`                            | Current user, or `{"user":null}`, which is not a 401 when signed out |
 | `POST` | `/api/auth/sign-in/email`                 | Sign in. Sets the session cookie and returns a token                 |
 | `POST` | `/api/auth/sign-out`                      | Sign out                                                             |
@@ -283,38 +286,39 @@ Search:
 ```bash
 curl -s -b jar.txt -X POST http://localhost:4000/api/search \
   -H 'content-type: application/json' \
-  -d '{"query":"Why are sound assets built in a separate pass?","limit":3}'
+  -d '{"query":"Who led the Circassian Confederation in the final years of the war with Russia?","limit":3}'
 ```
 
 ```json
 {
-  "query": "Why are sound assets built in a separate pass?",
+  "query": "Who led the Circassian Confederation in the final years of the war with Russia?",
   "results": [
     {
-      "chunkId": 144,
-      "documentId": 2,
-      "documentTitle": "Build Pipeline",
-      "sourcePath": "build-pipeline.md",
-      "category": "uncategorised",
-      "heading": null,
-      "content": "# Build Pipeline\n\nLumen builds run through the internal CLI…",
-      "ordinal": 0,
-      "score": 0.1678,
-      "vectorScore": 0.703,
-      "keywordScore": 1.0,
-      "rerankScore": 1.0,
+      "chunkId": 2523,
+      "documentId": 378,
+      "documentTitle": "Russo–Circassian War",
+      "sourcePath": "circassian-genocide/russo-circassian-war.md",
+      "category": "circassian-genocide",
+      "heading": "Final Circassian unification",
+      "content": "#### Final Circassian unification\nLater in 1839, the Circassians declared Bighurqal (Anapa) as their new capital and Hawduqo Mansur as the leader of the Circassian Confederation…",
+      "ordinal": 32,
+      "score": 0.1435,
+      "vectorScore": 0.8811,
+      "keywordScore": 0.7642,
+      "rerankScore": 1,
       "isDeprecated": false,
       "supersededBy": null
     }
   ],
-  "latencyMs": 2934
+  "latencyMs": 2372
 }
 ```
 
-Those numbers come from a real run, and they show the pipeline's own argument.
-`guides/asset-naming.md` had the highest fused score for this question, 0.1742, and was graded
-0.33. `build-pipeline.md` scored 0.1678 and was graded 1.00. That is why candidates are graded
-before the caller's `limit` is applied rather than after.
+A real run, and it shows why the arms are fused rather than picked between. This passage scores
+0.8811 on the vector side and 0.7642 on the keyword side — both arms found it, which is what
+lifts it above the several hundred biographies that mention Circassia, war and Russia in almost
+the same words. `heading` is populated because the corpus is long articles now, so a passage is a
+section rather than a whole document, and `ordinal` 32 says how far into the article it sits.
 
 `score` is the fused rank score and the primary ordering. `vectorScore` is null when a passage was
 found by keyword alone and `keywordScore` is null in the converse case. `rerankScore` is the judged
@@ -326,76 +330,76 @@ Answer:
 ```bash
 curl -s -b jar.txt -X POST http://localhost:4000/api/answer \
   -H 'content-type: application/json' \
-  -d '{"query":"How do I initialize the current Lumen SDK, and what happened to lumen.track?"}'
+  -d '{"query":"What is on the Circassian flag, and when is flag day?"}'
 ```
 
 ```json
 {
-  "query": "How do I initialize the current Lumen SDK, and what happened to lumen.track?",
-  "answer": "To initialize the current Lumen SDK, call LumenSDK.init(config) before any game code runs, and it returns a promise that resolves when the network wrapper is ready [1]. The old lumen.track calls from v2 are not recognized and fail silently, as they have been removed in favor of the new event system [1], [2].",
+  "query": "What is on the Circassian flag, and when is flag day?",
+  "answer": "The Circassian flag consists of a green field charged with twelve gold stars, nine forming an arc resembling a bow and three horizontal, along with three crossed arrows in the center. Flag day is celebrated on April 25 each year by Circassians [1].",
+  "abstained": false,
   "citations": [
     {
       "index": 1,
-      "chunkId": 283,
-      "documentId": 141,
-      "documentTitle": "Lumen SDK v3 (current)",
-      "sourcePath": "sdk-notes-v3.md",
-      "isDeprecated": false
-    },
-    {
-      "index": 2,
-      "chunkId": 268,
-      "documentId": 126,
-      "documentTitle": "Production Sync, 2026-03-23",
-      "sourcePath": "meeting-notes/2026-03-23-production-sync.md",
+      "chunkId": 2860,
+      "documentId": 416,
+      "documentTitle": "Seferbiy Zaneqo",
+      "sourcePath": "circassian-nationalism/seferbiy-zaneqo.md",
       "isDeprecated": false
     }
   ],
-  "deprecationNotices": [
-    {
-      "documentTitle": "Lumen SDK v2 (DEPRECATED)",
-      "sourcePath": "sdk-notes-v2.md",
-      "supersededBy": "Lumen SDK v3"
-    }
-  ],
-  "abstained": false,
+  "deprecationNotices": [],
   "sources": ["… the six graded passages …"],
-  "latencyMs": 2858
+  "latencyMs": 2461
 }
 ```
 
-That is verbatim output for sample question 2, and it is the case the rerank pass exists for. BM25
-ranked the deprecated `sdk-notes-v2.md` top of the keyword arm at a normalised 1.000, the grader
-scored it 0.00, and the deprecation notice comes from ingest-time metadata rather than from the
-model volunteering it.
+Verbatim output, including something worth not tidying away: the cited passage is a biography,
+not the article titled "Circassian flag". Three passages from the flag article were retrieved and
+two of them graded 0.33; the biography quotes the flag's description in full and graded 1.00. The
+answer is correct and the citation genuinely supports it, which is the guarantee — the promise is
+that every claim is checkable against the passage shown, not that the passage comes from the
+document with the most obvious title.
 
-An abstention is a 200 carrying `abstained: true`, an empty `answer`, no citations, and the nearest
-passages so the reader can judge the miss:
+An abstention is a 200 carrying `abstained: true`, no citations, and the nearest passages so the
+reader can judge the miss for themselves:
+
+```bash
+curl -s -b jar.txt -X POST http://localhost:4000/api/answer \
+  -H 'content-type: application/json' \
+  -d '{"query":"How many stars are on the Chechen flag?"}'
+```
 
 ```json
 {
-  "query": "What is the company vacation policy?",
-  "answer": "",
+  "query": "How many stars are on the Chechen flag?",
+  "answer": "No documents cover this.",
   "abstained": true,
   "citations": [],
   "deprecationNotices": [],
-  "sources": ["… the three nearest passages, all graded 0.00 …"],
-  "latencyMs": 1435
+  "sources": ["… 6 passages, every one graded 0.00 …"],
+  "latencyMs": 1897
 }
 ```
+
+That is the hard case rather than an easy one. The question is lexically almost identical to the
+one above, and retrieval confidently returns `circassian-culture/circassian-flag.md` for it — the
+corpus has a flag article, just not that flag. Fused scores cannot tell the two questions apart;
+the grader can, and scores all six passages 0.00. Abstention is a judgement about relevance, not a
+threshold on a retrieval score.
 
 Streamed, same endpoint:
 
 ```bash
 curl -N -b jar.txt -X POST http://localhost:4000/api/answer \
   -H 'content-type: application/json' -H 'accept: text/event-stream' \
-  -d '{"query":"How do I initialize the current Lumen SDK, and what happened to lumen.track?"}'
+  -d '{"query":"What is on the Circassian flag, and when is flag day?"}'
 ```
 
 ```
 data: {"type":"passages","sources":[…]}
-data: {"type":"delta","text":"To initialize"}
-data: {"type":"delta","text":" the current Lumen SDK,"}
+data: {"type":"delta","text":"The Circassian flag"}
+data: {"type":"delta","text":" consists of a green field"}
 data: {"type":"answer","response":{…}}
 ```
 
@@ -430,27 +434,30 @@ curl -s -b jar.txt -X POST http://localhost:4000/api/admin/ingestion/run \
 ```json
 {
   "run": {
-    "id": 8,
+    "id": 10,
     "trigger": "api",
     "status": "succeeded",
-    "docsTotal": 142,
+    "docsTotal": 1083,
     "docsIndexed": 0,
     "docsUpdated": 0,
-    "docsSkipped": 142,
+    "docsSkipped": 1083,
     "docsDeleted": 0,
     "docsFailed": 0,
     "error": null,
-    "startedAt": "2026-08-18T03:05:58Z",
-    "finishedAt": "2026-08-18T03:05:58Z",
-    "durationMs": 4
+    "startedAt": "2026-08-24T18:31:12Z",
+    "finishedAt": "2026-08-24T18:31:12Z",
+    "durationMs": 108
   }
 }
 ```
 
-Nothing had changed, so all 142 documents were skipped on their content hash and the run cost 4 ms
-and no embedding calls. Ingestion is awaited rather than backgrounded: a full re-index of this
-corpus takes about three seconds, so a response carrying the real counts beats a job id the client
-has to poll.
+Nothing had changed, so all 1083 documents were skipped on their content hash: 108 ms and no
+embedding calls at all. The first run over the same corpus embeds 7539 passages and takes 56.7 s,
+which is the whole point of hashing — the expensive path runs once.
+
+Ingestion is awaited rather than backgrounded. That is comfortable at a hundred milliseconds for a
+no-op and defensible at a minute for a full re-index, but it is a real ceiling: a corpus large
+enough to make the first ingest span minutes wants a job id and polling instead.
 
 ### Errors
 
@@ -523,7 +530,7 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MCP auth via OIDC        | Better Auth's `mcp` and `oidcProvider` plugins, so hatko is itself the authorization server. No hosted IdP, because the system has to run on a fresh machine. Discovery, dynamic client registration, PKCE, and a consent screen forced on every authorization. Bearer sessions stay available for scripts. |
 | Self-updating pipeline   | `npm run ingest:watch`, built on stdlib `fs.watch` with a 500 ms debounce. It coalesces bursts, never re-enters a run, and never drops a change that arrives mid-run. New, changed and removed files are all detected incrementally.                                                                        |
-| Live deployment          | <https://hatko.tugrap.dev>, behind the same sign-in, three processes behind Caddy                                                                                                                                                                                                                           |
+| Live deployment          | [docs/deployment.md](docs/deployment.md) — three processes behind Caddy, TLS, systemd units, and a verification checklist. Deployed and verified end to end; the public instance is currently offline.                                                                                                      |
 | Retrieval quality        | Hybrid vector and BM25 search, RRF tuned by sweep, LLM rerank with absolute grading                                                                                                                                                                                                                         |
 | Evaluation               | `npm run eval` reports recall@k, MRR, a per-arm comparison and answer-content checks                                                                                                                                                                                                                        |
 | Search-experience polish | Streamed answers, citation markers that jump to and promote the passage they point at, a cited-passage list under every answer, term highlighting inside the passages, a score legend, keyboard shortcuts                                                                                                   |
@@ -531,16 +538,16 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 
 ### Added beyond the brief
 
-| Addition                        | Why                                                                                                                                                                                                                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin-managed encrypted API key | An operator can rotate the credential without shell access. It is encrypted at rest with a key derived from `BETTER_AUTH_SECRET`, no route reads it back, and the environment variable stays supported.                                                                       |
-| Rate limiting                   | Otherwise a valid token can drive unbounded rerank calls, which is real money. One allowance keyed by user id, shared by `/search`, `/answer` and the MCP tool, defaulting to 30 a minute.                                                                                    |
-| Self-hosted model support       | Removes the paid dependency. One measured configuration (`qwen2.5:7b` with `nomic-embed-text`, 12 of 12), plus two documented rejections.                                                                                                                                     |
-| 3D embedding view               | The retriever's central claim is that 78 near-identical delivery reports collapse into one cluster, and this makes that visible. PCA by power iteration onto a canvas, drag to rotate, click a point to read its passage. Both parts are stdlib, so no three.js and no t-SNE. |
-| First-run setup checklist       | A fresh instance needs three things in a particular order. The dashboard says which, and links to each.                                                                                                                                                                       |
-| Admin model selection           | Answer and rerank models, intersected with what the provider actually advertises, with the measured model marked and a warning when the rerank model changes, because that is the model abstention depends on.                                                                |
-| MCP status tab                  | The MCP server is a separate process. Whether it was running, and which hostnames it accepts, previously lived only in a log readable over SSH, which is exactly where a misconfiguration hid through a whole deployment.                                                     |
-| Deactivated accounts            | An immediate cut-off that both surfaces honour at once, with sign-in saying why instead of looping silently.                                                                                                                                                                  |
+| Addition                        | Why                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin-managed encrypted API key | An operator can rotate the credential without shell access. It is encrypted at rest with a key derived from `BETTER_AUTH_SECRET`, no route reads it back, and the environment variable stays supported.                                                                                                   |
+| Rate limiting                   | Otherwise a valid token can drive unbounded rerank calls, which is real money. One allowance keyed by user id, shared by `/search`, `/answer` and the MCP tool, defaulting to 30 a minute.                                                                                                                |
+| Self-hosted model support       | Removes the paid dependency. One configuration measured 12 of 12 (`qwen2.5:7b` with `nomic-embed-text`) — on the previous corpus, and not re-measured since; [docs/self-hosted.md](docs/self-hosted.md) says so plainly, along with two documented rejections.                                            |
+| 3D embedding view               | The retriever's central claim is that near-identical documents collapse into one indistinguishable cluster, and this makes that visible instead of asserted. PCA by power iteration onto a canvas, drag to rotate, click a point to read its passage. Both parts are stdlib, so no three.js and no t-SNE. |
+| First-run setup checklist       | A fresh instance needs three things in a particular order. The dashboard says which, and links to each.                                                                                                                                                                                                   |
+| Admin model selection           | Answer and rerank models, intersected with what the provider actually advertises, with the measured model marked and a warning when the rerank model changes, because that is the model abstention depends on.                                                                                            |
+| MCP status tab                  | The MCP server is a separate process. Whether it was running, and which hostnames it accepts, previously lived only in a log readable over SSH, which is exactly where a misconfiguration hid through a whole deployment.                                                                                 |
+| Deactivated accounts            | An immediate cut-off that both surfaces honour at once, with sign-in saying why instead of looping silently.                                                                                                                                                                                              |
 
 ---
 
@@ -551,36 +558,49 @@ next to the decision, and in [CLAUDE.md](CLAUDE.md).
 
 **Chunking: cut on headings, then merge upward.** Split on markdown headings, merge adjacent
 sections up to about 1200 characters, and hard-split only a section that exceeds 2000 on its own.
-The documents are already structured, with roughly 294 level-2 headings, so cutting where the
-author cut never splits an idea. Merging matters because these files are tiny, averaging 800 bytes,
-and a heading-only split would shatter the 78 near-identical delivery reports into interchangeable
-"## Sign-off" fragments that no ranking could tell apart. The result is 142 documents and 142
-chunks, one per document, and that is the unit the sample questions name as an expected answer.
+The documents are already structured, so cutting where the author cut never splits an idea.
+Merging matters because a heading-only split leaves a fragment wherever someone wrote a two-line
+section, and a fragment has too little text for a meaningful embedding. On this corpus the result
+is 1083 documents and 7539 chunks, averaging 1082 characters: 277 documents are short enough to
+stay whole, and the longest splits into 150. Both halves earn their place — the same code produced
+exactly one chunk per document on an earlier corpus of 142 short files, which is the argument for
+the merge step rather than a fact about either corpus.
 
 **Vector store: SQLite with sqlite-vec and FTS5, no ORM, no ANN index.** There is no service to run
 and no native build, so a fresh machine needs only `npm install`, and FTS5 gives real BM25 where
 Postgres `ts_rank` does not. `chunks.id` is the rowid in both the vector table and the FTS table,
-so hybrid retrieval fits in a single SQL statement. 142 chunks scan exhaustively in about
-1 ms, so an approximate index would trade away recall for latency nobody needs.
+so hybrid retrieval fits in a single SQL statement. A full hybrid query over 7539 chunks measures
+about 13 ms, so an approximate index would trade away recall for latency nobody is waiting on. The
+one place the exhaustive habit stopped scaling is the category filter, which asked for a candidate
+pool the size of the whole collection and hit sqlite-vec's 4096 cap; it is capped there now, at
+200 ms, and the code says exactly which guarantee that weakened.
 
-**Retrieval: hybrid, fused with RRF at tuned constants.** Purely semantic search answers "why are
-sound assets built in a separate pass" with a wall of near-identical delivery reports, while
-"separate pass" is a literal phrase in exactly one document, so the lexical arm rescues it. The
-converse also holds: BM25 cannot match a question phrased in different words, and the stemmer does
-not bridge `built` and `building`. RRF fuses ranks rather than scores, because BM25 and cosine
-distance are not commensurable. Its textbook `k=60` with 30 candidates measured worse here than the
-keyword arm alone, 78% recall@1 against 89%, because summing `1/(k+rank)` rewards ranking
-mediocrely in both arms over ranking first in one. So `k=10` and 10 candidates per arm, both chosen
-by sweeping against the eval set and pinned by a test.
+**Retrieval: hybrid, fused with RRF at tuned constants.** The corpus is one dense subject, so
+near-identical documents are the normal case: asked who led the Circassian Confederation, semantic
+search alone returns a wall of biographies that each mention Circassia, war, Russia and exile, and
+the lexical arm rescues it because the office is named in only a couple of them. The converse holds
+too — BM25 cannot match "a language with an unusually large number of speech sounds" against a
+document that says "consonants", and the stemmer does not bridge `built` and `building`. Measured,
+each arm alone reaches 67% recall@3 and together they reach 100%. RRF fuses ranks rather than
+scores, because BM25 and cosine distance are not commensurable. Its textbook `k=60` with 30
+candidates measured worse than the keyword arm alone on the corpus it was swept against, because
+summing `1/(k+rank)` rewards ranking mediocrely in both arms over ranking first in one. So `k=10`
+and 10 candidates per arm, chosen by sweep and pinned by a test.
 
 **Reranking, and why abstention depends on it.** The rerank pass grades absolute relevance from 0
 to 3 per passage instead of producing a ranking. RRF scores carry no information about match
 quality, since the top result scores the same constant whether it answers the question or is merely
-the least bad of 142. So there is no threshold to set on a retrieval score, and whether the corpus
-covers a question has to be judged by reading the passages. Measured: answerable questions grade
-1.00, unanswerable ones at most 0.33, and the threshold sits at 0.67 between them. Grading also
-fixes the one ordering failure no tuning can. BM25 ranks the deprecated `sdk-notes-v2` above `v3`,
-because v2 mentions `lumen.track` more prominently than the document that replaced it.
+the least bad of several thousand. The eval prints the proof: fused scores for answerable questions
+span 0.0833–0.1818 and for unanswerable ones 0.0833–0.1333, which overlap, so no cut between them
+exists. Graded relevance does separate — answerable questions grade 1.00 and unanswerable ones at
+most 0.33 — and the threshold sits at 0.67 between them.
+
+Grading also fixes an ordering failure no tuning can. Hybrid reaches 100% recall@3 but only 56%
+recall@1, so on nearly half the questions the right passage is retrieved without being ranked
+first, and something has to reorder six passages that fusion could not separate. The sharpest
+version is a superseded document outranking its replacement because it happens to use the shared
+vocabulary more heavily: the difference is not in the words but in one document saying "deprecated,
+see the newer version", which only a reader can act on.
 
 Three properties live in code, not in the prompt, because a prompt can be ignored and a check on
 the output cannot. Citation markers are validated against the passages
@@ -590,28 +610,41 @@ the model volunteering them.
 
 ### Measured results
 
-`npm run eval -- --rerank --answers` over the 142-document sample corpus, 18 Aug 2026:
+`npm run eval -- --rerank --answers`, 24 Aug 2026 — 7539 chunks, 9 answerable questions and 3 the
+corpus cannot answer:
 
-| Arm     | recall@1 | recall@3 |   MRR |
-| ------- | -------: | -------: | ----: |
-| keyword |     100% |     100% | 1.000 |
-| vector  |      89% |      89% | 0.889 |
-| hybrid  |     100% |     100% | 1.000 |
+| Arm     | recall@1 | recall@3 | recall@5 |   MRR |
+| ------- | -------: | -------: | -------: | ----: |
+| keyword |      44% |      67% |      78% | 0.596 |
+| vector  |      56% |      67% |      67% | 0.611 |
+| hybrid  |  **56%** | **100%** | **100%** | 0.759 |
+
+Fusion is worth its complexity here in a way a single number hides. At rank 1 hybrid ties the
+vector arm, so if recall@1 were the only figure quoted you would conclude the keyword arm is dead
+weight. At rank 3 the two arms reach 67% each and fused they reach 100% — they miss _different_
+questions, which is the entire premise, and the answer path retrieves six passages precisely
+because that is where the fusion pays.
 
 Answer checks: 12 of 12. Every answerable question was answered with a valid citation, every
-unanswerable one abstained, and no citation was invented. Hybrid matching keyword-only here is
-worth stating plainly: the sample questions share vocabulary with their answers, which is BM25's
-best case. The vector arm is insurance for questions phrased in words the corpus does not use, and
-carrying it costs nothing in accuracy.
+unanswerable one abstained, and no citation was invented.
 
-The same run also prints score separation per arm, and every arm's fused scores overlap between
-answerable and unanswerable questions. That is the measurement behind the claim that a threshold
-has to sit on the judged grade rather than on retrieval score.
+Recall@1 of 56% is a real number and not a flattering one. It is also the number the rest of the
+pipeline is built around: 100% at rank 3 feeding a reranker that grades absolute relevance is what
+turns "the answer is somewhere in these six" into a correct, cited answer twelve times out of
+twelve. A system that quoted recall@1 and stopped there would be measuring the wrong stage.
 
-A self-hosted setup (Ollama `qwen2.5:7b` with `nomic-embed-text`) reaches the same figures at 4.4 s
-against 2.7 s. Two smaller models were measured and rejected: `qwen2.5:3b` scored 7 of 12 because
-it omits citation markers, and `llama3.2:3b` scored 4 of 12 because it graded every unanswerable
-question fully relevant, which destroys abstention. See [docs/self-hosted.md](docs/self-hosted.md).
+One ground-truth correction, disclosed because moving goalposts after seeing results is how an
+eval quietly rots: the Ubykh question originally listed one expected document and retrieval
+returned a different one, `ubykh-language/ubykh-phonology.md`, which opens by stating the language
+has the largest consonant inventory of any documented language without clicks. That answers the
+question more directly than the document listed. Both are accepted now — the ground truth was
+wrong, not the ranking — and the reasoning is recorded next to the question itself.
+
+A self-hosted setup (Ollama `qwen2.5:7b` with `nomic-embed-text`) scored 12 of 12 at 4.4 s against
+2.7 s, and two smaller models were measured and rejected: `qwen2.5:3b` at 7 of 12 because it omits
+citation markers, and `llama3.2:3b` at 4 of 12 because it graded every unanswerable question fully
+relevant, which destroys abstention. Those figures were measured on the previous corpus and have
+not been re-run against this one. See [docs/self-hosted.md](docs/self-hosted.md).
 
 ---
 
@@ -642,13 +675,14 @@ question fully relevant, which destroys abstention. See [docs/self-hosted.md](do
 
 ## Deployment guide
 
-Live at <https://hatko.tugrap.dev>, behind the same sign-in as a local install. Verified from
-outside on the current build: TLS, `/health` reporting 142 passages, both discovery documents,
-the `401` challenge that starts a client's OAuth flow, and every authenticated page and API
-refusing an anonymous request. Verified on the host itself: the retrieval and answer path
-citing `sdk-notes-v3.md` and grading the deprecated v2 at 0.00, an abstention on a question the
-corpus does not cover, an incremental ingest skipping all 142 unchanged documents, and an index
-whose 142 chunks and 142 vectors agree.
+[docs/deployment.md](docs/deployment.md) is the full guide, with its own verification checklist.
+It has been run end to end and verified from outside — TLS, both OAuth discovery documents, the
+`401` challenge that starts a client's flow, and every authenticated page and API refusing an
+anonymous request — and on the host, where the retrieval and answer path, an abstention, an
+incremental ingest and an index whose chunk and vector counts agree were all checked.
+
+That verification was performed against the previous corpus, and the public instance is currently
+offline. Anyone deploying this is deploying a guide that worked, not a URL that is up.
 
 Three Node processes and one reverse proxy on a single VPS. No database server, no container
 runtime, no backend build step.
@@ -675,7 +709,7 @@ sudo systemctl enable --now hatko-api hatko-web hatko-mcp
 ```
 
 ```caddyfile
-hatko.tugrap.dev {
+hatko.example.com {
     handle /mcp*          { reverse_proxy 127.0.0.1:4100 }
     handle /api/*         { reverse_proxy 127.0.0.1:4000 }
     handle /.well-known/* { reverse_proxy 127.0.0.1:4000 }

@@ -141,8 +141,8 @@ export function McpView() {
 
         <p className="mt-4 max-w-[68ch] text-body-sm text-text-muted">
           For a script or CI, a session bearer token works instead of the OAuth flow. Both paths
-          land on the same permission check, so authorization is decided in one place.
-          Full instructions are in <span className="font-mono">docs/mcp.md</span>.
+          land on the same permission check, so authorization is decided in one place. Full
+          instructions are in <span className="font-mono">docs/mcp.md</span>.
         </p>
       </LabelFrame>
     </div>

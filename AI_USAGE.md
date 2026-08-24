@@ -3382,3 +3382,62 @@ clone.
 places below the setup section. I corrected the ones in the install path and the corpus
 description; the rest sit inside prose about measured retrieval behaviour, and rewriting
 those honestly means re-running the eval on this corpus rather than editing the numbers.
+
+---
+
+## Step 30 — re-measuring everything the documentation claimed
+
+The README had been quoting a corpus that no longer existed, and the instruction was to
+fix all of it. Most of that was mechanical. Two parts were not.
+
+**The retrieval figures could only be fixed by re-running the eval.** `recall@1 100%, MRR
+1.000` was measured on 142 documents and there was no honest way to edit those numbers —
+so `npm run eval -- --rerank --answers` against the current index, and the table now says
+what it returned:
+
+| Arm     | recall@1 | recall@3 | recall@5 |   MRR |
+| ------- | -------: | -------: | -------: | ----: |
+| keyword |      44% |      67% |      78% | 0.596 |
+| vector  |      56% |      67% |      67% | 0.611 |
+| hybrid  |      56% |     100% |     100% | 0.759 |
+
+Recall@1 fell from 100% to 56%, which is what a corpus eight times larger and far more
+crowded does, and the README says so rather than burying it. The more interesting line is
+that hybrid ties the vector arm at rank 1 and beats both arms by a third at rank 3 — the
+arms miss _different_ questions, which is the entire premise, and quoting recall@1 alone
+would have argued for deleting the keyword arm.
+
+**One correction to the eval, disclosed in the eval itself.** The first run reported a
+miss: the Ubykh question expected `circassian-culture/ubykh-language.md` and retrieval
+returned `ubykh-language/ubykh-phonology.md`. Reading the document settled it — it opens
+by stating the language has the largest consonant inventory of any documented language
+without clicks, which answers the question more directly than the article I had listed.
+The ground truth was wrong, not the ranking. Both are accepted now, and because changing
+`expected` after seeing a result is exactly how an eval gets quietly corrupted, the reason
+is recorded next to the question rather than left in a commit message.
+
+**API examples were regenerated rather than edited.** Every request and response block in
+the README is output from a real run against this index. One of them shows the system
+being imperfect and was kept that way: asked what is on the Circassian flag, the answer is
+correct and cites a biography rather than the article titled "Circassian flag", because
+that passage quotes the flag's description and graded 1.00 while two passages from the
+flag article graded 0.33. The guarantee is that a claim is checkable against the passage
+shown, not that the passage comes from the document with the most obvious title, and
+editing the example would have quietly claimed the stronger thing.
+
+**Old-corpus references ran deeper than the README.** Twenty-odd code comments justified
+design decisions with documents that no longer exist, the chat page offered three example
+questions from the old corpus, the score legend explained BM25 in terms of "78
+near-identical delivery reports", and a setup step read `${documentsTotal || 142}` — a
+hardcoded fallback that showed a confident number precisely when the real one was unknown.
+Test fixtures were realigned to the widget corpus, which broke three assertions that had
+been coupled to fixture _content_ rather than to behaviour; all three were real coupling
+worth removing.
+
+**Measurements that could not be re-run are labelled, not deleted.** The self-hosted
+comparison (`qwen2.5:7b` 12 of 12, two smaller models rejected) was measured on the old
+corpus and needs Ollama to redo. `docs/self-hosted.md` now says the comparison between
+configurations is sound and the absolute figures belong to a corpus that is no longer the
+default. The same applies to the deployment verification, which was performed against the
+previous corpus on an instance that is now offline — the README says a guide that worked,
+not a URL that is up.

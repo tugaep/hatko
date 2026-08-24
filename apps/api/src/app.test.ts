@@ -35,13 +35,13 @@ process.env.DATABASE_PATH = path.join(dir, 'api.db');
 process.env.CORPUS_PATH = path.join(dir, 'corpus');
 fs.mkdirSync(process.env.CORPUS_PATH, { recursive: true });
 fs.writeFileSync(
-  path.join(process.env.CORPUS_PATH, 'build-pipeline.md'),
-  '# Build Pipeline\n\nSound assets are built separately from the main bundle. Audio is encoded ' +
-    'in a dedicated pass and injected at the inline stage.\n',
+  path.join(process.env.CORPUS_PATH, 'payload-limits.md'),
+  '# Payload Limits\n\nA single widget payload may not exceed 256 kilobytes after compression. ' +
+    'Requests over the limit are rejected with a 413 and are not retried.\n',
 );
 fs.writeFileSync(
-  path.join(process.env.CORPUS_PATH, 'sdk-notes-v2.md'),
-  '# Lumen SDK v2 (DEPRECATED)\n\nStatus: deprecated since January 2026. See "Lumen SDK v3" for ' +
+  path.join(process.env.CORPUS_PATH, 'widget-api-v1.md'),
+  '# Widget API v1 (DEPRECATED)\n\nStatus: deprecated since March 2026. See "Widget API v2" for ' +
     'current guidance.\n',
 );
 
@@ -197,13 +197,13 @@ withProvider('a regular user can search and get an answer', async () => {
   const search = await call('/api/search', {
     method: 'POST',
     cookie: userCookie,
-    body: { query: 'sound assets separate pass' },
+    body: { query: 'widget payload size limit' },
   });
 
   assert.equal(search.status, 200);
   const payload = (await search.json()) as { results: Array<{ sourcePath: string }> };
   assert.ok(payload.results.length > 0);
-  assert.equal(payload.results[0]?.sourcePath, 'build-pipeline.md');
+  assert.equal(payload.results[0]?.sourcePath, 'payload-limits.md');
 });
 
 test('an admin reaches every admin route', async () => {
@@ -390,11 +390,11 @@ test('documents can be filtered and paginated', async () => {
   assert.equal(all.total, 2);
 
   const filtered = (await (
-    await call('/api/admin/documents?q=sdk', { cookie: adminCookie })
+    await call('/api/admin/documents?q=widget', { cookie: adminCookie })
   ).json()) as { total: number; items: Array<{ sourcePath: string; isDeprecated: boolean }> };
 
   assert.equal(filtered.total, 1);
-  assert.equal(filtered.items[0]?.sourcePath, 'sdk-notes-v2.md');
+  assert.equal(filtered.items[0]?.sourcePath, 'widget-api-v1.md');
   assert.equal(filtered.items[0]?.isDeprecated, true);
 
   const paged = (await (
@@ -414,7 +414,7 @@ test('documents can be filtered and paginated', async () => {
  * every search below must find nothing.
  */
 test('LIKE wildcards typed into document search are matched literally', async () => {
-  for (const needle of ['%', '_', 'sdk_notes', '%pipeline%', '\\']) {
+  for (const needle of ['%', '_', 'widget_api', '%payload%', '\\']) {
     const response = await call(`/api/admin/documents?q=${encodeURIComponent(needle)}`, {
       cookie: adminCookie,
     });
@@ -430,10 +430,10 @@ test('LIKE wildcards typed into document search are matched literally', async ()
 
   // The escaping must not break ordinary substring search.
   const real = (await (
-    await call('/api/admin/documents?q=pipeline', { cookie: adminCookie })
+    await call('/api/admin/documents?q=payload', { cookie: adminCookie })
   ).json()) as { total: number; items: Array<{ sourcePath: string }> };
   assert.equal(real.total, 1);
-  assert.equal(real.items[0]?.sourcePath, 'build-pipeline.md');
+  assert.equal(real.items[0]?.sourcePath, 'payload-limits.md');
 });
 
 test('ingestion can be triggered by an admin and returns real counts', async () => {

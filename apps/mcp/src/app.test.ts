@@ -37,7 +37,7 @@ process.env.CORPUS_PATH = path.join(dir, 'corpus');
 fs.mkdirSync(process.env.CORPUS_PATH, { recursive: true });
 fs.writeFileSync(
   path.join(process.env.CORPUS_PATH, 'localization-guide.md'),
-  '# Localization Guide\n\nEvery playable ships with a minimum language set: English, Spanish and ' +
+  '# Localization Guide\n\nEvery release ships with a minimum language set: English, Spanish and ' +
     'Japanese. Language is auto-detected from the device locale, with English as the fallback.\n',
 );
 

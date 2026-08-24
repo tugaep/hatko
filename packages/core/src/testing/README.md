@@ -11,4 +11,4 @@ Pointing those at the live corpus made them fail the moment the corpus was
 replaced, for reasons that had nothing to do with the code under test.
 
 Tests that measure retrieval behaviour still run against the real corpus, because
-there the corpus *is* the thing under test.
+there the corpus _is_ the thing under test.

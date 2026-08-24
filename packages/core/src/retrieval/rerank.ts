@@ -7,18 +7,26 @@ import { activeModels } from '../settings.ts';
  * LLM reranking, doing two jobs.
  *
  * **Ordering.** Fusion gets the right document into the top few but not always
- * first. Measured on the eval set, the keyword arm alone reaches 100% recall@3
- * and 89% recall@1, and the single rank-1 miss is sample-2: BM25 puts the
- * deprecated `sdk-notes-v2` above the current `sdk-notes-v3`, because v2 mentions
- * `lumen.track` more prominently than the document that replaced it. No amount of
- * lexical or vector tuning fixes that — it needs a reader that understands one
- * document says "deprecated, see v3".
+ * first. Measured on the eval set: hybrid reaches 100% recall@3 and 56% recall@1,
+ * so on nearly half the questions the answer is retrieved but not ranked first,
+ * and something has to reorder six passages that fusion could not separate.
+ *
+ * The sharpest case for a reader rather than a tuning knob is a document that has
+ * been superseded. BM25 will rank an obsolete document above the one that replaced
+ * it whenever the obsolete one happens to use the shared vocabulary more heavily,
+ * and no lexical or vector weighting distinguishes them — the difference is not in
+ * the words, it is in one document saying "deprecated, see the newer version". The
+ * fixture corpus in `src/testing` carries that pair, since encyclopaedia articles
+ * do not announce their own obsolescence.
  *
  * **Absolute relevance, which is what makes abstention possible.** RRF scores
  * carry no information about match quality: the top result always scores the same
  * constant — 1/(k+1) for whatever k is in force — whether the passage answers the
- * question or is merely the least bad of 142. The eval confirms it: top-1 scores are
- * identical for questions the corpus answers and questions it cannot. So there is no
+ * question or is merely the least bad of several thousand. The eval confirms it, and
+ * prints it as a line: fused scores for answerable questions span 0.0833–0.1818 and
+ * unanswerable ones 0.0833–0.1333, which overlap, so no cut between them exists.
+ * Graded relevance does separate — 1.00 against at most 0.33 — which is where the
+ * 0.67 threshold comes from. So there is no
  * threshold to set on retrieval score, and "does the corpus actually cover this" has to
  * be judged by reading the passages. That judgement is this grade.
  *

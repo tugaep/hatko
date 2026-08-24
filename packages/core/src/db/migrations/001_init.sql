@@ -27,7 +27,7 @@ CREATE TABLE documents (
   byte_size     INTEGER NOT NULL,
   status        TEXT    NOT NULL DEFAULT 'pending'
                         CHECK (status IN ('pending', 'indexed', 'failed')),
-  -- Set when a document declares itself superseded (the sdk-notes-v2 case).
+  -- Set when a document declares itself superseded, e.g. a v1 that names its replacement.
   -- Deprecated documents stay retrievable; the answer prompt and the UI flag them.
   is_deprecated INTEGER NOT NULL DEFAULT 0 CHECK (is_deprecated IN (0, 1)),
   superseded_by TEXT,

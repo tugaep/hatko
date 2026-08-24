@@ -99,7 +99,7 @@ export type IngestionRun = z.infer<typeof ingestionRunSchema>;
  *
  * `sourcePath` is the default because it is a document's stable identity across
  * re-ingests, and sorting by it groups the corpus by directory, which is how someone
- * looking at 142 files expects to find one.
+ * looking at a directory tree expects to find one.
  */
 export const documentSortSchema = z.enum([
   'sourcePath',

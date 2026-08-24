@@ -6,11 +6,12 @@ import type { Db } from './client.ts';
  * The stored vectors, projected to three dimensions so the corpus can be looked at.
  *
  * This exists to make one claim checkable rather than asserted. The whole retrieval
- * design rests on the observation that 78 of the 142 documents are near-identical
- * delivery reports, and that a vector arm alone therefore returns four of them for a
- * question none of them answer. Every statement of that so far has been a sentence in a
- * document. Projected, it is a dense blob with the rest of the corpus scattered around
- * it, and an operator can see for themselves why the keyword arm is not optional.
+ * design rests on the observation that much of the corpus is near-identical — hundreds
+ * of documents sharing almost all of their vocabulary — so a vector arm alone returns a
+ * wall of them for a question none of them answer. Every statement of that so far has
+ * been a sentence in a document. Projected, it is a dense knot with the rest of the
+ * corpus scattered around it, and an operator can see for themselves why the keyword arm
+ * is not optional.
  *
  * PCA rather than t-SNE or UMAP, and hand-written rather than a library. PCA is a
  * rotation: the axes are the directions of greatest variance in the real embedding

@@ -1,12 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  catalogNumber,
-  formatBytes,
-  formatMs,
-  highlightSegments,
-  passageBody,
-} from './format.ts';
+import { catalogNumber, formatBytes, formatMs, highlightSegments, passageBody } from './format.ts';
 
 /**
  * `highlightSegments` is the one piece of logic here that can fail without anyone
@@ -35,7 +29,7 @@ test('regex metacharacters in a query are escaped, not executed', () => {
 });
 
 test('common words are not marked', () => {
-  const marked = highlightSegments(PASSAGE, 'which languages must every playable ship with')
+  const marked = highlightSegments(PASSAGE, 'which languages must a release ship with')
     .filter((segment) => segment.match)
     .map((segment) => segment.text.toLowerCase());
 
@@ -76,13 +70,16 @@ test('catalog numbers are zero-padded to a fixed width', () => {
  */
 
 test('a leading heading that repeats the title is dropped, with its blank line', () => {
-  const passage = '# Build Pipeline\n\nLumen builds run through the internal CLI.';
-  assert.equal(passageBody(passage, 'Build Pipeline'), 'Lumen builds run through the internal CLI.');
+  const passage = '# Build Pipeline\n\nBuilds run through the internal CLI.';
+  assert.equal(passageBody(passage, 'Build Pipeline'), 'Builds run through the internal CLI.');
 });
 
 test('punctuation and case do not stop it matching', () => {
-  const passage = '## Lumen SDK v2 (DEPRECATED)\n\nStatus: deprecated since January.';
-  assert.equal(passageBody(passage, 'Lumen SDK v2 (deprecated)'), 'Status: deprecated since January.');
+  const passage = '## Widget API v1 (DEPRECATED)\n\nStatus: deprecated since March.';
+  assert.equal(
+    passageBody(passage, 'Widget API v1 (deprecated)'),
+    'Status: deprecated since March.',
+  );
 });
 
 test('a heading that carries its own words is left alone', () => {

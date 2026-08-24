@@ -170,9 +170,10 @@ export function titleOf(sourcePath: string, body: string): string {
 /**
  * Detect a document that declares *itself* obsolete.
  *
- * Direction is the whole difficulty here. `sdk-notes-v2.md` opens with
- * "# Lumen SDK v2 (DEPRECATED)" and "Status: deprecated since January 2026",
- * while `sdk-notes-v3.md` — the current document — says "It supersedes v2".
+ * Direction is the whole difficulty here. The obsolete document opens with a title
+ * marked "(DEPRECATED)" and a line reading "Status: deprecated since March 2026",
+ * while the current one — the document that replaced it — says "It supersedes v1".
+ * Both mention the other; only one is making a claim about itself.
  * A regex looking for "supersede" anywhere would flag the current document and
  * invert the exact distinction this is meant to capture, so only the passive
  * direction counts, and only near the top of the file where a status header lives.
@@ -201,7 +202,8 @@ export function detectDeprecation(
   const patterns = [
     /superseded\s+by\s+["“']?([^"”'.\n]+)/i,
     /replaced\s+by\s+["“']?([^"”'.\n]+)/i,
-    // The sdk-notes-v2 phrasing: `See "Lumen SDK v3" for current guidance.`
+    // The `See "Widget API v2" for current guidance.` phrasing, which names the
+    // replacement in quotes rather than after "superseded by".
     /\bsee\s+["“]([^"”]+)["”]/i,
   ];
 

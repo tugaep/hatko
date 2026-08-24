@@ -45,11 +45,17 @@ interface Turn {
   stopped: boolean;
 }
 
-/** Real questions from the sample set, including one the corpus cannot answer. */
+/**
+ * Real questions from the eval set, including one the corpus cannot answer.
+ *
+ * The third is not filler. A reader who has only seen questions that work has no reason
+ * to believe the abstention is real, and it is the behaviour this product is built
+ * around — so one of the three offered questions deliberately fails.
+ */
 const EXAMPLES = [
-  'How do I initialize the current Lumen SDK, and what happened to lumen.track?',
-  'Which languages must every playable ship with, and what is the fallback?',
-  'What is the vacation policy?',
+  'What is on the Circassian flag, and when is flag day?',
+  'Who led the Circassian Confederation in the final years of the war with Russia?',
+  'How many stars are on the Chechen flag?',
 ];
 
 /** How long a cited source card stays promoted after its citation is clicked. */

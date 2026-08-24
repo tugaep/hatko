@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildEmbeddingText, chunkMarkdown, estimateTokens } from './chunk.ts';
 
-/** Verbatim shape of a delivery report — the corpus's most common document. */
+/** A short structured report: the shape a heading-split would shatter into fragments. */
 const DELIVERY_REPORT = `# Delivery Report: Bubble Bakery, 2025-05
 
 Client: SweetPixel Games. Target network this cycle: Unity. Developers: Viktor, Tomas.
@@ -29,7 +29,7 @@ test('a single chunk keeps the distinguishing title text', () => {
   const [chunk] = chunkMarkdown(DELIVERY_REPORT);
 
   // "Bubble Bakery" and the date are what separate this from the other 77
-  // delivery reports in keyword search. Stripping the H1 would move those words
+  // near-identical reports in keyword search. Stripping the H1 would move those words
   // out of the FTS index and make the reports genuinely interchangeable.
   assert.match(chunk!.content, /Bubble Bakery/);
   assert.match(chunk!.content, /2025-05/);
@@ -264,14 +264,14 @@ test('a longer fence may contain a shorter delimiter as content', () => {
 
 test('embedding text prefixes context a passage would otherwise lose', () => {
   const text = buildEmbeddingText(
-    'Network Specs: AppLovin',
+    'Network Specs: Partner A',
     'Hard limits',
     '- Maximum file size: 5 MB for the final single HTML file.',
   );
 
   // "Maximum file size: 5 MB" is uninterpretable alone; the prefix is what ties
-  // it to AppLovin so the passage can be retrieved by a query naming the network.
-  assert.match(text, /^Network Specs: AppLovin › Hard limits\n\n/);
+  // it to the partner so the passage can be retrieved by a query naming the network.
+  assert.match(text, /^Network Specs: Partner A › Hard limits\n\n/);
   assert.match(text, /5 MB/);
 });
 

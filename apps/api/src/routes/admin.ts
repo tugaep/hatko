@@ -152,7 +152,10 @@ adminRoutes.delete('/settings/api-key', requires('documents:manage'), (c) => {
  * the response carries every document's title and category, which is a listing of the
  * corpus. That is the same thing `/documents` returns and is gated the same way.
  *
- * Computed per request rather than cached. It is one exhaustive pass over 142 vectors,
+ * Cached on the ingestion run that last wrote the vectors, since that is the only thing
+ * that changes the answer. It used to be computed per request, which was defensible at
+ * 142 vectors and became a 47-second stall over the whole API at 7539 — see the note in
+ * embedding-map.ts.
  * and a cache would need invalidating on every ingest — see the note in embedding-map.ts
  * for where that stops being true.
  */
