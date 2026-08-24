@@ -156,8 +156,8 @@ adminRoutes.delete('/settings/api-key', requires('documents:manage'), (c) => {
  * and a cache would need invalidating on every ingest — see the note in embedding-map.ts
  * for where that stops being true.
  */
-adminRoutes.get('/embedding-map', requires('documents:manage'), (c) =>
-  c.json(getEmbeddingMap(getDb())),
+adminRoutes.get('/embedding-map', requires('documents:manage'), async (c) =>
+  c.json(await getEmbeddingMap(getDb())),
 );
 
 // --- model selection --------------------------------------------------------

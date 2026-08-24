@@ -3290,3 +3290,48 @@ costs real provider calls, so the only recall figures I have are from the keywor
 stub embeddings — all nine answerable questions inside the top eight, which is a floor and
 not a score. The README's corpus figures are stale by roughly eightfold, and the chat page
 still offers example questions naming documents that no longer exist.
+
+---
+
+## Step 28 — the projection, and three measurements that each changed the answer
+
+The 3D view froze the API for 47.5 seconds. Fixing it took three passes, and every pass
+was aimed at something a measurement had just contradicted.
+
+**The first assumption was wrong about which matrix.** `embedding-map.ts` chose the Gram
+matrix over the covariance matrix and said why: at 142 vectors of 1536 dimensions, `XXᵀ`
+is 142×142 where `XᵀX` is 1536×1536. Correct, and it inverted silently when the corpus
+grew — at 7539 chunks the Gram matrix is 455 MB and the covariance matrix is still 18 MB,
+because its size is set by the embedding width and never by the document count. Both are
+now implemented and the smaller one runs. 32.9 s and 696 MB became 6.6 s and 312 MB, with
+the explained variance identical to ten decimal places, which is the check that the two
+sides really are the same decomposition.
+
+**A bug the new path introduced, caught by a test written to catch exactly it.** The two
+paths recover coordinates differently — Gram scales an eigenvector by `√λ`, covariance
+projects the data onto it — and that difference matters when the data spans fewer than
+three dimensions. After deflation the third eigenvalue is rounding error and its
+eigenvector points nowhere in particular; the Gram side collapses that axis to zero
+because `√λ` is zero, and the covariance side projected real data onto an arbitrary
+direction and produced a full-sized third axis of pure noise. A test running the same
+rectangle through both paths, once in two dimensions and once padded to eight, failed on
+the first run and is the reason there is now an explicit relative threshold rather than
+`value <= 0`.
+
+**Yielding fixed less than expected, so I measured instead of assuming again.** Adding a
+yield every 256 rows of the covariance build took the worst blocked request from 47.5 s to
+5.26 s — better, and nowhere near the ~150 ms the yield interval implied. Timing the
+phases separately found it: the covariance arithmetic is 4217 ms and the eigen solve 77 ms,
+but reading the vectors is a single synchronous `.all()` that decodes 46 MB of blobs and
+takes 1954 ms, and nothing can yield inside a `node:sqlite` call. Paging that read at 512
+rows brought the worst case to 0.92 s, with a median of 1 ms across 51 probes taken while
+the projection ran.
+
+**Then the cheap part.** A cache keyed on the last ingestion run id and the vector row
+count — the count because a `--force` re-embed rewrites vectors without changing the id.
+Cold 7469 ms, cached 1 ms.
+
+**What is still true.** The first request after an ingest does about seven seconds of work
+and briefly blocks for up to 0.9 s of it. That is a real remaining cost, and the honest
+next step if it matters is a randomised SVD rather than more yielding, since the
+arithmetic itself is what is left.
