@@ -3441,3 +3441,34 @@ configurations is sound and the absolute figures belong to a corpus that is no l
 default. The same applies to the deployment verification, which was performed against the
 previous corpus on an instance that is now offline — the README says a guide that worked,
 not a URL that is up.
+
+---
+
+## Step 31 — the README rewritten for a public audience, and v1 tagged
+
+The instruction was to write the README professionally, credit the author, point it at the
+live deployment, tag v1 and make the repository public.
+
+**What changed, and what deliberately did not.** The structure is new — an overview, an
+at-a-glance table, a table of contents, capability prose instead of a bullet list, and an
+author section. The substance is untouched: every measured figure is the one the eval
+returned, every request and response block is still verbatim output, and the design-decision
+section still explains why each choice was made rather than asserting that it was correct.
+A README that reads well and quotes numbers nobody ran is worse than an unpolished one.
+
+**Two consistency errors surfaced during the pass**, both the kind that only appear when
+someone reads the whole document at once: the technology-stack table said 286 tests and the
+checks section said 286, while the suite has been 287 since the PCA agreement test was
+added. Both corrected, and the checks section now also states the fresh-clone figure — 264
+passing with 23 skipped — because a reader who clones and sees 23 skips deserves to have
+been told first.
+
+**The live deployment was restored to the document.** The previous pass had removed
+`hatko.tugrap.dev` from the README, `.env.example` and the deployment guide and replaced it
+with a placeholder domain, on the reasoning that the instance was offline. It is being
+redeployed, so the real hostname is back in all three.
+
+**The credential history is still there and rotation is still the fix.** The operator has
+said they will configure new credentials before deploying, which is the thing that actually
+resolves it — the old passwords remain reachable through `git log -p` on any clone, and
+publishing does not change that either way.

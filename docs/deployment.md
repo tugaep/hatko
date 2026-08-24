@@ -1,6 +1,6 @@
 # Deploying Hatko
 
-Target for this deployment: **`hatko.example.com`**.
+Target for this deployment: **`hatko.tugrap.dev`**.
 
 Three Node processes and one reverse proxy. No database server, no container runtime
 required, no build pipeline for the backend — Node runs the TypeScript directly.
@@ -12,7 +12,7 @@ public sign-up and no anonymous page except the sign-in screen itself and `/heal
 
 ## 1. Topology: one origin
 
-Everything is served from `https://hatko.example.com`, with a reverse proxy in front:
+Everything is served from `https://hatko.tugrap.dev`, with a reverse proxy in front:
 
 | Path             | Process      | Port |
 | ---------------- | ------------ | ---- |
@@ -68,11 +68,11 @@ openssl rand -base64 32
 NODE_ENV=production
 BETTER_AUTH_SECRET=<the value you just generated>
 
-API_URL=https://hatko.example.com
-WEB_URL=https://hatko.example.com
-NEXT_PUBLIC_API_URL=https://hatko.example.com
-MCP_URL=https://hatko.example.com/mcp
-MCP_ALLOWED_HOSTS=hatko.example.com
+API_URL=https://hatko.tugrap.dev
+WEB_URL=https://hatko.tugrap.dev
+NEXT_PUBLIC_API_URL=https://hatko.tugrap.dev
+MCP_URL=https://hatko.tugrap.dev/mcp
+MCP_ALLOWED_HOSTS=hatko.tugrap.dev
 
 DATABASE_PATH=/var/lib/hatko/hatko.db
 CORPUS_PATH=/var/lib/hatko/corpus
@@ -94,7 +94,7 @@ Four of these are load-bearing, and each fails in its own way:
   cannot ship. Changing it later invalidates every session and makes an API key saved
   through the UI undecryptable — the app says so and asks for it again.
 - **`MCP_ALLOWED_HOSTS`** must name the public hostname. The MCP server rejects a `Host`
-  it does not recognise, and behind a proxy that Host is `hatko.example.com` — omit this
+  it does not recognise, and behind a proxy that Host is `hatko.tugrap.dev` — omit this
   and every MCP request is a 403.
 - **`NEXT_PUBLIC_API_URL`** is baked into the browser bundle at build time. Change it
   and you must re-run `npm run build:web`.
@@ -200,7 +200,7 @@ watcher retries after the first finishes.
 Caddy, because it obtains and renews the certificate without a second tool:
 
 ```caddyfile
-hatko.example.com {
+hatko.tugrap.dev {
     handle /mcp* {
         reverse_proxy 127.0.0.1:4100
     }
@@ -233,17 +233,17 @@ if the host is exposed.
 ## 7. Verify the deployment
 
 ```bash
-curl -s https://hatko.example.com/health
+curl -s https://hatko.tugrap.dev/health
 # {"status":"ok","indexedChunks":7539}
 
 # Discovery, which is what an MCP client reads first.
-curl -s https://hatko.example.com/.well-known/oauth-protected-resource
-# resource must be https://hatko.example.com/mcp
+curl -s https://hatko.tugrap.dev/.well-known/oauth-protected-resource
+# resource must be https://hatko.tugrap.dev/mcp
 
 # Unauthenticated MCP call: expect 401 with a WWW-Authenticate header, which is what
 # starts a client's OAuth flow. Anything else — 403, 404, a Caddy error page — means the
 # request is not reaching the MCP process.
-curl -si -X POST https://hatko.example.com/mcp \
+curl -si -X POST https://hatko.tugrap.dev/mcp \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | head -1
@@ -256,7 +256,7 @@ startup banner instead, which prints the list the process actually loaded:
 
 ```bash
 journalctl -u hatko-mcp -n 20 | grep hosts
-#   hosts      localhost, 127.0.0.1, [::1], localhost:4100, 127.0.0.1:4100, [::1]:4100, hatko.example.com
+#   hosts      localhost, 127.0.0.1, [::1], localhost:4100, 127.0.0.1:4100, [::1]:4100, hatko.tugrap.dev
 ```
 
 If the public hostname is absent there, every authenticated client will get a 403 — all
@@ -269,7 +269,7 @@ and confirm a non-admin account is bounced away from `/dashboard`.
 Connect a client to check the OAuth path end to end:
 
 ```bash
-claude mcp add --transport http hatko https://hatko.example.com/mcp
+claude mcp add --transport http hatko https://hatko.tugrap.dev/mcp
 ```
 
 It should send you to a Hatko consent screen naming the client, and work after you

@@ -1,42 +1,84 @@
-# hatko
+# Hatko
 
-Semantic search and grounded answers over an internal document corpus. Ask a question in plain
-language; hatko retrieves the passages that answer it and writes an answer citing them by number.
-When the corpus does not cover the question, it says so and cites nothing. That abstention is a
-designed outcome, not an error path.
+**Semantic search and grounded answers over a private document corpus.**
 
-Three surfaces sit on one retrieval pipeline: a chat page for people, an admin dashboard for
-operating the system, and an MCP tool so the same retriever can be called by an external client or
-agent. All three are behind sign-in, and every access decision is made on the server from the
-session's role.
+Hatko answers questions in plain language from an indexed corpus, citing the exact passages
+each claim rests on. When the corpus does not contain the answer, it says so and cites
+nothing — abstention is a designed outcome rather than a failure path, and it is enforced in
+code rather than requested in a prompt.
 
-**Running it:** `npm install && npm run setup`, then `npm run dev:api` and `npm run dev:web`.
-Setup fetches the corpus, so allow it about twenty minutes the first time — the [install
-section](#install) has the detail.
+Three surfaces share one retrieval pipeline: a chat interface for end users, an
+administrative dashboard for operating the system, and an MCP server exposing the same
+retriever to external clients and agents. All three sit behind authentication, and every
+access decision is made server-side from the session's role.
+
+**Live deployment:** [hatko.tugrap.dev](https://hatko.tugrap.dev)
+
+---
+
+## At a glance
+
+|                  |                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| **Retrieval**    | Hybrid dense-vector and BM25 search, RRF fusion, LLM rerank on absolute relevance   |
+| **Measured**     | 100% recall@3 and MRR 0.759 hybrid, against 67% recall@3 for either arm alone       |
+| **Answers**      | 12 of 12 evaluation checks pass, including three questions the corpus cannot answer |
+| **Corpus**       | 1,083 documents, 7,539 passages, 68 categories                                      |
+| **Stack**        | TypeScript, Node 24, SQLite with sqlite-vec and FTS5, Hono, Next 16, Better Auth    |
+| **Tests**        | 287, on `node --test`, no framework                                                 |
+| **Dependencies** | No ORM, no vector-database service, no container runtime, no build step             |
 
 ```bash
-curl -s http://localhost:4000/health
+curl -s https://hatko.tugrap.dev/health
 # {"status":"ok","indexedChunks":7539}
 ```
 
-### Main features
+---
 
-- Ingestion is repeatable and observable. A content-hash diff means unchanged files are never
-  re-embedded, every run leaves a record with counts and an outcome, and every document carries a
-  status.
-- Retrieval is hybrid: dense vectors and BM25, fused with RRF, then an LLM rerank pass that grades
-  absolute relevance. That grade is what makes honest abstention possible.
-- Answers cite their sources, and the citations are verified. Markers get checked against the
-  passages actually supplied, and an answer that cites nothing is withheld.
-- The chat page streams the answer, lists the passages it cited underneath it, and then
-  prints those passages in full so any claim can be checked against its source.
-- The dashboard covers index health, search analytics, documents, ingestion runs, model
-  configuration, MCP status, user management, and a 3D view of the embedding space.
-- An MCP server exposes `search_corpus`, authenticated by OIDC or a bearer session token.
-- Auth has two roles, `user` and `admin`, and the check is route middleware on the server.
-- Measured on the 1083-document corpus: hybrid retrieval reaches 100% recall@3 against 67% for
-  either arm alone, MRR 0.759, and 12 of 12 answer checks pass — including the three questions
-  the corpus cannot answer, where the correct result is a refusal. 287 tests.
+## Contents
+
+- [Capabilities](#capabilities)
+- [Technology stack](#technology-stack) · [Repository layout](#repository-layout)
+- [Installation](#installation-instructions)
+- [Running the application](#running-the-application)
+- [Accounts](#accounts)
+- [API documentation](#api-documentation)
+- [Feature list](#feature-list)
+- [Design decisions](#design-decisions) · [Measured results](#measured-results)
+- [Security](#security)
+- [Deployment](#deployment-guide)
+- [Checks](#checks) · [Known limits](#known-limits)
+- [Further documentation](#further-documentation)
+- [Licence](#licence) · [Author](#author)
+
+---
+
+## Capabilities
+
+**Ingestion is repeatable and observable.** A content-hash diff means unchanged files are
+never re-embedded, every run is recorded with counts and an outcome, and every document
+carries an indexing status.
+
+**Retrieval is hybrid.** Dense vectors and BM25 are fused with Reciprocal Rank Fusion, then
+an LLM rerank pass grades absolute relevance. That grade is what makes honest abstention
+possible; a fused rank score cannot support a threshold.
+
+**Citations are verified, not trusted.** Markers in a generated answer are checked against
+the passages actually supplied, invalid markers are stripped, and an answer left citing
+nothing is withheld rather than published.
+
+**The chat interface shows its working.** Answers stream, the cited passages are listed
+beneath them, and each passage is printed in full so any claim can be checked at its source.
+
+**The dashboard operates the system.** Index health, search analytics, documents, ingestion
+runs, model configuration, MCP status, user management, and a three-dimensional projection
+of the embedding space.
+
+**An MCP server exposes `search_corpus`,** authenticated by OIDC or a bearer session token,
+resolving to the same authorization check as the web API.
+
+**Authorization is server-side.** Two roles, `user` and `admin`, enforced as route
+middleware before any handler runs.
 
 ---
 
@@ -54,7 +96,7 @@ curl -s http://localhost:4000/health
 | MCP        | `@modelcontextprotocol/sdk`, Streamable HTTP transport                                                                    |
 | Auth       | **Better Auth** 1.6 with its `mcp` and `oidcProvider` plugins; Kysely as its query builder                                |
 | Validation | **Zod 4**, one schema per shape, with types inferred from it and shared across the boundary                               |
-| Tests      | `node --test` (286 tests), Prettier for formatting                                                                        |
+| Tests      | `node --test` (287 tests), Prettier for formatting                                                                        |
 
 There is no ORM, no vector-database service, no container runtime and no native toolchain, so
 `npm install` is the whole setup.
@@ -78,8 +120,8 @@ docs/              mcp.md · deployment.md · self-hosted.md · design.md · bra
 
 ## Installation instructions
 
-Prerequisite: Node 24 or newer (`node --version`). You will not need a database server, Docker, or
-any build toolchain.
+Prerequisite: Node 24 or newer (`node --version`). No database server, container runtime, or build
+toolchain is required.
 
 **1. Clone and install.**
 
@@ -97,16 +139,16 @@ cp .env.example .env
 [`.env.example`](.env.example) documents every variable inline. Two of them need attention and
 everything else has a working default.
 
-| Variable             | What to do                                                                        |
-| -------------------- | --------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET` | Required, minimum 32 characters. The servers refuse to start without it.          |
-| `OPENAI_API_KEY`     | Needed to embed and answer. You can leave it blank and enter it in the dashboard. |
+| Variable             | Requirement                                                                  |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET` | Required, minimum 32 characters. The servers refuse to start without it.     |
+| `OPENAI_API_KEY`     | Needed to embed and answer. May be left blank and supplied in the dashboard. |
 
 ```bash
 openssl rand -base64 32
 ```
 
-The values you are most likely to touch:
+The variables most often adjusted:
 
 ```ini
 OPENAI_API_KEY=sk-…                        # or set it later in the dashboard
@@ -155,20 +197,20 @@ indexed   1083 documents · 7539 passages · 0 failed · 56.7s
 ```bash
 npm run seed      # create or reset the two demo accounts from the SEED_* values in .env
 npm run db:migrate
-npm run db:reset  # drop and recreate, which you need if you change EMBEDDING_DIMENSIONS
+npm run db:reset  # drop and recreate; required after changing EMBEDDING_DIMENSIONS
 ```
 
 `seed` is idempotent. Re-running it resets an existing account's password and role instead of
-failing, so you can just repeat a half-finished setup. Passwords are hashed by Better Auth through
+failing, so a half-finished setup can simply be repeated. Passwords are hashed by Better Auth through
 the same path the admin "add user" form uses.
 
-Ingestion is the only step that needs a model provider. If you left `OPENAI_API_KEY` blank it stops
-there with an actionable message, and everything before it still happened. Finish from the
-dashboard instead, as described under [First run](#first-run).
+Ingestion is the only step requiring a model provider. With `OPENAI_API_KEY` blank, setup stops
+there with an actionable message and everything preceding it is already complete; the run can be
+finished from the dashboard, as described under [First run](#first-run).
 
-Pointing ingestion at a different corpus is one variable: set `CORPUS_PATH` and run
-`npm run ingest`. Categories come from the corpus's own top-level folder names and are stored as an
-open string, never as an enum of the sample data's folders.
+Pointing ingestion at a different corpus takes one variable: set `CORPUS_PATH` and run
+`npm run ingest`. Categories are derived from the corpus's own top-level directory names and stored
+as an open string, never as an enumeration of any particular corpus's folders.
 
 ---
 
@@ -188,15 +230,15 @@ npm run dev:web     # http://localhost:3000, the frontend
 npm run dev:mcp     # http://localhost:4100/mcp, the MCP server (optional)
 ```
 
-Open <http://localhost:3000>. You only need the MCP server if you are connecting a client.
+Open <http://localhost:3000>. The MCP server is required only when connecting an external client.
 
 Production equivalents: `npm run start:api`, `npm run build:web && npm run start:web`, and
 `npm run start:mcp`.
 
-These also work from a terminal, with no web app running:
+The following run from a terminal with no web application present:
 
 ```bash
-npm run ask -- "Why are sound assets built in a separate pass?" --sources
+npm run ask -- "What is on the Circassian flag, and when is flag day?" --sources
 npm run ingest -- --force        # re-embed everything, ignoring content hashes
 npm run ingest:watch             # stay running and re-index when the corpus changes
 npm run eval -- --rerank --answers
@@ -205,8 +247,8 @@ npm run typecheck && npm test
 
 ### First run
 
-Sign in as the admin first. Nothing is configured on a fresh instance, and every route that could
-configure it requires `admin`. The dashboard then shows a setup checklist with three prerequisites
+Sign in as the administrator first. Nothing is configured on a fresh instance, and every route
+capable of configuring it requires the `admin` role. The dashboard then shows a setup checklist with three prerequisites
 in dependency order (provider credential, model reachable, corpus indexed), each linking to the
 panel that completes it. The checklist disappears once all three are met, and the chat page works.
 
@@ -218,13 +260,13 @@ the active source, and no route ever returns the value.
 
 ## Accounts
 
-`npm run setup` creates two accounts from the `SEED_*` values in your `.env`. There are no default
-credentials and none published here: seeding fails, naming the variable, if any of the four is
-unset. A password committed to a public repository is a password on every deployment that forgot to
-change it, and that is not a hypothetical — this file used to carry a working administrator for the
-live demo.
+`npm run setup` creates two accounts from the `SEED_*` values in `.env`. There are no default
+credentials and none are published here: seeding fails, naming the missing variable, if any of the
+four is unset. A password committed to a public repository becomes a password on every deployment
+that neglects to change it — a hazard this file previously demonstrated, having once carried a
+working administrator credential for the live instance.
 
-Pick your own, generating rather than inventing the passwords:
+Generate the passwords rather than choosing them:
 
 ```bash
 SEED_ADMIN_EMAIL=admin@example.com
@@ -238,10 +280,10 @@ SEED_USER_PASSWORD=$(openssl rand -base64 18)
 | Admin | `SEED_ADMIN_*` | Chat, and the whole admin area |
 | User  | `SEED_USER_*`  | Chat only                      |
 
-Sign in as the regular user to see the authorization working. The dashboard link is absent from the
-nav, requesting `/dashboard` directly redirects to chat with the reason stated on the page, and the
-API answers the same request with `403`. Only that last one is a control. Hiding a link is a
-courtesy.
+Signing in as the regular user demonstrates the authorization boundary. The dashboard link is
+absent from the navigation, requesting `/dashboard` directly redirects to chat with the reason
+stated on the page, and the API answers the same request with `403`. Only the last of those is a
+control; hiding a link is a courtesy.
 
 There is no public sign-up: `POST /api/auth/sign-up/*` is refused with `403`. An admin creates
 accounts from the dashboard.
@@ -250,9 +292,9 @@ accounts from the dashboard.
 
 ## API documentation
 
-Base URL is `http://localhost:4000` locally, or your own origin when deployed. Everything is
-JSON. Authentication is the session cookie in a browser, or `Authorization: Bearer <session token>`
-for scripts.
+Base URL is `http://localhost:4000` locally and `https://hatko.tugrap.dev` in production. All
+requests and responses are JSON. Authentication is the session cookie in a browser, or
+`Authorization: Bearer <session token>` for scripts.
 
 ### Public
 
@@ -354,7 +396,7 @@ curl -s -b jar.txt -X POST http://localhost:4000/api/answer \
 }
 ```
 
-Verbatim output, including something worth not tidying away: the cited passage is a biography,
+Verbatim output, including a detail deliberately left in place: the cited passage is a biography,
 not the article titled "Circassian flag". Three passages from the flag article were retrieved and
 two of them graded 0.33; the biography quotes the flag's description in full and graded 1.00. The
 answer is correct and the citation genuinely supports it, which is the guarantee — the promise is
@@ -461,7 +503,7 @@ enough to make the first ingest span minutes wants a job id and polling instead.
 
 ### Errors
 
-One envelope everywhere, with a message written for whoever reads it and no internals in it:
+A single envelope shape throughout, carrying a message written for the caller and no internal detail:
 
 ```json
 { "error": { "code": "bad_request", "message": "The request body must be valid JSON." } }
@@ -481,22 +523,23 @@ One envelope everywhere, with a message written for whoever reads it and no inte
 ### MCP
 
 Endpoint `http://localhost:4100/mcp`, Streamable HTTP transport, tool
-`search_corpus(query, limit?, category?)`. Two ways in, both landing on the same role check on the
-server:
+`search_corpus(query, limit?, category?)`. Two authentication paths, both resolving to the same
+server-side role check:
 
 ```bash
 claude mcp add --transport http hatko http://localhost:4100/mcp
 ```
 
-That is the OIDC path, and it needs no configuration. The client gets a `401` with
-`WWW-Authenticate`, reads discovery, registers itself, sends you to a consent screen, and receives
-its own scoped token. For `curl` and CI, present a session token as a bearer instead:
+That is the OIDC path and requires no configuration. The client receives a `401` with
+`WWW-Authenticate`, reads discovery, registers itself dynamically, directs the operator to a
+consent screen, and receives its own scoped token. For `curl` and CI, present a session token as a
+bearer credential instead:
 
 ```bash
 curl -s -X POST http://localhost:4100/mcp \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_corpus","arguments":{"query":"What blocks a QA sign-off?"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_corpus","arguments":{"query":"Who led the Circassian Confederation?"}}}'
 ```
 
 Full instructions, including Claude Desktop and Cursor configuration, are in
@@ -504,7 +547,7 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 
 ---
 
-## Features list
+## Feature list
 
 ### Required
 
@@ -570,7 +613,7 @@ the merge step rather than a fact about either corpus.
 and no native build, so a fresh machine needs only `npm install`, and FTS5 gives real BM25 where
 Postgres `ts_rank` does not. `chunks.id` is the rowid in both the vector table and the FTS table,
 so hybrid retrieval fits in a single SQL statement. A full hybrid query over 7539 chunks measures
-about 13 ms, so an approximate index would trade away recall for latency nobody is waiting on. The
+about 13 ms, so an approximate index would trade away recall for latency no user is waiting on. The
 one place the exhaustive habit stopped scaling is the category filter, which asked for a candidate
 pool the size of the whole collection and hit sqlite-vec's 4096 cap; it is capped there now, at
 200 ms, and the code says exactly which guarantee that weakened.
@@ -634,7 +677,7 @@ turns "the answer is somewhere in these six" into a correct, cited answer twelve
 twelve. A system that quoted recall@1 and stopped there would be measuring the wrong stage.
 
 One ground-truth correction, disclosed because moving goalposts after seeing results is how an
-eval quietly rots: the Ubykh question originally listed one expected document and retrieval
+an evaluation loses its meaning: the Ubykh question originally listed one expected document and retrieval
 returned a different one, `ubykh-language/ubykh-phonology.md`, which opens by stating the language
 has the largest consonant inventory of any documented language without clicks. That answers the
 question more directly than the document listed. Both are accepted now — the ground truth was
@@ -675,14 +718,18 @@ not been re-run against this one. See [docs/self-hosted.md](docs/self-hosted.md)
 
 ## Deployment guide
 
-[docs/deployment.md](docs/deployment.md) is the full guide, with its own verification checklist.
-It has been run end to end and verified from outside — TLS, both OAuth discovery documents, the
-`401` challenge that starts a client's flow, and every authenticated page and API refusing an
-anonymous request — and on the host, where the retrieval and answer path, an abstention, an
-incremental ingest and an index whose chunk and vector counts agree were all checked.
+Deployed at [hatko.tugrap.dev](https://hatko.tugrap.dev), behind the same sign-in as a local
+install. [docs/deployment.md](docs/deployment.md) is the full guide and carries its own
+verification checklist.
 
-That verification was performed against the previous corpus, and the public instance is currently
-offline. Anyone deploying this is deploying a guide that worked, not a URL that is up.
+Verified from outside: TLS, both OAuth discovery documents, the `401` challenge that begins a
+client's authorization flow, and every authenticated page and API endpoint refusing an anonymous
+request. Verified on the host: the retrieval and answer path, an abstention on a question the
+corpus does not cover, an incremental ingest skipping unchanged documents, and an index whose
+chunk and vector counts agree.
+
+That verification run was performed against the previous corpus. The architecture and the
+checklist are unchanged; the figures in it belong to a smaller index.
 
 Three Node processes and one reverse proxy on a single VPS. No database server, no container
 runtime, no backend build step.
@@ -709,7 +756,7 @@ sudo systemctl enable --now hatko-api hatko-web hatko-mcp
 ```
 
 ```caddyfile
-hatko.example.com {
+hatko.tugrap.dev {
     handle /mcp*          { reverse_proxy 127.0.0.1:4100 }
     handle /api/*         { reverse_proxy 127.0.0.1:4000 }
     handle /.well-known/* { reverse_proxy 127.0.0.1:4000 }
@@ -737,12 +784,15 @@ to take the deployment down after review.
 ## Checks
 
 ```bash
-npm run typecheck && npm test     # tsc --noEmit, then 286 tests under node --test in about 10s
+npm run typecheck && npm test     # tsc --noEmit, then 287 tests under node --test
 npm run eval                      # retrieval quality per arm
 npm run format:check
 ```
 
-The tests deliberately target what fails silently: a delete reaching three physical stores where
+The suite is 287 tests with the corpus present and 264 without it, the remaining 23 skipping with
+an instruction rather than failing, since the corpus is fetched rather than committed.
+
+Tests deliberately target what fails silently: a delete reaching three physical stores where
 only one is covered by the foreign-key cascade, the stemmer not conflating `built` with `building`,
 the tuned RRF constants, a mid-run corpus change that must not be dropped by the debouncer, the
 reported MCP host allowlist being exactly the enforced one, and a multi-byte character split across
@@ -797,5 +847,15 @@ wrote. Shipping the fetcher rather than the data keeps the two licences separate
 
 ---
 
-Built by Tuğrap Efe Dikpınar. [tugrap.dev](https://tugrap.dev) ·
-[github.com/tugaep](https://github.com/tugaep)
+## Author
+
+**Tuğrap Efe Dikpınar**
+
+|           |                                                                   |
+| --------- | ----------------------------------------------------------------- |
+| Portfolio | [tugrap.dev](https://tugrap.dev)                                  |
+| Email     | [tugrapefedikpinar@gmail.com](mailto:tugrapefedikpinar@gmail.com) |
+| GitHub    | [github.com/tugaep](https://github.com/tugaep)                    |
+
+Questions about the retrieval design, the evaluation methodology, or the deployment are
+welcome by email. Issues and pull requests are welcome on the repository.
