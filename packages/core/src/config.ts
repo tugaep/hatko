@@ -140,7 +140,7 @@ const absolute = (p: string) => (path.isAbsolute(p) ? p : path.resolve(REPO_ROOT
  *
  * Plain `path.relative` was printing a corpus outside the repository as
  * `../../../../../private/tmp/…/corpus` — longer and harder to read than the absolute path
- * it was shortening, in the exact case the brief cares about, which is pointing CORPUS_PATH
+ * it was shortening, in the exact case that matters most, which is pointing CORPUS_PATH
  * at the real corpus somewhere else on disk.
  */
 export function displayPath(absolutePath: string): string {

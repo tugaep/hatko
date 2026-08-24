@@ -4,10 +4,10 @@ import { hybridSearch, type HybridOptions } from './search.ts';
 import { rerank, type RerankOptions } from './rerank.ts';
 
 /**
- * Retrieve, judge, then cut — in that order.
+ * Retrieve, judge, then cut, in that order.
  *
- * This exists because the order was wrong, and wrong in a way that cost the top-graded
- * axis its most important correction. Both surfaces used to call
+ * This exists because the order was wrong, and wrong in a way that cost retrieval its most
+ * important correction. Both surfaces used to call
  * `hybridSearch({ limit })` and then `rerank`, which truncates to the caller's `limit`
  * *before* anything reads the passages, so the reranker could only reorder a set that had
  * already been decided by fused score. `limit` is caller-supplied on `/api/search` and on

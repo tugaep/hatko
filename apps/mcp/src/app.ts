@@ -23,7 +23,7 @@ import { runSearchTool, searchToolInput } from './tool.ts';
  * rest of this file looks the way it does. stdio would have been less code — no
  * port, no headers — but a stdio server is spawned by the client as a local
  * subprocess, and a subprocess cannot be authenticated: whoever can run it already
- * has the machine. The brief requires access to be gated by role, so the retrieval
+ * has the machine. Access is gated by role, so the retrieval
  * tool needs a caller identity, and an identity needs somewhere to travel. Over HTTP
  * it travels in the `Authorization` header.
  *

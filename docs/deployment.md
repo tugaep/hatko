@@ -339,7 +339,7 @@ to be fixed.
 
 ## 9. Taking it down
 
-The brief asks for the deployment to come down after review.
+When the deployment is no longer needed, take it down cleanly rather than leaving it running.
 
 ```bash
 sudo systemctl disable --now hatko-api hatko-web hatko-mcp hatko-ingest

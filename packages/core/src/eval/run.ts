@@ -11,7 +11,7 @@ import { summarise, type QuestionResult } from './metrics.ts';
 /**
  * `npm run eval [-- --arm=hybrid|vector|keyword|all] [--k=5]`
  *
- * Measures retrieval, not answer wording. Retrieval is the top-graded axis and
+ * Measures retrieval, not answer wording. Retrieval is what everything downstream rests on, and
  * the thing every later stage depends on: an answer cannot be grounded in a
  * passage that was never retrieved.
  *

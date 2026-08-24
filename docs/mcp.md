@@ -201,12 +201,12 @@ report the system being honest as the system being broken.
 
 **Streamable HTTP, not stdio.** stdio would have been less code, but a stdio server
 is spawned by the client as a local subprocess, and a subprocess cannot be
-authenticated, because whoever can run it already has the machine. The brief requires access
+authenticated, because whoever can run it already has the machine. This system gates access
 to be gated by role, so the tool needs a caller identity, and an identity needs
 somewhere to travel. Over HTTP it travels in the `Authorization` header.
 
 **hatko is its own OIDC provider.** Not an external identity provider, because the
-brief requires the system to run on a fresh machine from the README and a hosted IdP
+system has to run on a fresh machine from the README alone, and a hosted IdP
 would make a network account a prerequisite for `npm install`. Better Auth's `mcp` and
 `oidcProvider` plugins supply the endpoints; this repository supplies the schema
 (migration 007), the consent screen, and the policy that consent is mandatory.

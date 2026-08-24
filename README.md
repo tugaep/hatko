@@ -565,55 +565,85 @@ Full instructions, including Claude Desktop and Cursor configuration, are in
 
 ## Feature list
 
-### Required
+### Retrieval and answers
 
-| Requirement                                              | Where                                                                                 |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Monorepo with shared types across the boundary           | `packages/shared`: Zod schemas and `z.infer` types, imported by all four others       |
-| Ingestion that chunks, embeds and stores, repeatably     | `packages/core/src/ingest`, with a content-hash diff and batched embedding            |
-| Ingestion observable                                     | `ingestion_runs` rows and per-document status, both on the dashboard                  |
-| Semantic search over a vector store                      | `chunks_vec` (sqlite-vec) fused with FTS5                                             |
-| Grounded answers citing source documents                 | `packages/core/src/answer`, with markers validated against supplied passages          |
-| Says so when the corpus lacks the answer                 | A judged-grade threshold, with its own UI state                                       |
-| Chat page: question, passages, cited answer              | `apps/web/app/(app)/chat`                                                             |
-| Dashboard: corpus, ingestion, index health, search stats | `apps/web/app/(app)/dashboard`, six sections                                          |
-| MCP server for search, documented                        | `apps/mcp` and [docs/mcp.md](docs/mcp.md)                                             |
-| Authentication and role-based authorization              | Better Auth, one permissions map, route middleware                                    |
-| TypeScript, Tailwind, responsive on phone to desktop     | No JavaScript files anywhere, Tailwind 4                                              |
-| Error handling throughout                                | A typed envelope, handled at the boundary where the failure happens                   |
-| README, AI usage log, `.env.example`, seeding            | This file, [AI_USAGE.md](AI_USAGE.md), [`.env.example`](.env.example), `npm run seed` |
+| Feature                           | Implementation                                                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hybrid search                     | Dense vectors in `chunks_vec` (sqlite-vec) fused with FTS5 BM25 by Reciprocal Rank Fusion, at constants chosen by sweep rather than by citation |
+| LLM reranking                     | Absolute relevance graded 0 to 3 per passage, which is what a refusal can be thresholded against                                                |
+| Grounded answers                  | `packages/core/src/answer`, with every citation marker validated against the passages actually supplied                                         |
+| Refusal when the corpus is silent | A judged-grade threshold at 0.67, with a UI state of its own rather than an error page                                                          |
+| Deprecation notices               | Computed from ingest-time metadata, so a superseded source is flagged whether or not the model mentions it                                      |
+| Streaming                         | Server-sent events, with citation validation and the refusal decision both running on the complete text                                         |
+| Evaluation                        | `npm run eval` reports recall@k, MRR, a per-arm comparison, score separation, and answer-content checks                                         |
 
-### Bonus features, all six attempted
+### Ingestion
 
-| Bonus                    | What was built                                                                                                                                                                                                                                                                                              |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP auth via OIDC        | Better Auth's `mcp` and `oidcProvider` plugins, so hatko is itself the authorization server. No hosted IdP, because the system has to run on a fresh machine. Discovery, dynamic client registration, PKCE, and a consent screen forced on every authorization. Bearer sessions stay available for scripts. |
-| Self-updating pipeline   | `npm run ingest:watch`, built on stdlib `fs.watch` with a 500 ms debounce. It coalesces bursts, never re-enters a run, and never drops a change that arrives mid-run. New, changed and removed files are all detected incrementally.                                                                        |
-| Live deployment          | [hatko.tugrap.dev](https://hatko.tugrap.dev). Three Node processes and Caddy on one host, with TLS, systemd units, and a verification checklist in [docs/deployment.md](docs/deployment.md).                                                                                                                |
-| Retrieval quality        | Hybrid vector and BM25 search, RRF tuned by sweep, LLM rerank with absolute grading                                                                                                                                                                                                                         |
-| Evaluation               | `npm run eval` reports recall@k, MRR, a per-arm comparison and answer-content checks                                                                                                                                                                                                                        |
-| Search-experience polish | Streamed answers, citation markers that jump to and promote the passage they point at, a cited-passage list under every answer, term highlighting inside the passages, a score legend, keyboard shortcuts                                                                                                   |
-| User management          | An admin surface to list, search, add, change role, deactivate and restore, with two lockouts refused on the server: you cannot change your own account, and the last active admin cannot be demoted or disabled.                                                                                           |
+| Feature               | Implementation                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chunking              | Split on markdown headings, merge upward to a target size, hard-split only a section that exceeds the ceiling alone                                       |
+| Repeatable runs       | A content-hash diff, so unchanged files are never re-embedded and a re-run costs no provider calls                                                        |
+| Observable runs       | An `ingestion_runs` row per run with counts and an outcome, plus a per-document status, both on the dashboard                                             |
+| Incremental detection | New, changed and removed documents are each handled, and a delete reaches all three physical stores                                                       |
+| Watch mode            | `npm run ingest:watch` on stdlib `fs.watch` with a 500 ms debounce. It coalesces bursts, never re-enters a run, and never drops a change arriving mid-run |
+| Corpus fetcher        | `npm run corpus:fetch` builds the demo corpus from the Wikipedia API with backoff and resume                                                              |
 
-### Added beyond the brief
+### Interfaces
 
-| Addition                        | Why                                                                                                                                                                                                                                                                                                       |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin-managed encrypted API key | An operator can rotate the credential without shell access. It is encrypted at rest with a key derived from `BETTER_AUTH_SECRET`, no route reads it back, and the environment variable stays supported.                                                                                                   |
-| Rate limiting                   | Otherwise a valid token can drive unbounded rerank calls, which is real money. One allowance keyed by user id, shared by `/search`, `/answer` and the MCP tool, defaulting to 30 a minute.                                                                                                                |
-| Self-hosted model support       | Removes the paid dependency. One configuration measured 12 of 12 (`qwen2.5:7b` with `nomic-embed-text`), on the previous corpus and not re-measured since. [docs/self-hosted.md](docs/self-hosted.md) says so, along with two rejected models.                                                            |
-| 3D embedding view               | The retriever's central claim is that near-identical documents collapse into one indistinguishable cluster, and this makes that visible instead of asserted. PCA by power iteration onto a canvas, drag to rotate, click a point to read its passage. Both parts are stdlib, so no three.js and no t-SNE. |
-| First-run setup checklist       | A fresh instance needs three things in a particular order. The dashboard says which, and links to each.                                                                                                                                                                                                   |
-| Admin model selection           | Answer and rerank models, intersected with what the provider actually advertises, with the measured model marked and a warning when the rerank model changes, because that is the model abstention depends on.                                                                                            |
-| MCP status tab                  | The MCP server is a separate process. Whether it was running, and which hostnames it accepts, previously lived only in a log readable over SSH, which is exactly where a misconfiguration hid through a whole deployment.                                                                                 |
-| Deactivated accounts            | An immediate cut-off that both surfaces honour at once, with sign-in saying why instead of looping silently.                                                                                                                                                                                              |
+| Feature             | Implementation                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat                | Question, streamed answer, the cited passages listed beneath it, then each passage in full                                                                                            |
+| Citation navigation | Markers jump to the passage they point at and promote it; terms are highlighted inside the passage                                                                                    |
+| Score legend        | Vector, BM25, fused and judged scores are all shown, because the promise is to show the working                                                                                       |
+| Dashboard           | Six sections: analytics, model configuration, documents, ingestion, MCP status, users                                                                                                 |
+| Index health        | Document and vector counts checked against each other, since the two stores are maintained separately                                                                                 |
+| Setup checklist     | A fresh instance needs three things in order. The dashboard names them and links to each                                                                                              |
+| Embedding space     | The stored vectors projected to three dimensions by PCA and drawn on a canvas, drag to rotate, click a point to read its passage. Both halves are stdlib, so no three.js and no t-SNE |
+| Responsive          | Phone through desktop, Tailwind 4, 44px touch targets                                                                                                                                 |
 
----
+### MCP
+
+| Feature                    | Implementation                                                                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_corpus` tool       | `apps/mcp`, its own process and port, Streamable HTTP transport                                                                                                |
+| OIDC authorization         | Better Auth's `mcp` and `oidcProvider` plugins, so hatko is its own authorization server rather than depending on a hosted IdP a fresh machine would not reach |
+| Discovery and registration | RFC 9728 and RFC 8414 documents, dynamic client registration, PKCE, and a consent screen forced on every authorization                                         |
+| Bearer sessions            | Session tokens work for `curl` and CI, landing on the same permission check the OAuth path uses                                                                |
+| Host allowlist             | A DNS-rebinding guard whose accepted hosts the dashboard reads from the same function that enforces them                                                       |
+
+### Authentication and accounts
+
+| Feature                 | Implementation                                                                                                                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roles                   | `user` and `admin`, resolved from the session record, never from the client                                                                                                                   |
+| Server-side enforcement | One permissions map in `packages/shared`, checked as route middleware before any handler runs                                                                                                 |
+| Closed sign-up          | `POST /api/auth/sign-up/*` answers 403. An administrator creates accounts                                                                                                                     |
+| User management         | List, search, add, change role, deactivate and restore, with two lockouts refused on the server: no editing your own account, and the last active administrator cannot be demoted or disabled |
+| Deactivation            | An immediate cut-off both surfaces honour at once, with sign-in stating the reason instead of looping                                                                                         |
+
+### Operations
+
+| Feature            | Implementation                                                                                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment         | [hatko.tugrap.dev](https://hatko.tugrap.dev). Three Node processes and Caddy on one host, TLS, systemd units, and a verification checklist in [docs/deployment.md](docs/deployment.md)                  |
+| Encrypted API key  | An operator can rotate the credential without shell access. Encrypted at rest under a key derived from `BETTER_AUTH_SECRET`, never returned by any route, with the environment variable still supported |
+| Model selection    | Answer and rerank models chosen in the dashboard, intersected with what the provider advertises, with a warning when the rerank model changes because that is the model refusal depends on              |
+| Self-hosted models | Any OpenAI-shaped server through `OPENAI_BASE_URL`. One configuration measured 12 of 12, and two rejected models documented in [docs/self-hosted.md](docs/self-hosted.md)                               |
+| Rate limiting      | One allowance keyed by user id, shared by `/search`, `/answer` and the MCP tool, 30 a minute by default. Without it a valid token can drive unbounded rerank calls, which is real money                 |
+
+### Engineering
+
+| Feature        | Implementation                                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared types   | `packages/shared` holds Zod schemas with types inferred from them, imported by all four other workspaces, so the API and the UI cannot disagree about a shape |
+| No build step  | TypeScript run directly by Node's type stripping                                                                                                              |
+| Error handling | One typed envelope, handled at the boundary where the failure happens, with no internals reaching the client                                                  |
+| Tests          | 287 on `node --test`, targeting what fails silently rather than what fails loudly                                                                             |
 
 ## Design decisions
 
-The four the brief asks about, in a sentence or two each. Longer reasoning lives in code comments
-next to the decision it explains.
+The four that shaped everything else, in a sentence or two each. Longer reasoning lives in code
+comments next to the decision it explains.
 
 **Chunking: cut on headings, then merge upward.** Split on markdown headings, merge adjacent
 sections up to about 1200 characters, and hard-split only a section that exceeds 2000 on its own.

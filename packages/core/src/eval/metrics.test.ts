@@ -82,7 +82,7 @@ test('an eval with nothing answerable reports zero rather than NaN', () => {
 
 /**
  * The eval set is a specification, not a sample — sample_questions.md names the
- * unanswerable cases explicitly and the brief says the private set is "in the same
+ * unanswerable cases explicitly, and an evaluation set is only useful if held-out questions are "in the same
  * style". A set that lost its unanswerable half would still report perfect recall while
  * measuring nothing about abstention, which is the behaviour most likely to be graded.
  */

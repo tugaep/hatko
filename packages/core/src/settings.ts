@@ -9,7 +9,7 @@ import { getDb, type Db } from './db/client.ts';
  * The OpenAI key can be supplied two ways: the OPENAI_API_KEY environment
  * variable, or an admin entering it in the web UI. Both are supported on purpose —
  * the environment variable is what the ingestion CLI uses before any user
- * account exists, and the brief requires keys to be suppliable that way, while
+ * account exists, and a key has to be suppliable that way, while
  * the UI is what lets an operator rotate a key without shell access.
  *
  * When both are present the database wins: someone typing a key into the admin

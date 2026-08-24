@@ -12,7 +12,7 @@ import { Badge, Button, ErrorCard, LabelFrame, SkeletonLine, cx } from '../../..
 /**
  * Ingestion: trigger it, and see every run that has happened.
  *
- * The brief asks for ingestion to be observable — "what was indexed, when, and whether
+ * Ingestion has to be observable: what was indexed, when, and whether
  * it succeeded" — so the per-outcome counts are the point of this table, not decoration.
  * Skipped is as informative as indexed: it is the evidence that content hashing is doing
  * its job and a re-run is cheap.

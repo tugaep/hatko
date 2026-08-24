@@ -490,7 +490,7 @@ Label frame. `eyebrow` label, then the figure in `h1` Fraunces `.tabular`, then 
 
 ### Ingestion run row
 
-`mono-label` run ID, timestamp, duration, counts (`indexed / updated / skipped / failed`), status badge. Failed runs expand to a per-file error list. The count set is deliberate: it's what makes ingestion "observable" as the brief requires.
+`mono-label` run ID, timestamp, duration, counts (`indexed / updated / skipped / failed`), status badge. Failed runs expand to a per-file error list. The count set is deliberate: it is what makes an ingestion run observable rather than merely finished.
 
 ### Empty, loading, error
 

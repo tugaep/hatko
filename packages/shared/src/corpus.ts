@@ -67,7 +67,7 @@ export const documentDetailSchema = z.object({
 export type DocumentDetail = z.infer<typeof documentDetailSchema>;
 
 /**
- * One execution of the ingestion pipeline. The brief requires ingestion to be
+ * One execution of the ingestion pipeline. Ingestion has to be
  * "repeatable and observable"; this table is the observable part, and the
  * per-outcome counts are what the dashboard renders.
  */

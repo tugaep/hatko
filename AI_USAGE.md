@@ -3509,3 +3509,27 @@ never reached the remote, which I confirmed against the published tree rather th
 working agreement, the grading rubric and the build-order checklist were all public. That file
 is context for whoever was doing the exercise, not for someone reading the result, so it is
 untracked now and the two README links to it are gone.
+
+---
+
+## Step 33 — the feature list reorganised around the product
+
+The README grouped its features as "Required", "Bonus features, all six attempted" and
+"Added beyond the brief". Those are categories from an exercise, and they only mean anything
+to someone holding the exercise. A reader arriving at a public repository wants to know what
+the system does, not which column a capability was scored in.
+
+Reorganised by subject instead: retrieval and answers, ingestion, interfaces, MCP,
+authentication and accounts, operations, engineering. Nothing was dropped, and the split
+turned out to be more useful than the old one, because capabilities that had been separated
+purely by scoring category now sit next to the things they actually relate to. Watch-mode
+ingestion was a "bonus" and incremental detection was a "requirement"; they are the same
+subject and now appear together.
+
+**The framing ran deeper than that section.** Thirteen further places referred to the brief
+as an authority: `docs/deployment.md` explaining that the deployment should come down because
+it was asked for, `docs/design.md` justifying a count set as "observable as the brief
+requires", and eleven source comments deriving a design constraint from what was required
+rather than from what is true. Each was rewritten to state the reason directly. "The system
+has to run on a fresh machine" is the actual constraint; "the brief requires the system to
+run on a fresh machine" only tells a reader that someone was told to do it.

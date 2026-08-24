@@ -27,7 +27,7 @@ export const CATEGORY_MAX_CHARS = 64;
  * at ingest time — deliberately an open string rather than an enum.
  *
  * The sample corpus happens to use guides/changelogs/client-briefs/delivery-reports/
- * meeting-notes/postmortems, but the brief requires that pointing ingestion at the
+ * meeting-notes/postmortems, but pointing ingestion at a
  * real corpus be straightforward. Enumerating the sample's folder names here would
  * make every document in a differently-organised corpus fail validation.
  *
