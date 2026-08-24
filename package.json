@@ -18,6 +18,7 @@
     "format:check": "prettier --check .",
     "db:migrate": "npm run migrate --workspace @hatko/core",
     "db:reset": "npm run reset --workspace @hatko/core",
+    "corpus:wikipedia": "node scripts/wiki-corpus.mjs",
     "ingest": "npm run ingest --workspace @hatko/core --",
     "ingest:watch": "npm run ingest --workspace @hatko/core -- --watch",
     "eval": "npm run eval --workspace @hatko/core --",

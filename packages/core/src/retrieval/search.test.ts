@@ -40,10 +40,27 @@ await ingest(db, {
   embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
 });
 
+/**
+ * A second index over the fixture corpus in `../testing`, for the two tests that
+ * need a document declaring itself superseded. No real corpus can be relied on to
+ * contain one, and pointing these at the sample corpus is what broke them when it
+ * was replaced — for reasons unrelated to the code under test.
+ */
+const fixtureDb = openDb(path.join(dir, 'fixture.db'));
+await ingest(fixtureDb, {
+  trigger: 'cli',
+  corpusPath: path.join(import.meta.dirname, '..', 'testing', 'fixture-corpus'),
+  embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
+});
+
 test.after(() => {
   db.close();
+  fixtureDb.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+const searchFixture = (query: string, options = {}) =>
+  hybridSearch(fixtureDb, query, { embedder: stubEmbedder, ...options });
 
 const search = (query: string, options = {}) =>
   hybridSearch(db, query, { embedder: stubEmbedder, ...options });
@@ -64,14 +81,15 @@ test('hybrid fusion returns results and every score field is populated coherentl
 });
 
 test('the keyword arm finds the document the vector arm cannot', async () => {
-  // Sample question 3. With stub embeddings the vector arm is noise, so a hit
-  // here is entirely the lexical arm doing the work — which is the case for its
-  // existence: 78 near-identical delivery reports otherwise bury this document.
-  const results = await search('Why are sound assets built in a separate pass?', {
+  // With stub embeddings the vector arm is noise, so a hit here is entirely the
+  // lexical arm doing the work — which is the case for its existence. This corpus
+  // is one dense topic, so a dish name is what separates one document about
+  // Circassian food from the dozen others that share most of their vocabulary.
+  const results = await search('Which Circassian dish is served in a walnut sauce?', {
     arm: 'keyword',
   });
 
-  assert.equal(results[0]?.sourcePath, 'build-pipeline.md');
+  assert.equal(results[0]?.sourcePath, 'circassian-cuisine/circassian-chicken.md');
 });
 
 test('fusion keeps a passage found by only one arm', async () => {
@@ -96,19 +114,22 @@ test('a query with no usable keyword terms falls back to vector-only', async () 
 });
 
 test('deprecation metadata travels with the result', async () => {
-  const results = await search('lumen.track events v2', { arm: 'keyword', limit: 10 });
-  const v2 = results.find((r) => r.sourcePath === 'sdk-notes-v2.md');
+  const results = await searchFixture('widget init batches events', {
+    arm: 'keyword',
+    limit: 10,
+  });
+  const v1 = results.find((r) => r.sourcePath === 'guides/widget-api-v1.md');
 
-  assert.ok(v2, 'the deprecated document is retrievable — it is not filtered out');
-  assert.equal(v2.isDeprecated, true);
-  assert.equal(v2.supersededBy, 'Lumen SDK v3');
+  assert.ok(v1, 'the deprecated document is retrievable — it is not filtered out');
+  assert.equal(v1.isDeprecated, true);
+  assert.equal(v1.supersededBy, 'Widget API v2');
 });
 
 test('the category filter restricts results without emptying them', async () => {
-  const results = await search('delivery report QA findings', { category: 'delivery-reports' });
+  const results = await search('cheese and walnut dishes', { category: 'circassian-cuisine' });
 
   assert.ok(results.length > 0);
-  assert.ok(results.every((r) => r.category === 'delivery-reports'));
+  assert.ok(results.every((r) => r.category === 'circassian-cuisine'));
 });
 
 test('an unknown category returns nothing, without paying for an embedding', async () => {
@@ -223,21 +244,23 @@ const gradeBy = (grades: Record<string, number>) => async (_q: string, c: Search
   new Map(c.map((r) => [r.chunkId, grades[r.sourcePath] ?? RELEVANCE.UNRELATED]));
 
 test('reranking reorders by graded relevance, not by fusion rank', async () => {
-  const results = await search('How do I initialize the current Lumen SDK?', {
-    arm: 'keyword',
-    limit: 10,
+  // The failure this guards against: a deprecated document outranking the one
+  // that replaced it, because it happens to use the shared vocabulary more
+  // heavily. No lexical or vector tuning corrects that — only the grade does.
+  const query = 'How do I initialize the widget client?';
+  const results = await searchFixture(query, { arm: 'keyword', limit: 10 });
+
+  const first = results[0]?.sourcePath;
+  const second = results.find((r) => r.sourcePath !== first)?.sourcePath;
+  assert.ok(first && second, 'two distinct documents to reorder');
+
+  // Graded against the fused order deliberately: if rerank respected fusion rank
+  // at all, the document already at the top would stay there.
+  const reranked = await rerank(query, results, {
+    grader: gradeBy({ [second]: RELEVANCE.DIRECT, [first]: RELEVANCE.SAME_TOPIC }),
   });
 
-  // The measured failure: BM25 ranks the deprecated v2 above the current v3,
-  // because v2 mentions lumen.track more prominently than its replacement does.
-  const reranked = await rerank('How do I initialize the current Lumen SDK?', results, {
-    grader: gradeBy({
-      'sdk-notes-v3.md': RELEVANCE.DIRECT,
-      'sdk-notes-v2.md': RELEVANCE.SAME_TOPIC,
-    }),
-  });
-
-  assert.equal(reranked[0]?.sourcePath, 'sdk-notes-v3.md');
+  assert.equal(reranked[0]?.sourcePath, second);
   assert.equal(reranked[0]?.rerankScore, 1);
 });
 

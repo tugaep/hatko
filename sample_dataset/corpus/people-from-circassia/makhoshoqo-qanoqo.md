@@ -1,0 +1,23 @@
+# Makhoshoqo Qanoqo
+
+Makhoshoqo Qanoqo (Kabardian: Къанокъуэ Мэхъуэщокъуэ) or Ivan Maashuk Kanukov (Russian: Иван (Маашук) Кануков) was a 16th century Circassian prince and military leader of the Principality of Besleney. He converted to Eastern Orthodoxy and forged an alliance with Ivan the Terrible, claiming to represent the entirety of Circassia. However, after his death, the Besleney Principality was Islamised and shifted to a pro-Ottoman stance. According to some scholars, he was the brother of Mahidevran.
+
+## Biography
+
+### Early life
+Makhoshoqo Qanuqo was from the Qanuqo family, which ruled over the Besleney.
+
+### Alliance with Moscow
+As a successor state to the Golden Horde, the Crimean Khanate claimed sovereignty over the Circassia. This political relationship was characterized primarily by the obligation of Circassian princes to pay tribute to the Crimean Khan, predominantly in the form of slaves. This tribute was demanded upon the ascension of a new Khan to the throne or levied as fines for crimes committed by Circassian subjects. When Circassian leaders refused to deliver the required number of captives, the Crimean leadership launched punitive military expeditions to enforce payment.
+Seeking a powerful ally to defend themselves, several Circassian leaders turned their attention to the expanding Russian state, which had recently demonstrated its military might by conquering the Kazan Khanate. In 1552, Prince Makhoshoqo joined the first Circassian embassy to Moscow to seek protection from Ivan the Terrible against Crimean slave raids and protect Besleney independence against the Crimean Khanate. Despite his alliance with Moscow, Qanuqo's family maintained deep connections with the Ottoman Empire. While Makhoshoqo sought an alliance with Moscow, historical records suggest that another member of the Qanuqo family, possibly even his own son, was serving at the Ottoman court of Sultan Suleiman the Magnificent during the same period.
+In 1553, Makhoshoqo strengthened this alliance by participating in Russian military operations in Ukraine. By 1557, he returned to Moscow to swear allegiance to Russia and converted to Orthodoxy, taking the name Ivan. He subsequently facilitated diplomatic missions for his brothers, Kankilish in 1557 and Yelzheruqo in 1559. The delegation that went to Moscow on behalf of Prince Temruqo Idar of Kabarda was headed by Kankilish Qanoqo. During the Livonian War (1558), Prince Makhoshoqo and his Besleney cavalry served in the vanguard of the Russian army, and joined to the capture of approximately 20 fortresses.
+Despite these military successes on the Baltic front, the Circassian princes ultimately concluded that fighting in the Livonian War offered no strategic advantages or benefits for Circassian independence. Consequently, in February 1560, Makhoshoqo took the initiative to leave the Livonian theater. They departed Russia with the majority of their warriors and returned to their homeland in the Caucasus. Upon returning to Besleney, Makhoshoqo established a pro-Russian faction and allied with Ataman Dmytro Vyshnevetsky. In 1556, their forces captured the fortresses of Temryuk, Taman, and Islam-Kermen. By April 1559, Makhoshoqo led a successful military campaign against the strategic Ottoman stronghold of Azov. Despite these military victories, his conversion to Christianity and Russian alignment alienated his subjects and his local authority weakened. No traditional songs were composed in Makhoshoqo's honor by the people. In 1560, Ivan the Terrible sent Dmytro Vyshnevetsky to Circassia, accompanied by Makhoshoqo Qanoqo (Ivan Kanukov) and Zhaney prince Sibok Qanshaoqo (Vasily Kansaukov), and in the following years, Russian and Circassian troops together made several major raids on Crimea.
+
+### Death
+In 1560, Makhoshoqo was killed by Crimean Tatars in a skirmish near Caffa. After his death, Ivan the Terrible made significant donations to churches in his memory. Makhoshoqo's son Ramadan (Peter), continued his father's service in the Russian court as an Oprichniki. Peter's son Vasily also achieved prominence in the Russian administration and died childless in 1652, ending the Mashukov-Cherkassky branch of the House of Qanoqo.
+After the death of Makhoshoqo, the Besleney-Russian alliance was over and the principality shifted back towards the pro-Ottoman side.
+
+## References
+
+Slavic Encyclopedia. Kievan Rus — Muscovy: in 2 vols. Vol.1 A-M.
+Dzamikhov K. F. (2001). "Западно-адыгские Черкасские на российской службе (Western Adyghe Cherkasskys in Russian Service)". Nalchik. Archived from the original on 2018-01-23. {{cite book}}: Missing or empty |title= (help)CS1 maint: location missing publisher (link)

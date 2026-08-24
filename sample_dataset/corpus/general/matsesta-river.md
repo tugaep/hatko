@@ -1,0 +1,7 @@
+# Matsesta (river)
+
+The Matsesta (Russian: Мацеста, Adyghe: Мэсты Псы,МэшIост) is a river in Krasnodar Krai, Russia, that flows into the Black Sea.  The river rises in the southern ranges of the Alek mountains at an elevation of 900 metres (3,000 ft) above sea level and flows through the Khostinsky City District of the city of Sochi and into the Black Sea. It is 18 kilometres (11 mi) long, and has a drainage basin of 67.5 square kilometres (26.1 sq mi). The highest point in the river's basin is 1,003 metres (3,291 ft) above sea level.  The river has numerous tributaries, the largest of which are the Tsanyk and Zmeyka.
+The Matsesta is most famous for its sources of mineral water.  The name of the river translates in the Ubykh language and the Circassian (Adyghe) language as "fiery water", from the words mašč'o (fire) and psy (water).  This was because people that immersed themselves in the water of the Matsesta found that their skin became red.  There also exists a legend about a girl named Matsesta who invaded an underground kingdom in order to find the spirit of the mineral resources.  She killed the spirit at the price of her own life and then brought the healing sources of the river to its surface.
+The Matsesta was mentioned for the first time in history in 137 when the Roman military commander and historian Arrian described the coast of the Black Sea and the river Matsesta in a letter to the emperor Hadrian.
+
+## References

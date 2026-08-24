@@ -1,0 +1,34 @@
+# Kabardian Civil War (1601)
+
+The Kabardian Civil War (1601), or the Political Crisis in Kabardia was a pivotal internal conflict in the Kabardia fought between the Qeytuqo dynasty and the Russian-aligned Yidarey principality, Triggered by a struggle for political dominance over the Princedom. the war resulted in the collapse of the Yidarey Principality, the assassination of pro-Russian princes, and a significant realignment of power in the region that favored factions resistant to the Tsardom of Russia.
+
+## Background
+
+### Prelude
+After the death of Qambolet Idar, Kabardia entered a period of internal political crisis marked by a rivalry between the Qeytuqo and Talostaney factions for the grand princely title. The conflict was shaped by the intervention of the Russian government, encouraged by the son of Temruqo the Brave, Mamstruk Temryukovich, who was the head of the Idarey principality. Through this intervention, The Qeytuqo dynasty, along with the Idarey princes, formed a coalition against Talostaney, led by Sholokh Tepsaruqo. The ensuing conflict resulted in the military defeat of the Talostaney faction with the support of Russian forces.
+In its aftermath, Jansokh Qeytuqo was installed as the Grand Prince of Kabardia. His elevation was largely facilitated by the political strength and external connections of Mamstruk Temryukovich. Although the outcome consolidated the position of the Idarey-aligned factions and weakened the military capacity of the Talostaney, it also placed Jansokh in a politically dependent position, reliant on the support of Moscow, which had backed his claim to power. Jansokh's authority was weak, as he was not accepted as the Grand Prince within Kabardia and was only recognised by Russia.
+
+## Assassination and campaign
+Mamstruk was chosen by Russia as the Grand Prince of Kabardia, but could not be elected within Kabardia, as "Genealogy of Kabardian princes and murzas of the 17th century" by A.I. Lobanov-Rostovsky states that;
+
+"Mastryuk-prince, the sovereign (Russia) granted him the Kabardian principality, but in Kabarda he was not given a principality".
+
+As, at the time, Jansokh Qeytuqo was still alive and ruling Kabardia, thus Mamstruk could not claim the title of Grand Prince.
+During this period, leading members of the Idarey dynasty, including Domanuk and Mamstruk Temryukovich Cherkassky, were murdered and taverns of the Principality of Idarey within Kabardia was captured by the Qeytuqo family, leading to the disintegration of the Idarey Principality. According to contemporary accounts, they had been invited to a feast, where they were held for several days and then killed. This incident was not a sudden act, but a planned political move, meant to remove rivals and take control of their followers and lands. The attack is linked to Qaziy Pshiapshoqo of the Qeytuqo family.
+A report sent in October 1601 by Russian officials on the Terek River describes the situation in Kabarda at the time. It shows that the region was politically divided and that many local princes were not loyal to the Russian state. The report confirms the killing of Idarey leaders and mentions changing alliances between different factions, including the exchange of hostages to secure agreements. These events happened during a time of change in Russia after the death of Feodor Ioannovich and the rule of Boris Godunov. During this period, people connected to the previous ruling family lost influence. One of them, Boris Kambulatovich Cherkassky (previously Qarashey, the son of Qambolet Idar), was arrested, exiled, and died in 1601. This weakened the position of the Idareys, who had strong ties with Russia.
+After the killings, a new balance of power appeared in Kabardia, sometimes called "Kaziev Kabarda," led by Qaziy Pshiapshoqo and the Qeytuqey's. This period lasted for about three years and weakened the Idarey family. Some members of the Idarey dynasty migrated closer to the Terek River under Russian protection, where a new center of power began to form. At the same time, the Qeytuqeys and Talostaneys formed an agreement, strengthened by exchanging hostages. This alliance was against both the remaining Idareys and Russian influence in the region.
+
+## Aftermath
+The return of Qaziy Pshiapshoqo to Kabardia, who migrated to Besleney around 1601, fearing revenge from the Yidarey dynasty, apparently occurred around 1604. During these 3 years the Yidarey principality started reappearing in Kabardia as an appanage, but for a very long time its owners remained in the shadow of Sunchaley Kanklychev, who relied directly on the military resources of the Terek city and the Russian state. A partial restoration of the Yidarey's influence in Kabardia occurred only after the Romanovs came to power in the Russian Tsardom. The cousin of Mikhail Fedorovich, Ivan Borisovich Cherkassky, son of Boris (Qarashey) Kambulatovich, and another representative of the Yidarey family, Dmitry (Qanshau) Mamstryukovich, son of Ivan the Terrible's brother-in-law, who was killed in Kabardia, rose to the forefront of the ruling elite of the Russian state. The strengthening of the Yidareys' position in Russia under the government of Mikhail Fedorovich and his father, Filaret, correlates with the recent major successes of this princely house in Kabardia. The secondary rise of the Yidar dynasty occurred not so much due to the strengthening of their resource base and the demographic parameters of the Yidarey, but rather due to favorable domestic political circumstances.
+Sholokh Tepsaruqo, who changed his political position against the Qeytuqeys, used the already existing blood feud and the unethical assassination executed by Qaziy Pshiapshoqo as an excuse for the civil war that broke out in November 1615, where Qazy Pshiapsoqo, along with many of his relatives from the Qeytuqo family, died in the war against the Talostaney principality led by Sholokh and his son Karashay supported by the Tarki Shamkhalate and the Nogai Horde.
+
+## See also
+Kabardian Civil War (1589)
+Kabardian Civil War (1615)
+
+## References
+
+## Sources
+Kozhev, Z. A. (2021). "Feudal Wars of the Late XVI – Beginning XVII Century and the Rise of Sholokh Tepsarukov". Scientific News (Nauchnye Izvestiya) (in Russian and English) (25). doi:10.34905/PC.2021.24.1.012 (inactive 11 May 2026).{{cite journal}}:  CS1 maint: DOI inactive as of May 2026 (link)
+Kozhev, Zaurbek A. (2024). "Secession of Kaziyev's Kabarda in 1601 and 1641 Years: Stages of the "Dynasty Change"". Caucasology (in Russian and English). 2024 (4): 27–39. doi:10.31143/2542-212X-2024-4-27-39. Retrieved 2026-04-27.
+Kozhev, Zaurbek A. (2023). "Internal Political Crisis in the Kabarda in 1589: Background, Historical Context, Implications". Электронный Журнал «Кавказология» / Caucasology (in Russian) (4): 40–54. doi:10.31143/2542-212X-2023-4-40-54.

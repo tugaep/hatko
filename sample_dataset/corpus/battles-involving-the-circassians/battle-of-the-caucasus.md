@@ -1,0 +1,113 @@
+# Battle of the Caucasus
+
+The Battle of the Caucasus was a series of Axis and Soviet operations in the Caucasus as part of the Eastern Front of World War II. On 25 July 1942, German troops captured Rostov-on-Don, opening the Caucasus region of the southern Soviet Union to the Germans and threatening the oil fields beyond at Maykop, Grozny, and ultimately Baku. Two days prior, Adolf Hitler had issued a directive to launch an operation into the Caucasus named Operation Edelweiß. German units would reach their high water mark in the Caucasus in early November 1942, getting as far as the town of Alagir and city of Ordzhonikidze, some 610 km from their starting positions. Axis forces were compelled to withdraw from the area later that winter as Operation Little Saturn threatened to cut them off.
+
+## Order of battle
+
+### Red Army
+North Caucasian Front – Marshal Semyon Budyonny (until September 1942)
+Transcaucasian Front – General of the Army Ivan Tyulenev
+Black Sea Fleet – Vice Admiral Filipp Oktyabrsky
+Azov Sea Flotilla – Rear Admiral Sergey Gorshkov
+
+### German Army
+Army Group A – Generalfeldmarschall Wilhelm List
+
+1st Panzer Army – General Ewald von Kleist (until 21 November 1942)
+17th Army – Generaloberst Richard Ruoff
+3rd Romanian Army – General Petre Dumitrescu
+
+## German operations
+
+Operation Edelweiß, named after the mountain flower, was a German plan to gain control over the Caucasus and capture the oil fields of Baku on the Eastern Front of World War II. The operation was authorised by Adolf Hitler on 23 July 1942. The main forces included Army Group A commanded by Wilhelm List, 1st Panzer Army (Ewald von Kleist), 4th Panzer Army (Colonel-General Hermann Hoth), 17th Army (Colonel-General Richard Ruoff), part of the Luftflotte 4 (Generalfeldmarschall Wolfram Freiherr von Richthofen) and the 3rd Romanian Army (General Petre Dumitrescu). Army Group A was supported to the east by Army Group B commanded by Maximilian von Weichs and by the remaining 4th Air Fleet aircraft (1,000 aircraft in all). The land forces, accompanied by 15,000 oil industry workers, included 167,000 troopers, 4,540 guns and 1,130 tanks.
+
+### Preparations
+Several oil firms such as "German Oil on the Caucasus", "Ost-Öl" and "Karpaten-Öl" had been established in Germany. They were awarded an exclusive 99-year lease to exploit the Caucasian oil fields. For this purpose, a large number of pipes—which later proved useful to Soviet oil industry workers—were delivered. A special economic inspection "A", headed by Lieutenant-General Nidenfuhr was created. Bombing the oil fields was forbidden. To defend them from destruction by Soviet units under the command of Nikolai Baibakov and Semyon Budyonny, an SS guard regiment and a Cossack regiment were formed. The head of the Abwehr developed Operation Schamil, which called for landing in the Grozny, Malgobek and Maikop regions. They would be supported by the local fifth column.
+
+### Events
+ 
+
+After neutralizing the Soviet counter-attack in the Izyum-Barvenkovsk direction the German Army Group A rapidly attacked towards the Caucasus. When Rostov-on-Don, nicknamed "The Gates of Caucasus," was reached on 23 July 1942 (falling on the 27th), the tank units of Ewald von Kleist moved towards the Caucasian Mountain Range. The "Edelweiß" division commander, Hubert Lanz, decided to advance through the gorges of rivers of the Kuban River basin and by crossing the Marukhskiy Pass (Maly Zelenchuk River), Teberda, Uchkulan reach the Klukhorskiy Pass, and simultaneously through the Khotyu-tau Pass block the upper reaches of the Baksan River and the Donguz-Orun and Becho passes.
+Concurrently with the outflanking maneuvers, the Caucasian Mountain Range was supposed to be crossed through such passes as Sancharo, Klukhorskiy and Marukhskiy to reach Kutaisi, Zugdidi, Sukhumi and the Soviet Georgian capital city of Tbilisi. The units of the 4th German Mountain Division, manned with Tyroleans, were active in this thrust. They succeeded in advancing 30 km toward Sukhumi. To attack from the Kuban region, capture the passes that led to Elbrus, and cover the "Edelweiß" flank, a vanguard detachment of 150 men commanded by Captain (Hauptmann) Heinz Groth, was formed. From the Old Karachay through the Khurzuk aul and the Ullu-kam Gorge the detachment reached the Khotyu-tau Pass, which had not been defended by the Soviet troops. Khotyu-tau gained a new name – "The Pass of General Konrad".
+The starting point of the operation on the Krasnodar-Pyatigorsk-Maykop line was reached on 10 August 1942. On 16 August, the battalion commanded by von Hirschfeld made a feint and reached the Kadar Gorge. On 21 August, troops from the 1st Mountain Division planted the flag of Nazi Germany on the summit of Mount Elbrus, the highest peak in both the Caucasus and Europe. On 9 September, Hitler sacked List from command of Army Group A and sent him into retirement, for having blundered the capture of Grozny by "ridiculous" diversions of troops. Hitler then took personal charge of Army Group A, a highly impractical arrangement. 
+By 1 November 1942, the German 23rd Panzer Division had reached Alagir and the 13th Panzer Division had reached Ordzhonikidze, approximately 610 km from their starting positions, the high water mark of the Axis invasion of the Caucasus. The 13th Panzer Division was encircled by Red Army counterattacks shortly after however, but was able to break out with assistance from SS Division Wiking. These events led Ewald von Kleist to halt further offensive operations. On 22 November, Hitler gave command of Army Group A to von Kleist, and Eberhard von Mackensen replaced von Kleist as commander of 1st Panzer Army. 
+
+3 August 1942 – German Army takes Stavropol
+10 August 1942 – German Army takes Maykop
+12 August 1942 – German Army takes Krasnodar
+23 August 1942 – German Army takes Mozdok
+11 September 1942 – German Army and Romanian Army take Novorossiysk
+1 November 1942 – German Army reaches the town of Alagir and city of Ordzhonikidze, North Ossetia.
+
+## Soviet operations
+
+### 1941
+There were no military operations in the region in 1941, but the region was affected by warfare elsewhere in the Soviet Union.
+In his memoirs, Soviet Transcaucasian Front commander Ivan Tiulenev recounts how thousands of civilians attempted to flee from Ukraine to the comparatively safe Caspian ports, such as Makhachkala and Baku. The Caucasus area became a new area of industry when 226 factories were evacuated there during the industrial evacuations undertaken by the Soviet Union in 1941. After the Grozny to Kiev line was captured during Axis advances, a new link between Moscow and Transcaucasia was established with the construction of the new railway line running from Baku to Orsk (via Astrakhan), bypassing the front line at Grozny, while a shipping line was maintained over the Caspian Sea through the town of Krasnovodsk in Turkmenistan.
+
+### 1942
+In 1942, the German Army launched Operation Edelweiß which was aimed at advancing to the oil fields of Azerbaijan. The German offensive slowed as it entered the mountains in the southern Caucasus and did not reach all of its 1942 objectives. After the Soviet breakthroughs in the region around Stalingrad, the German forces in the Caucasus were put on the defensive.
+Soviet military operations included
+
+Tikhoretsk-Stavropol Defensive Operation (25 July – 5 August 1942)
+Armavir-Maikop Defensive Operation (6–17 August 1942)
+Novorossiysk Defensive Operation (19 August – 26 September 1942)
+Mozdok-Malgobek Defensive Operation (1–28 September 1942)
+Tuapse Defensive Operation (25 September – 20 December 1942)
+Nalchik-Ordzhonikidze Defensive Operation (25 October – 12 November 1942)
+
+### 1943
+
+In early 1943, the Germans began to withdraw and consolidate their positions in the region due to setbacks elsewhere. They established a defensive line (Kuban bridgehead) in the Taman Peninsula from which they hoped to eventually launch new operations in the Caucasus. The fighting remained reasonably static until September 1943, when the Germans ordered fresh withdrawals which effectively ended the period of fighting in the Caucasus.
+Soviet Operations in 1943 consisted of the following.
+North Caucasus Strategic Offensive (Operation Don)
+
+Salsk-Rostov Offensive (1 January – 4 February 1943)
+Mozdok-Stavropol Offensive (1 January – 24 January 1943)
+Novorossiysk-Maykop Offensive (11 January – 4 February 1943)
+Tikhoretsk-Eisk Offensive (24 January – 4 February 1943)
+Rostov Offensive (5–18 February 1943)
+Krasnodar Offensive (9 February – 24 May 1943)
+Novorossiysk-Taman Operation (10 September – 9 October 1943)
+The key military base of Novorossiysk was retaken in September, 1943.
+
+3 January 1943 – Red Army retakes Mozdok
+21 January 1943 – Red Army retakes Stavropol
+23 January 1943 – Red Army retakes Armavir
+29 January 1943 – Red Army retakes Maykop
+4 February 1943 – Soviet marines repel a German attempt to land at Malaya Zemlya, an island fort that controlled access to the port at Novorossiysk. Soviets hold this island until relieved in September, denying the use of the port to the Germans.
+12 February 1943 – Red Army retakes Krasnodar
+16 February 1943 – Red Army retakes Rostov
+9 September 1943 – the Germans begin to retreat from the Blue Line defensive positions
+16 September 1943 – Red Army occupies Novorossiysk, relieving the sailors and marines at Malaya Zemlya.
+9 October 1943 – Red Army controls the whole of the Taman Peninsula
+
+### 1944
+During the Winter Spring Campaign of 1944 (1 January – 31 May), the Soviet army was able to launch an invasion of the Crimea from the Caucasus, which was fully recaptured by 12 May 1944.
+Operations included:
+
+Kerch-Eltigen Amphibious Offensive Operation (31 October 1943 – 11 December 1944)
+Perekop–Sevastopol Offensive (8 April – 12 May 1944)
+Kerch–Sevastopol Offensive (11 April – 12 May 1944)
+
+## Anti-Soviet insurgency (1940–1944)
+1940–1944 insurgency in Chechnya
+
+## See also
+Army Group A action – Caucasus campaign
+Baku Air Defence Army
+
+## References
+Alexander Werth, The Battle of Stalingrad, Chapter 7, "Caucasus, there and back", pp. 648–651
+Ivan Tyulenev, "Cherez Tri Voyny" (Through Three Wars), Moscow, 1960, p. 176.
+
+## Bibliography
+(in Russian) Иван Тюленев. Крах операции "Эдельвейс". Орджоникидзе, 1975.
+(in Russian) К.-М. Алиев. В зоне "Эдельвейса". М.-Ставрополь, 2005.
+Javrishvili K. Battle of Caucasus: Case for Georgian Alpinists, Translated by Michael P. Willis, 2017.
+
+## External links
+(in Russian) Ясен Дьяченко. История альпинизма. Война на Кавказе
+(in Russian) Великая Война – Кавказ
+(in Russian) Операция "Эдельвейс". Последняя тайна
+(in Russian) Товарищи под знаком Эдельвейса / Kameraden unterm Edelweiß

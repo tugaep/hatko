@@ -1,0 +1,12 @@
+# Murayj al-Durr
+
+Murayj al-Durr (Arabic: مرج الدر; Adyghe: Хъосай Къуадж [χʷasaːj qʷaːd͡ʒ] pronounced Merzhidor, also spelled Mraij ad-Durr, Murij al-Durr) is a village in northern Syria, administratively part of the Homs Governorate, located northeast of Homs and southeast of Hama, on the eastern bank of the Orontes River. Nearby localities include the district center al-Rastan to the west, Ghor al-Assi to the north (opposite side of the Orontes), Izz al-Din to the west and al-Zaafaraniyah to the south. According to the Syria Central Bureau of Statistics (CBS), Murayj al-Durr had a population of 295 in the 2004 census, making it one of the smallest localities in the al-Rastan nahiyah ("subdistrict"). Most of its inhabitants are Circassians.
+
+## History
+The name of the town translates as "Little Pearl Valley." It was settled by Turkmens from the Jaliqliyya tribe in the late 17th century. Prior to the settlement of the Jaliqliyya, the village was likely abandoned as a result of unrest among the rural regional tribes. According to author and expert in Ottoman history, Dick Douwes, Murayj al-Durr was situated "in the highly valued periphery of the Syrian Desert." The founding of the village marked the transition from a nomadic to a sedentary lifestyle for members of the tribe who also settled around a dozen of other villages in the vicinity, including Ghor al-Assi, at that time. Murayj al-Durr's inhabitants relied on agriculture and animal husbandry for income. They paid a smaller amount of taxes to the state authorities in return for their military service, particularly as a buffer between Hama and the Bedouin tribes who dominated the Syrian Desert to the east.
+In 1838 Biblical scholars Edward Robinson and Eli Smith classified the village as Muslim. As more villages were founded east of Murayj al-Durr, its inhabitants began to lose their important status in the eyes of the provincial authorities. The village became dependent on the authorities in Hama and Bedouin tribes for protection from attack or plunder. Murayj al-Durr grew increasingly poor during the reign of Faraj Agha, the governor of Hama in the mid-19th century. By then its inhabitants were forced to pay the equivalent of the taxes that villages without special status paid.
+During the years following Faraj Agha's reign, Murayj al-Durr's Turkmen residents gradually left the village while Circassians from the Caucasus region settled in their place. Today most of the village's inhabitants are Circassians from the Shapsugh tribe.
+
+## References
+
+## Bibliography

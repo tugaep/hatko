@@ -252,12 +252,33 @@ function normaliseBm25(rows: FusedRow[]): Map<number, number> {
  * gaps, and compressing 142 positions into 10 leaves every candidate within a factor
  * of two of every other, so near-ties decide the ordering instead of relevance.
  *
- * The ceiling is a full scan of the collection. At 142 chunks that is about a
- * millisecond, the same trade already accepted in having no ANN index. Two orders of
- * magnitude larger, the move is a vec0 partition key on category so the filter goes
- * into the scan itself — that needs a migration and a re-insert of every vector,
- * which is why it is not here yet.
+ * Those figures were measured on a 142-chunk corpus. The corpus is now 7539 chunks,
+ * and "every chunk" stopped being available: sqlite-vec caps `k` at 4096, so the pool
+ * is capped there too and the guarantee is weaker than the paragraph above describes.
+ *
+ * What is still guaranteed: any in-category passage inside the top 4096 by vector
+ * distance, plus everything the keyword arm finds — the FTS side is not capped, so a
+ * passage that matches the query lexically is never lost. What can now be missed: a
+ * passage that is both outside the vector top 4096 and not a lexical match, which on
+ * a vector-only query (one with no usable keyword terms) is a real gap rather than a
+ * theoretical one.
+ *
+ * Closing it properly means a vec0 partition key on category, so the filter goes into
+ * the scan instead of being applied after it. That needs a migration and a re-insert
+ * of every vector, and it renumbers ranks within the partition — which is the change
+ * measured at MRR 0.431 above. So it is not a drop-in fix, and it is not here yet.
  */
+/**
+ * sqlite-vec refuses a KNN query asking for more than this many neighbours. The
+ * library's limit, not a tuning choice.
+ *
+ * Scoring every row with `vec_distance_cosine` instead was tried and rejected on
+ * measurement: it produces exactly the same ranking, and took 1870ms against
+ * 18ms for `k = 4096` over the same 7539 chunks. A facet nobody waits two seconds
+ * for is not a working facet.
+ */
+const MAX_KNN_K = 4096;
+
 function poolForCategory(db: Db, category: string): number {
   const inCategory = Number(
     (
@@ -272,7 +293,9 @@ function poolForCategory(db: Db, category: string): number {
   );
 
   if (inCategory === 0) return 0;
-  return Number((db.prepare('SELECT count(*) AS n FROM chunks').get() as { n: number }).n);
+
+  const total = Number((db.prepare('SELECT count(*) AS n FROM chunks').get() as { n: number }).n);
+  return Math.min(total, MAX_KNN_K);
 }
 
 function toSearchResult(row: FusedRow, keywordScores: Map<number, number>): SearchResult {

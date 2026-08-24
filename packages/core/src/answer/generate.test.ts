@@ -43,8 +43,21 @@ await ingest(db, {
   embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
 });
 
+/**
+ * A second index over the fixture corpus in `../testing`, for the two deprecation
+ * tests below. They need a document that declares itself superseded, which no real
+ * corpus can be relied on to contain.
+ */
+const fixtureDb = openDb(path.join(dir, 'fixture.db'));
+await ingest(fixtureDb, {
+  trigger: 'cli',
+  corpusPath: path.join(import.meta.dirname, '..', 'testing', 'fixture-corpus'),
+  embedder: (texts) => Promise.all(texts.map(stubEmbedder)),
+});
+
 test.after(() => {
   db.close();
+  fixtureDb.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -221,7 +234,7 @@ test('an unreachable grader does not cause a false abstention', async () => {
 
 test('deprecation reaches the prompt so the answer can flag it', async () => {
   let seen = '';
-  await answerQuestion(db, 'How do I initialize the Lumen SDK?', {
+  await answerQuestion(fixtureDb, 'How do I initialize the widget client?', {
     arm: 'keyword',
     limit: 10,
     grader: allRelevant,
@@ -229,27 +242,30 @@ test('deprecation reaches the prompt so the answer can flag it', async () => {
       seen = passages
         .map((p) => `${p.sourcePath}:${p.isDeprecated}:${p.supersededBy ?? ''}`)
         .join('|');
-      return 'Call LumenSDK.init [1].';
+      return 'Call widget.init [1].';
     },
   });
 
-  assert.match(seen, /sdk-notes-v2\.md:true:Lumen SDK v3/, 'the model is told v2 is superseded');
+  assert.match(seen, /widget-api-v1\.md:true:Widget API v2/, 'the model is told v1 is superseded');
 });
 
 test('a deprecated source produces a notice regardless of what the model wrote', async () => {
-  // The model was asked three separate ways to mention that v2 is superseded and
-  // declined every time, answering correctly from v3 while omitting the fact. The
-  // notice is therefore computed from ingest metadata, not parsed out of prose.
-  const response = await answerQuestion(db, 'How do I initialize the Lumen SDK?', {
+  // The model was asked three separate ways to mention that the older document is
+  // superseded and declined every time, answering correctly from the current one
+  // while omitting the fact. The notice is therefore computed from ingest
+  // metadata, not parsed out of prose.
+  const response = await answerQuestion(fixtureDb, 'How do I initialize the widget client?', {
     arm: 'keyword',
     limit: 10,
     grader: allRelevant,
-    generator: async () => 'Call LumenSDK.init(config) [1].',
+    generator: async () => 'Call widget.init(config) [1].',
   });
 
-  const notice = response.deprecationNotices.find((n) => n.sourcePath === 'sdk-notes-v2.md');
+  const notice = response.deprecationNotices.find(
+    (n) => n.sourcePath === 'guides/widget-api-v1.md',
+  );
   assert.ok(notice, 'the superseded document is reported');
-  assert.equal(notice.supersededBy, 'Lumen SDK v3');
+  assert.equal(notice.supersededBy, 'Widget API v2');
 });
 
 // --- streaming ---------------------------------------------------------------

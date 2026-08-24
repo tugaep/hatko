@@ -3212,3 +3212,81 @@ undo it. A live `search_corpus` call is the other gap: it needs a bearer token, 
 not handle, so what is proven is the server's half, the 401 challenge with
 `WWW-Authenticate`, the two discovery documents, and the probe reporting the endpoint as
 answering.
+
+---
+
+## Step 27 — replacing the corpus, and what the replacement broke
+
+The operator asked for a Wikipedia corpus in place of the sample documents, then for it
+to be as large as the subject allows. Both were their decision; what follows is what the
+decision cost and how each cost was found.
+
+**There is no Wikipedia-as-markdown dataset.** I searched before building. Everything
+published is JSON, parquet or XML — `wikimedia/wikipedia`, `wikimedia/structured-wikipedia`,
+`rag-mini-wikipedia`, the raw dumps. Downloading a multi-gigabyte dump to reconstruct a
+thousand small files is the expensive path, and Wikipedia's own API already returns
+plain-text extracts whose `== Section ==` headings are one substitution from markdown, which
+is the only markup the heading-based chunker needs. So `scripts/wiki-corpus.mjs` is stdlib
+`fetch` and no dependency.
+
+**Two API mistakes, both caught by running it rather than reading it.** The first request
+omitted `action=query` and Wikipedia returned an HTML error page, which failed as a JSON
+parse error rather than as anything informative. The second was subtler and would have
+passed review: full-text extracts return _one_ page per request however high `exlimit` is
+set, and the API continues with `excontinue` rather than the generator's `gcmcontinue`. My
+loop only looked for the latter, so it collected roughly one article per category and
+reported success — 23 files from categories I had already measured as holding several
+hundred. The number being obviously too small is what exposed it. A loop that had stopped at
+a plausible count would have shipped.
+
+**Rate limiting, which only appears at scale.** At 127 files Wikipedia returned 429 and the
+script died, losing the run. It now honours `Retry-After`, backs off geometrically, and skips
+what is already on disk, so an interruption costs one request instead of the whole fetch.
+
+**A misfiled quarter of the corpus, found by looking at the output.** The category walk
+produced 68 folders, and the largest — 282 articles — was
+`articles-containing-adyghe-language-text`, a Wikipedia maintenance category rather than a
+subject. Nothing failed; the corpus was simply wrong in a way only reading the directory
+listing shows. Tracking categories are now walked last, so an article carries one only if no
+topical category holds it, and those go to `general`.
+
+**Ten tests broke, and the reason was a design fault rather than the corpus.** Every one
+asserted ingestion or retrieval _mechanics_ — that a deprecation flag survives into the
+answer prompt, that categories come from directory names, that a delete reaches all three
+stores — while depending on the filenames of whichever corpus happened to be installed. Two
+of them needed a document declaring itself superseded, which no encyclopaedia article does.
+The fix separates the two kinds: mechanics tests now run against a four-document fixture
+corpus in `packages/core/src/testing`, and only the tests where the corpus genuinely is the
+subject still use the real one.
+
+**A check that quietly stopped meaning anything.** The re-index test asserted that the word
+"pinewood" appeared in exactly one document. True at 142 files. At 1083 it appears in two, so
+the test failed — but the failure was luck. Had the second occurrence not existed, the test
+would have kept passing while no longer testing what its name claims. It is now anchored to
+the document's own rowids and to a word invented for the test.
+
+**A real defect the size increase exposed.** `poolForCategory` deliberately widens the
+candidate pool to every chunk so that a post-fusion category filter cannot truncate, and
+sqlite-vec refuses a KNN `k` above 4096. At 7539 chunks, category-filtered search threw.
+Three options, measured rather than argued: `k = 4096` at 18 ms, a rowid pre-filter at 5 ms
+but renumbering ranks within the category — which that file records as measuring MRR 0.431
+against 0.667 — and scoring every row with `vec_distance_cosine`, which produces identical
+ranking at 1870 ms. The scan was the tempting answer and the timing killed it. The pool is
+capped, category search went from 4096 ms to 200 ms, and the doc block now states the weaker
+guarantee instead of the one it used to give.
+
+**The 3D view works and should not be left as it is.** After ingest it renders all 7539
+points correctly, and its variance caption adapts itself honestly — 6.9 / 5.6 / 3.8 per cent,
+16 between them, against 18.2 / 14.5 / 8.6 on the old corpus. But `getEmbeddingMap` takes
+32.9 s and peaks at 696 MB, and the route computes it synchronously, so the whole API stalls:
+`/health` measured 47.5 s during one request, and an unauthenticated 401 took 2.4 s. The
+code predicted this about itself — a `ponytail:` comment in `embedding-map.ts` naming a few
+thousand chunks as the point where it needs a cache, and a comment in `admin.ts` justifying
+no cache with "one exhaustive pass over 142 vectors". Both were true when written. Left as
+found, and reported, because the fix is the operator's call.
+
+**Not verified.** Retrieval quality on this corpus. `npm run eval` with rerank and answers
+costs real provider calls, so the only recall figures I have are from the keyword arm with
+stub embeddings — all nine answerable questions inside the top eight, which is a floor and
+not a score. The README's corpus figures are stale by roughly eightfold, and the chat page
+still offers example questions naming documents that no longer exist.

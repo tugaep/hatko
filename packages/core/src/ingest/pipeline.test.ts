@@ -54,6 +54,15 @@ function tempDb() {
   };
 }
 
+/**
+ * A corpus this file owns, for the tests that assert ingestion *mechanics* rather
+ * than anything about the installed corpus: a document that declares itself
+ * superseded, and a file at the root with no directory to take a category from.
+ * Pointing those at the real corpus coupled them to whichever corpus happened to
+ * be installed, and they broke when it was replaced.
+ */
+const FIXTURE_CORPUS = path.join(import.meta.dirname, '..', 'testing', 'fixture-corpus');
+
 /** A throwaway copy of the corpus, so tests that delete files leave the real one alone. */
 function tempCorpus() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hatko-corpus-'));
@@ -122,11 +131,24 @@ test('a changed file is re-indexed and its stale passages replaced', async () =>
   using corpus = tempCorpus();
   await run(ctx.db, corpus.path);
 
-  const target = path.join(corpus.path, 'build-pipeline.md');
+  // The document is identified by its own chunk rows rather than by vocabulary.
+  // Picking a word that appears in exactly one document worked on a small corpus
+  // and quietly stopped being true when the corpus grew, so the assertions below
+  // are anchored to rowids and to a term invented for this test.
+  const source = 'circassian-cuisine/circassian-smoked-cheese.md';
+  const before = ctx.db
+    .prepare(
+      `SELECT c.id FROM chunks c
+         JOIN documents d ON d.id = c.document_id
+        WHERE d.source_path = ?`,
+    )
+    .all(source) as Array<{ id: number }>;
+  assert.ok(before.length > 0, 'fixture document was indexed to begin with');
+
   fs.writeFileSync(
-    target,
-    '# Build Pipeline\n\nThe pipeline now has five stages: bundle, ' +
-      'compress, inline, verify, notarise.\n',
+    path.join(corpus.path, source),
+    '# Circassian smoked cheese\n\nThe cheese is now cured in brine and ' +
+      'labelled qorthaven, a word that appears nowhere else.\n',
   );
 
   const second = await run(ctx.db, corpus.path);
@@ -135,14 +157,18 @@ test('a changed file is re-indexed and its stale passages replaced', async () =>
   assert.equal(second.docsSkipped, second.docsTotal - 1);
 
   const hits = ctx.db
-    .prepare("SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH 'notarise'")
+    .prepare("SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH 'qorthaven'")
     .get() as { n: number };
   assert.equal(hits.n, 1, 'the new text is searchable');
 
+  // The old passages are gone from the keyword index, not merely outranked. A
+  // replaced document that leaves its previous rows behind answers questions
+  // from text that is no longer in the corpus.
+  const placeholders = before.map(() => '?').join(',');
   const stale = ctx.db
-    .prepare("SELECT count(*) n FROM chunks_fts WHERE chunks_fts MATCH 'nondeterministic'")
-    .get() as { n: number };
-  assert.equal(stale.n, 0, 'the replaced text is gone from the index');
+    .prepare(`SELECT count(*) n FROM chunks_fts WHERE rowid IN (${placeholders})`)
+    .get(...before.map((r) => Number(r.id))) as { n: number };
+  assert.equal(stale.n, 0, 'the replaced passages are gone from the index');
 });
 
 test('a file deleted from the corpus is pruned from all three stores', async () => {
@@ -151,19 +177,19 @@ test('a file deleted from the corpus is pruned from all three stores', async () 
   const first = await run(ctx.db, corpus.path);
 
   // Track the document's own rows rather than asserting on vocabulary: terms in
-  // this corpus repeat heavily across documents ("glyph" appears in 14 of them),
-  // so a keyword-based check would pass or fail for the wrong reason.
+  // this corpus repeat heavily across documents, so a keyword-based check would
+  // pass or fail for the wrong reason.
   const doomed = ctx.db
     .prepare(
       `SELECT c.id FROM chunks c
          JOIN documents d ON d.id = c.document_id
-        WHERE d.source_path = 'localization-guide.md'`,
+        WHERE d.source_path = 'circassian-cuisine/lepsi-dish.md'`,
     )
     .all() as Array<{ id: number }>;
   assert.ok(doomed.length > 0, 'fixture document was indexed to begin with');
   const doomedIds = doomed.map((row) => Number(row.id));
 
-  fs.rmSync(path.join(corpus.path, 'localization-guide.md'));
+  fs.rmSync(path.join(corpus.path, 'circassian-cuisine', 'lepsi-dish.md'));
   const second = await run(ctx.db, corpus.path);
 
   assert.equal(second.docsDeleted, 1);
@@ -188,32 +214,38 @@ test('a file deleted from the corpus is pruned from all three stores', async () 
   assert.equal(vectors.n, chunks.n, 'vectors stay in step with chunks after a prune');
 });
 
-test('deprecation is detected in the right direction across the real SDK notes', async () => {
+test('deprecation is detected in the right direction, not merely detected', async () => {
   using ctx = tempDb();
-  await run(ctx.db, config.corpusPath);
+  await run(ctx.db, FIXTURE_CORPUS);
 
   const documents = listDocuments(ctx.db);
-  const v2 = documents.find((d) => d.sourcePath.endsWith('sdk-notes-v2.md'));
-  const v3 = documents.find((d) => d.sourcePath.endsWith('sdk-notes-v3.md'));
+  const v1 = documents.find((d) => d.sourcePath.endsWith('widget-api-v1.md'));
+  const v2 = documents.find((d) => d.sourcePath.endsWith('widget-api-v2.md'));
 
-  assert.ok(v2 && v3, 'both SDK documents are present');
-  assert.equal(v2.isDeprecated, true);
-  assert.equal(v2.supersededBy, 'Lumen SDK v3');
-  assert.equal(v3.isDeprecated, false, 'the current document must not be flagged');
+  assert.ok(v1 && v2, 'both widget documents are present');
+  assert.equal(v1.isDeprecated, true);
+  assert.equal(v1.supersededBy, 'Widget API v2');
 
-  // Exactly one document in the sample corpus declares itself deprecated. A
-  // detector that started matching more is over-firing.
-  assert.equal(documents.filter((d) => d.isDeprecated).length, 1);
+  // The direction is the whole difficulty. v2 says "It supersedes v1" — a
+  // detector reading that as a status rather than as a claim about another
+  // document flags the current guidance and hides it behind a deprecation notice.
+  assert.equal(v2.isDeprecated, false, 'the current document must not be flagged');
+
+  assert.equal(
+    documents.filter((d) => d.isDeprecated).length,
+    1,
+    'a detector matching more than the one declared status is over-firing',
+  );
 });
 
 test('categories are derived from the corpus directory layout', async () => {
   using ctx = tempDb();
-  await run(ctx.db, config.corpusPath);
+  await run(ctx.db, FIXTURE_CORPUS);
 
   const categories = new Set(listDocuments(ctx.db).map((d) => d.category));
 
-  assert.ok(categories.has('delivery-reports'));
-  assert.ok(categories.has('client-briefs'));
+  assert.ok(categories.has('guides'));
+  assert.ok(categories.has('reference'));
   assert.ok(categories.has('uncategorised'), 'root-level files fall back');
 });
 

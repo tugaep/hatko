@@ -1,0 +1,17 @@
+# Battle of Ust-Labinsk
+
+The Battle of Ust-Labinsk was a major clash between the Crimean Khanate and a coalition of Circassian principalities, led by the Chemguy tribe, on June 6, 1761 near the right bank of the Kuban River.
+
+## Background
+In 1760 Chemguys Attacked the Abazin prince Itebokaka from the Bashylbay clan. During the skirmish, the prince was killed. His sister was the mother of the Crimean Khan Qırım Giray, and he khan decided to avenge his uncle's death. This led to a battle 6 June 1761 Years on Right bank of the Kuban
+
+## History
+In the early 1760s, the Crimean Khanate, under the leadership of Khan Qırım Giray, sought to consolidate control over the region and punish the Circassian principalities that had been resisting the khanate’s expansion. On June 6, 1761, Crimean forces, led by several commanders from the elite Kapı kulu, clashed with the combined forces of the Chemguys, Bzhedug, Besleney, and Makhosh tribes near the Kuban River.
+The Circassians, led by their princes and supported by a significant military alliance, decisively defeated the Crimean forces. The Circassians captured a substantial portion of the Crimean troops, including several high-ranking officials such as three of the Kapı kulu commanders and five beys, the leading military and political figures of the Crimean Khanate. This victory significantly weakened the Crimean Khanate's position in the region.
+In response to the defeat, Khan Qırım Giray attempted to raise a new large army to retaliate. According to Russian sources, a 30,000-strong force was reportedly sent to deal with the Circassians. However, due to internal struggles and defections—particularly the retreat of the Crimean commander Bahadır Giray — the Crimean counteroffensive was never realized. Despite rumors in November 1763 about a renewed invasion, the campaign was ultimately called off.
+The military engagements between the Crimean Khanate and Circassian principalities were often not direct confrontations, but rather consisted of raids and skirmishes. According to historians, the Crimean Khanate could gather large cavalry forces, but the Circassian noble cavalry was highly skilled in combat, which allowed them to effectively resist the larger Crimean armies. One of the key elements in these conflicts was the use of raiding tactics by both sides.
+
+ "The Crimean Khan seeks the blood of his own uncle, the Bashilbay ruler, from the Chemguy... A very great battle occurred between those forces; many of the Crimean troops were beaten and wounded by the Chemguy army, and others drowned in the Laba River, including the brother of Agha Islam Tagetov, who was known in Crimea as a most glorious warrior. The Chemguy captured three aghas, two Shirins, and two murzas, as well as more than three hundred people of various other ranks; however, it is heard through the local people that the number of captured murzas and others is even higher than stated..."
+The Battle of Ust-Labinsk, also known as "Лэбэпэ зау" in the oral tradition of the Circassians, was a defining moment in this struggle. In June 1761, the Crimean Khanate, under the leadership of Khan Bagadyr Giray, launched a military campaign against the Chemguy tribe, one of the most influential Circassian factions. After an intense battle near the mouth of the Laba River, the Crimean forces were decisively defeated by the Circassian cavalry. The surviving Crimean soldiers fled in panic, and many were captured.
+
+## References
