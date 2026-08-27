@@ -36,7 +36,7 @@ npm run start:mcp
 
 ```
 hatko MCP on http://localhost:4100/mcp
-  corpus     7539 passages indexed
+  corpus     7541 passages indexed
   auth       OAuth 2.1 / OIDC, or Authorization: Bearer <session token>
   clients    point them at this URL; see docs/mcp.md
 ```

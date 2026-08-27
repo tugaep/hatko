@@ -45,7 +45,7 @@ system knows or cares that this particular corpus is about Circassians.
 
 ```bash
 curl -s https://hatko.tugrap.dev/health
-# {"status":"ok","indexedChunks":7539}
+# {"status":"ok","indexedChunks":7541}
 ```
 
 ---
@@ -316,7 +316,7 @@ requests and responses are JSON. Authentication is the session cookie in a brows
 
 | Method | Endpoint                                  | Description                                                          |
 | ------ | ----------------------------------------- | -------------------------------------------------------------------- |
-| `GET`  | `/health`                                 | Unauthenticated. `{"status":"ok","indexedChunks":7539}`              |
+| `GET`  | `/health`                                 | Unauthenticated. `{"status":"ok","indexedChunks":7541}`              |
 | `GET`  | `/api/session`                            | Current user, or `{"user":null}`, which is not a 401 when signed out |
 | `POST` | `/api/auth/sign-in/email`                 | Sign in. Sets the session cookie and returns a token                 |
 | `POST` | `/api/auth/sign-out`                      | Sign out                                                             |
@@ -650,7 +650,7 @@ sections up to about 1200 characters, and hard-split only a section that exceeds
 The documents are already structured, so cutting where the author cut never splits an idea.
 Merging matters because a heading-only split leaves a fragment wherever someone wrote a two-line
 section, and a fragment has too little text for a meaningful embedding. On this corpus the result
-is 1083 documents and 7539 chunks, averaging 1082 characters: 277 documents are short enough to
+is 1083 documents and 7541 chunks, averaging 1082 characters: 277 documents are short enough to
 stay whole, and the longest splits into 150. Both halves earn their place. The same code produced
 exactly one chunk per document on an earlier corpus of 142 short files, which is the argument for
 the merge step rather than a fact about either corpus.

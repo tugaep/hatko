@@ -234,7 +234,7 @@ if the host is exposed.
 
 ```bash
 curl -s https://hatko.tugrap.dev/health
-# {"status":"ok","indexedChunks":7539}
+# {"status":"ok","indexedChunks":7541}
 
 # Discovery, which is what an MCP client reads first.
 curl -s https://hatko.tugrap.dev/.well-known/oauth-protected-resource
