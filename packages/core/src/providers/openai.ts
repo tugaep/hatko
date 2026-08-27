@@ -176,8 +176,43 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
   throw lastError ?? new ProviderError(`Request to ${path} failed`);
 }
 
-const postJson = async (path: string, body: unknown, signal?: AbortSignal): Promise<unknown> =>
-  (await post(path, body, signal)).json();
+/**
+ * Send a request and read its JSON body, retrying the whole exchange if the body stalls.
+ *
+ * `post` retries around `fetch`, which resolves as soon as the response *headers*
+ * arrive — so everything it protects is the part that was already fine. Reading the
+ * body is a second, unprotected network transfer, and on a lossy path it is the half
+ * that hangs: a 200 whose body stalls past the timeout used to abort the entire
+ * ingestion, because the retry loop had already exited successfully. Observed against
+ * OpenAI from a VPS where roughly a fifth of embedding responses stalled mid-body while
+ * headers came back in under a second every time.
+ *
+ * Retrying re-sends the request rather than resuming the stalled read, which is the only
+ * option a consumed Response leaves — and is safe here because every endpoint this
+ * module posts to is idempotent.
+ */
+const postJson = async (path: string, body: unknown, signal?: AbortSignal): Promise<unknown> => {
+  let lastError: ProviderError | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const response = await post(path, body, signal);
+    try {
+      return await response.json();
+    } catch (cause) {
+      lastError = new ProviderError(
+        `Reading the response body from ${path} failed: ${(cause as Error).message}`,
+        { retryable: true, cause },
+      );
+      // The caller's own signal aborting is a cancellation, not a flaky body — retrying
+      // it would ignore the caller and burn the remaining attempts on a dead request.
+      if (signal?.aborted) throw lastError;
+      if (attempt === MAX_ATTEMPTS) throw lastError;
+      await sleep(BASE_DELAY_MS * 2 ** (attempt - 1));
+    }
+  }
+
+  throw lastError ?? new ProviderError(`Request to ${path} failed`);
+};
 
 const modelListSchema = z.object({ data: z.array(z.object({ id: z.string() })) });
 
